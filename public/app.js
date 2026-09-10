@@ -872,12 +872,37 @@ DOM.employeeLoginForm.addEventListener('submit', async (e) => {
   }
 });
 
+// Toggle Password Visibility (Hide / Unhide)
+window.togglePasswordVisibility = function(inputId, btn) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const isPass = input.type === 'password';
+  input.type = isPass ? 'text' : 'password';
+  const icon = btn ? btn.querySelector('.eye-icon') : null;
+  if (icon) {
+    icon.textContent = isPass ? '🙈' : '👁️';
+  }
+  if (btn) {
+    btn.setAttribute('aria-label', isPass ? 'Hide password' : 'Show password');
+    btn.setAttribute('title', isPass ? 'Hide password' : 'Show password');
+  }
+};
+
 // Sign Up Form Handler (Basic Enquiries + Face Enrollment)
 const employeeSignUpForm = document.getElementById('employeeSignUpForm');
 if (employeeSignUpForm) {
   employeeSignUpForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     DOM.loginErrorBanner.style.display = 'none';
+
+    const empIdInput = document.getElementById('signupEmployeeId');
+    const employee_id = empIdInput ? empIdInput.value.trim() : '';
+
+    if (!employee_id) {
+      DOM.loginErrorMessage.textContent = 'Please enter your Employee ID.';
+      DOM.loginErrorBanner.style.display = 'flex';
+      return;
+    }
 
     const pass = document.getElementById('signupPassword').value;
     const confirmPass = document.getElementById('signupConfirmPassword').value;
@@ -894,7 +919,7 @@ if (employeeSignUpForm) {
 
     const payload = {
       name: document.getElementById('signupName').value.trim(),
-      email: document.getElementById('signupEmail').value.trim(),
+      employee_id: employee_id,
       phone: document.getElementById('signupPhone').value.trim(),
       employer_id: document.getElementById('signupEmployerSelect').value,
       department: document.getElementById('signupDepartment').value,

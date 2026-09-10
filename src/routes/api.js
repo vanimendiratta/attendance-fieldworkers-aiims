@@ -123,6 +123,7 @@ function generateEmployeeId(employerId) {
 router.post('/auth/employee/signup', (req, res) => {
   const {
     name,
+    employee_id,
     email,
     phone,
     employer_id = 'ORG-001',
@@ -141,9 +142,12 @@ router.post('/auth/employee/signup', (req, res) => {
   if (!name || !name.trim()) {
     return res.status(400).json({ success: false, error: 'Full Name is required.' });
   }
-  if (!email || !email.trim() || !email.includes('@')) {
-    return res.status(400).json({ success: false, error: 'Valid email address is required.' });
+
+  const manualEmpId = employee_id ? employee_id.trim() : '';
+  if (!manualEmpId && (!email || !email.trim())) {
+    return res.status(400).json({ success: false, error: 'Employee ID is required.' });
   }
+
   if (!password || password.length < 6) {
     return res.status(400).json({ success: false, error: 'Password must be at least 6 characters.' });
   }
@@ -155,25 +159,37 @@ router.post('/auth/employee/signup', (req, res) => {
     return res.status(404).json({ success: false, error: 'Employer organization not found.' });
   }
 
+  const newEmpId = manualEmpId || generateEmployeeId(effectiveOrgId);
+
+  // Check if manual employee ID already exists
+  const existingById = db.prepare('SELECT id, name FROM employees WHERE id = ?').get(newEmpId);
+  if (existingById) {
+    return res.status(409).json({ success: false, error: `Employee ID '${newEmpId}' is already registered. Please sign in or enter a different ID.` });
+  }
+
+  // Derive unique corporate email if not entered manually
+  const finalEmail = (email && email.trim())
+    ? email.trim().toLowerCase()
+    : `${newEmpId.toLowerCase().replace(/[^a-z0-9_-]/g, '')}@aiims.internal`;
+
   // Check if email already registered
-  const existingEmp = db.prepare('SELECT id, email FROM employees WHERE email = ?').get(email.trim().toLowerCase());
+  const existingEmp = db.prepare('SELECT id, email FROM employees WHERE email = ?').get(finalEmail);
   if (existingEmp) {
-    return res.status(409).json({ success: false, error: 'An employee account with this email address already exists. Please sign in.' });
+    return res.status(409).json({ success: false, error: 'An employee account with this ID or Email already exists. Please sign in.' });
   }
 
   // Resolve matching regional team if state & district provided
   let teamId = null;
   if (state && district) {
-    const matchedTeam = db.prepare('SELECT id FROM teams WHERE employer_id = ? AND state = ? AND district = ? LIMIT 1').get(employer_id, state, district);
+    const matchedTeam = db.prepare('SELECT id FROM teams WHERE employer_id = ? AND state = ? AND district = ? LIMIT 1').get(effectiveOrgId, state, district);
     if (matchedTeam) {
       teamId = matchedTeam.id;
     } else {
-      const stateTeam = db.prepare('SELECT id FROM teams WHERE employer_id = ? AND state = ? LIMIT 1').get(employer_id, state);
+      const stateTeam = db.prepare('SELECT id FROM teams WHERE employer_id = ? AND state = ? LIMIT 1').get(effectiveOrgId, state);
       if (stateTeam) teamId = stateTeam.id;
     }
   }
 
-  const newEmpId = generateEmployeeId(employer_id);
   const now = new Date().toISOString();
   let descriptorToSave = null;
   let hasFaceEnrolled = 0;
@@ -194,12 +210,12 @@ router.post('/auth/employee/signup', (req, res) => {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     newEmpId,
-    employer_id,
+    effectiveOrgId,
     name.trim(),
-    email.trim().toLowerCase(),
+    finalEmail,
     phone ? phone.trim() : null,
-    department.trim(),
-    designation.trim(),
+    department ? department.trim() : 'Dental',
+    designation ? designation.trim() : 'PRS-1',
     '1234',
     password,
     face_photo || null,
@@ -213,10 +229,10 @@ router.post('/auth/employee/signup', (req, res) => {
     now
   );
 
-  attendanceService.logAudit('EMPLOYEE_SIGNUP_SUCCESS', newEmpId, employer_id, 'EMPLOYEE_SIGNUP', 'SUCCESS', {
+  attendanceService.logAudit('EMPLOYEE_SIGNUP_SUCCESS', newEmpId, effectiveOrgId, 'EMPLOYEE_SIGNUP', 'SUCCESS', {
     name: name.trim(),
-    email: email.trim(),
-    department,
+    email: finalEmail,
+    department: department ? department.trim() : 'Dental',
     face_enrolled: hasFaceEnrolled
   }, clientIp, userAgent);
 
