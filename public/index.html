@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Attendance | Apex Workspace</title>
+  <meta name="description" content="Verified real-time photo and geolocation attendance for enterprise employees.">
+  <link rel="stylesheet" href="/style.css">
+  <!-- Client-side States & Districts Dictionary -->
+  <script src="/states_districts_client.js"></script>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%20width=%2232%22%20height=%2232%22><text y=%2224%22 font-size=%2224%22>🛡️</text></svg>">
+</head>
+<body>
+
+  <div class="app-viewport">
+
+    <!-- 1. App Top Header Bar -->
+    <header class="employee-header-bar">
+      <div class="brand-row">
+        <div class="brand-avatar" id="headerAvatar">A</div>
+        <div>
+          <div class="brand-text-name" id="headerEmpName">Alex Johnson</div>
+          <div class="brand-text-org" id="headerEmployerName">Apex Innovations</div>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <a href="/admin.html" class="btn btn-secondary" style="font-size: 11px; padding: 5px 10px;">
+          <span>Admin</span>
+        </a>
+        <button id="btnLogoutEmployee" class="btn btn-tertiary" style="font-size: 11px; padding: 5px 8px;" title="Sign Out">
+          🚪 Logout
+        </button>
+      </div>
+    </header>
+
+    <!-- 2. Notification Banner -->
+    <div id="alertBanner" class="notification-strip alert-danger" style="display: none;" role="alert">
+      <span id="alertIcon">⚠️</span>
+      <div id="alertMessage" style="flex: 1;">Notification</div>
+      <button id="alertCloseBtn" style="background: none; border: none; font-size: 16px; cursor: pointer; color: inherit;">&times;</button>
+    </div>
+
+    <!-- 3. Main Scrollable Container -->
+    <main class="employee-scroll-body">
+      
+      <!-- Greeting (Section 10) -->
+      <section class="employee-greeting">
+        <div class="greeting-sup">TODAY'S ATTENDANCE</div>
+        <h1 class="greeting-name" id="displayGreetingName">Good morning, Alex</h1>
+        <div class="greeting-date" id="displayGreetingDate">Tuesday · 08 September 2026</div>
+        <div style="display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap;" id="profileTeamBadgeContainer">
+          <span class="badge badge-neutral" id="displayEmployeeTeam" style="font-size: 11px;">👥 Team: Loading...</span>
+          <span class="badge badge-neutral" id="displayEmployeeTerritory" style="font-size: 11px;">📍 Territory: Loading...</span>
+        </div>
+      </section>
+
+      <!-- Primary Attendance Card (Section 10) -->
+      <section class="today-attendance-card" id="cardTodayAttendance">
+        <div class="today-card-top">
+          <span class="today-label">ATTENDANCE STATUS</span>
+          <span class="badge badge-neutral" id="empStatusBadge">
+            <span class="badge-dot"></span>
+            <span id="empStatusText">Ready to Check In</span>
+          </span>
+        </div>
+
+        <!-- Timer / Working Hours Display -->
+        <div class="working-timer-block">
+          <div class="working-digits" id="tickingWorkTimer">00h 00m 00s</div>
+          <div class="working-sublabel" id="checkedInAtLabel">Official server timestamp generated upon punch</div>
+        </div>
+
+        <!-- Duty Mode Selector (Office vs Field Work) -->
+        <div class="duty-mode-container" style="margin-bottom: 20px;">
+          <div class="duty-mode-toggle" role="group" aria-label="Duty Work Mode">
+            <button type="button" class="duty-mode-btn active" id="btnModeOffice" data-mode="OFFICE">
+              <span>🏢 Office Duty</span>
+            </button>
+            <button type="button" class="duty-mode-btn" id="btnModeField" data-mode="FIELD_WORK">
+              <span>🚗 Field Work / On-Site</span>
+            </button>
+          </div>
+          
+          <!-- Field Work Notes & Dynamic Territory Selector -->
+          <div id="fieldWorkNotesContainer" style="display: none; margin-top: 12px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px;">
+              <div>
+                <label style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">
+                  Duty State / UT
+                </label>
+                <select id="selectFieldState" class="form-select" style="padding: 6px 10px; font-size: 12px; width: 100%; border-radius: var(--radius-sm);">
+                  <option value="">Select State / UT</option>
+                </select>
+              </div>
+              <div>
+                <label style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">
+                  Duty District
+                </label>
+                <select id="selectFieldDistrict" class="form-select" style="padding: 6px 10px; font-size: 12px; width: 100%; border-radius: var(--radius-sm);" disabled>
+                  <option value="">Select District</option>
+                </select>
+              </div>
+            </div>
+
+            <label style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">
+              Field Site / Client Name / Visit Purpose
+            </label>
+            <input type="text" id="inputFieldSiteNotes" class="field-site-input" placeholder="e.g. AIIMS Trauma Center - On-site Inspection" />
+          </div>
+        </div>
+
+        <!-- Primary Action Button (Check In / Check Out) -->
+        <button class="btn btn-attendance-action action-btn-checkin" id="btnMainAttendanceAction" type="button">
+          CHECK IN
+        </button>
+
+        <!-- Secondary Break Controls (Visible when working) -->
+        <div class="break-control-row" id="rowBreakControls" style="display: none;">
+          <button class="btn btn-secondary" id="btnStartBreak" type="button">
+            <span>☕ Start Break</span>
+          </button>
+          <button class="btn btn-primary" id="btnEndBreak" type="button" style="display: none;">
+            <span>▶️ Resume Work</span>
+          </button>
+        </div>
+
+        <!-- Sensor Verification Telemetry (Section 10) -->
+        <div class="telemetry-status-grid">
+          <div class="telemetry-row-item">
+            <div class="telemetry-left">
+              <span>📍</span>
+              <span>Location Accuracy</span>
+            </div>
+            <div class="telemetry-right">
+              <span class="badge badge-success" id="chipGpsStatus">
+                <span class="badge-dot"></span>
+                <span id="textGpsStatus">Acquiring GPS...</span>
+              </span>
+            </div>
+          </div>
+
+          <div class="telemetry-row-item" id="rowRegisteredOffice">
+            <div class="telemetry-left">
+              <span id="iconWorkplaceType">🏢</span>
+              <span id="labelWorkplaceType">Registered Office</span>
+            </div>
+            <div class="telemetry-right" style="display: flex; align-items: center; gap: 8px;">
+              <span id="textOfficeLocationLabel" style="font-size: 11px; font-weight: 500;">CDER AIIMS Campus</span>
+              <button id="btnSyncOfficeToCurrent" type="button" class="btn btn-secondary" style="padding: 2px 8px; font-size: 10px;" title="Update registered office to your current coordinates">
+                📍 Set Here
+              </button>
+            </div>
+          </div>
+
+          <div class="telemetry-row-item">
+            <div class="telemetry-left">
+              <span id="iconDistanceOrAddress">📏</span>
+              <span id="labelDistanceOrAddress">Distance to Office</span>
+            </div>
+            <div class="telemetry-right" style="max-width: 65%; text-align: right;">
+              <span id="textLiveDistance" style="font-size: 11px; font-weight: 600; font-family: var(--font-mono); word-break: break-word;">Calculating...</span>
+            </div>
+          </div>
+
+          <div class="telemetry-row-item">
+            <div class="telemetry-left">
+              <span>📷</span>
+              <span>Live Attendance Photo</span>
+            </div>
+            <div class="telemetry-right">
+              <span style="font-size: 11px; color: var(--color-text-secondary);">Real-time Camera Required</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Working Hours Visualization Card (Section 15) -->
+      <section class="shift-progress-box">
+        <div class="shift-progress-header">
+          <span style="font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--color-text-muted); letter-spacing: 0.5px;">
+            Shift Progress
+          </span>
+          <span style="font-size: 13px; font-weight: 600; color: var(--color-text-primary);" id="textNetHoursDisplay">
+            00h 00m
+          </span>
+        </div>
+
+        <!-- Subtle progress track -->
+        <div class="progress-track">
+          <div class="progress-bar-fill" id="shiftProgressBar" style="width: 0%;"></div>
+        </div>
+
+        <div class="progress-meta-row">
+          <span>Required: <strong id="valRequiredShift">08h 00m</strong></span>
+          <span>Breaks: <strong id="valBreakDeducted">00m</strong></span>
+          <span>Overtime: <strong id="valOvertimeAccumulated" style="color: var(--color-accent);">00m</strong></span>
+        </div>
+      </section>
+
+      <!-- Today's Activity Timeline (Section 13) -->
+      <section class="today-timeline-card">
+        <div class="timeline-title-row">Today's Timeline</div>
+        <ul class="clean-timeline" id="employeeTimelineList">
+          <li class="timeline-step">
+            <div class="timeline-step-dot"></div>
+            <div class="timeline-step-time" id="tlTimeCheckin">--:--</div>
+            <div class="timeline-step-desc" id="tlDescCheckin">Awaiting check-in punch</div>
+            <div class="timeline-step-badge" id="tlBadgeCheckin">Live camera + GPS required</div>
+          </li>
+          <li class="timeline-step">
+            <div class="timeline-step-dot" style="border-color: var(--color-border-strong);"></div>
+            <div class="timeline-step-time" id="tlTimeCheckout">--:--</div>
+            <div class="timeline-step-desc" id="tlDescCheckout">Awaiting shift completion</div>
+            <div class="timeline-step-badge">Fresh photo and location required</div>
+          </li>
+        </ul>
+      </section>
+
+    </main>
+
+    <!-- 4. Mobile Bottom Navigation Bar (Section 17) -->
+    <nav class="employee-bottom-nav">
+      <button class="bottom-nav-item active" id="bnavToday">
+        <span style="font-size: 16px;">⏱️</span>
+        <span>Today</span>
+      </button>
+      <button class="bottom-nav-item" id="bnavHistory" onclick="alert('Attendance History: Verified attendance records are synchronized directly with your employer’s REDCap instance.')">
+        <span style="font-size: 16px;">📅</span>
+        <span>History</span>
+      </button>
+      <button class="bottom-nav-item" id="bnavProfile" onclick="alert('Signed in as ' + (state.currentEmployee?.name || 'Employee') + ' · ' + (state.currentEmployer?.name || 'Organization'))">
+        <span style="font-size: 16px;">👤</span>
+        <span>Profile</span>
+      </button>
+    </nav>
+
+  </div>
+
+  <!-- 5. DEDICATED CAMERA CAPTURE EXPERIENCE (Section 11 & 12) -->
+  <div class="camera-overlay-backdrop" id="cameraModal" role="dialog" aria-modal="true">
+    <div class="camera-dialog-box">
+      
+      <div class="camera-dialog-header">
+        <div>
+          <h3 style="font-size: 15px; font-weight: 600;" id="modalFlowTitle">Attendance Verification</h3>
+          <p style="font-size: 11px; color: var(--color-text-tertiary);" id="modalFlowSubtitle">Position your face inside the guide</p>
+        </div>
+        <button id="modalCloseBtn" class="btn-close-icon">&times;</button>
+      </div>
+
+      <!-- Viewfinder -->
+      <div class="viewfinder-box">
+        <video id="videoPreview" autoplay playsinline muted></video>
+        <canvas id="snapshotCanvas"></canvas>
+
+        <!-- Trustworthy subtle face outline guide -->
+        <div class="camera-face-guide" id="reticleGuide"></div>
+
+        <!-- Telemetry HUD -->
+        <div class="camera-hud-pill" id="hudGpsBadge">
+          ✓ Location Verified · ±12m
+        </div>
+        <div class="camera-hud-pill" id="hudAddressBadge" style="top: 48px; font-size: 11px; max-width: 90%; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; background: rgba(15, 23, 42, 0.85);">
+          📍 Resolving Location...
+        </div>
+      </div>
+
+      <!-- Privacy & Verification Notice (Section 31) -->
+      <div class="camera-privacy-notice">
+        🔒 <strong>Attendance Verification:</strong> Your photograph and device GPS are captured strictly to authenticate attendance. Gallery uploads and manual entries are disabled.
+      </div>
+
+      <!-- In-Modal Status & Error Feedback Box -->
+      <div id="modalFeedbackBox" style="display: none; padding: 10px 16px; margin: 8px 16px 0; font-size: 12px; border-radius: var(--radius-sm); line-height: 1.4;"></div>
+
+      <!-- Camera Action Controls -->
+      <div class="camera-actions-bar">
+        <!-- Capture Phase -->
+        <div id="controlsCapturePhase" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+          <button class="btn btn-tertiary" id="btnCancelCapture" type="button">Cancel</button>
+          <button class="shutter-btn" id="btnShutterCapture" type="button" title="Capture Photograph" aria-label="Capture Photo"></button>
+          <div style="width: 60px;"></div>
+        </div>
+
+        <!-- Review & Confirm Phase -->
+        <div id="controlsReviewPhase" style="display: none; align-items: center; justify-content: space-between; width: 100%;">
+          <button class="btn btn-secondary" id="btnRetakePhoto" type="button">Retake</button>
+          <button class="btn btn-primary" id="btnConfirmSubmission" type="button">Confirm & Submit</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 6. EMPLOYEE AUTHENTICATION PORTAL (Sign In / Sign Up & Mobile Screenlock Face Recognition) -->
+  <div class="camera-overlay-backdrop" id="loginModal" role="dialog" aria-modal="true">
+    <div class="auth-dialog-box">
+
+      <!-- Primary Tab Switcher: Sign In vs Sign Up -->
+      <div class="auth-nav-tabs">
+        <button type="button" class="auth-nav-tab active" id="tabAuthSignIn" onclick="switchAuthTab('signin')">
+          <span>🔐 Sign In</span>
+        </button>
+        <button type="button" class="auth-nav-tab" id="tabAuthSignUp" onclick="switchAuthTab('signup')">
+          <span>📝 Create Account (Sign Up)</span>
+        </button>
+      </div>
+
+      <!-- Error / Success Alert Notification -->
+      <div id="loginErrorBanner" class="badge badge-danger" style="display: none; width: 100%; padding: 10px 14px; margin-bottom: 16px; font-size: 12px; border-radius: var(--radius-sm); text-align: left; line-height: 1.4;">
+        <span id="loginErrorMessage">Invalid credentials.</span>
+      </div>
+
+      <!-- ========================================================
+           TAB 1: SIGN IN VIEW (Face Recognition or ID & Password)
+           ======================================================== -->
+      <div id="authSignInPanel">
+        <!-- Sign-in Mode Selector -->
+        <div class="signin-method-toggle">
+          <button type="button" class="signin-method-btn active" id="btnMethodFace" onclick="switchSignInMethod('face')">
+            <span>📱 Face Recognition (Screenlock)</span>
+          </button>
+          <button type="button" class="signin-method-btn" id="btnMethodCreds" onclick="switchSignInMethod('creds')">
+            <span>🔑 ID & Password</span>
+          </button>
+        </div>
+
+        <!-- 1A: Mobile Screenlock Face Recognition View -->
+        <div id="signInFaceMethod" class="screenlock-container">
+          <!-- Animated Lock Header -->
+          <div class="screenlock-padlock" id="screenlockPadlock">
+            <svg id="screenlockPadlockSvg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </div>
+          <h2 style="font-size: 18px; font-weight: 700; color: var(--color-text-primary); margin-bottom: 2px;">Face Unlock</h2>
+          <p style="font-size: 13px; color: var(--color-text-tertiary); margin-bottom: 10px;">Look directly into the scanner to unlock your workspace</p>
+
+          <!-- Circular Biometric Scanner Viewfinder -->
+          <div class="screenlock-scanner-frame" id="screenlockScannerFrame">
+            <video id="faceLoginVideo" autoplay playsinline muted></video>
+            <canvas id="faceLoginCanvas" width="128" height="128" style="display: none;"></canvas>
+
+            <!-- Sweeping Laser Beam -->
+            <div class="screenlock-laser-beam active" id="screenlockLaser"></div>
+
+            <!-- 4 Corner Biometric Reticles -->
+            <div class="reticle-corner corner-tl"></div>
+            <div class="reticle-corner corner-tr"></div>
+            <div class="reticle-corner corner-bl"></div>
+            <div class="reticle-corner corner-br"></div>
+          </div>
+
+          <!-- Dynamic Status Badge -->
+          <div class="screenlock-status-badge" id="screenlockStatusBadge">
+            <span class="pulse-dot" id="screenlockDot"></span>
+            <span id="screenlockStatusText">Position face in circle...</span>
+          </div>
+
+          <!-- Employer Selection for Scoped Matching -->
+          <div style="width: 100%; margin-bottom: 12px; text-align: left;">
+            <label class="form-label" style="font-size: 11px; margin-bottom: 4px;">Organization (Optional scope)</label>
+            <select id="faceLoginOrgSelect" class="form-select" style="font-size: 12px; padding: 6px 10px;">
+              <option value="ALL">All Enrolled Organizations</option>
+              <option value="ORG-001">Apex Innovations Ltd. (ORG-001)</option>
+              <option value="ORG-002">Cyberdyne Systems Corp (ORG-002)</option>
+            </select>
+          </div>
+
+          <!-- Action Button -->
+          <div style="display: flex; gap: 8px; width: 100%;">
+            <button type="button" class="btn btn-primary" id="btnTriggerFaceScan" style="flex: 1; padding: 9px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+              <span>⚡ Scan & Unlock</span>
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="switchSignInMethod('creds')" style="font-size: 12px; padding: 9px 12px;">
+              <span>Use Password</span>
+            </button>
+          </div>
+
+          <!-- Demo Quick Face Unlock -->
+          <div style="margin-top: 18px; width: 100%; padding-top: 14px; border-top: 1px solid var(--color-border-default); text-align: left;">
+            <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 6px;">
+              Demo Biometric One-Click:
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <button type="button" class="btn btn-secondary" onclick="quickFaceUnlock('EMP-1001')" style="justify-content: space-between; font-size: 11px; padding: 6px 10px;">
+                <span>👤 <strong>Alex Johnson</strong> (Apex · Engineering)</span>
+                <span style="color: #3b82f6; font-weight: 600;">Unlock Face ID</span>
+              </button>
+              <button type="button" class="btn btn-secondary" onclick="quickFaceUnlock('EMP-2001')" style="justify-content: space-between; font-size: 11px; padding: 6px 10px;">
+                <span>👤 <strong>Marcus Wright</strong> (Cyberdyne · Security)</span>
+                <span style="color: #3b82f6; font-weight: 600;">Unlock Face ID</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 1B: Traditional ID & Password View -->
+        <div id="signInCredsMethod" style="display: none;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <div class="brand-avatar" style="margin: 0 auto 10px; width: 40px; height: 40px; font-size: 18px;">A</div>
+            <h2 style="font-size: 17px; font-weight: 700; color: var(--color-text-primary);">Employee Workspace Sign In</h2>
+            <p style="font-size: 12px; color: var(--color-text-tertiary); margin-top: 2px;">Sign in with your corporate ID and password</p>
+          </div>
+
+          <form id="employeeLoginForm">
+            <div style="margin-bottom: 14px;">
+              <label class="form-label" for="loginEmployerSelect">Employer Organization</label>
+              <select id="loginEmployerSelect" class="form-select">
+                <option value="ORG-001">Apex Innovations Ltd. (ORG-001)</option>
+                <option value="ORG-002">Cyberdyne Systems Corp (ORG-002)</option>
+              </select>
+            </div>
+
+            <div style="margin-bottom: 14px;">
+              <label class="form-label" for="loginEmployeeId">Employee ID or Corporate Email</label>
+              <input type="text" id="loginEmployeeId" required placeholder="e.g. EMP-1001" class="form-input">
+            </div>
+
+            <div style="margin-bottom: 18px;">
+              <label class="form-label" for="loginEmployeePassword">Password</label>
+              <input type="password" id="loginEmployeePassword" required placeholder="Enter password" class="form-input">
+            </div>
+
+            <button type="submit" class="btn btn-primary" id="btnSubmitLogin" style="width: 100%; padding: 10px; font-size: 14px;">
+              Sign In
+            </button>
+          </form>
+
+          <!-- Quick Demo Fill -->
+          <div style="margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--color-border-default);">
+            <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 8px;">
+              Demo Quick-Fill:
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <button type="button" class="btn btn-secondary" onclick="fillEmployeeCreds('ORG-001', 'EMP-1001', 'Password@1001')" style="justify-content: space-between; font-size: 11px; padding: 6px 10px;">
+                <span><strong>Apex:</strong> EMP-1001 (Alex Johnson)</span>
+                <span style="color: var(--color-text-muted);">Pass: Password@1001</span>
+              </button>
+              <button type="button" class="btn btn-secondary" onclick="fillEmployeeCreds('ORG-002', 'EMP-2001', 'Password@2001')" style="justify-content: space-between; font-size: 11px; padding: 6px 10px;">
+                <span><strong>Cyberdyne:</strong> EMP-2001 (Marcus Wright)</span>
+                <span style="color: var(--color-text-muted);">Pass: Password@2001</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========================================================
+           TAB 2: SIGN UP VIEW (Basic Enquiries + Face Biometric Setup)
+           ======================================================== -->
+      <div id="authSignUpPanel" style="display: none;">
+        <div style="text-align: center; margin-bottom: 18px;">
+          <h2 style="font-size: 18px; font-weight: 700; color: var(--color-text-primary);">Employee Registration</h2>
+          <p style="font-size: 12px; color: var(--color-text-tertiary); margin-top: 2px;">Enter your basic employment details and enroll Face ID</p>
+        </div>
+
+        <form id="employeeSignUpForm">
+          <div class="signup-grid">
+            <!-- Full Name -->
+            <div class="signup-full-width">
+              <label class="form-label" for="signupName">Full Name *</label>
+              <input type="text" id="signupName" required placeholder="e.g. Ananya Sharma" class="form-input">
+            </div>
+
+            <!-- Email Address -->
+            <div>
+              <label class="form-label" for="signupEmail">Corporate Email *</label>
+              <input type="email" id="signupEmail" required placeholder="ananya@apexcorp.internal" class="form-input">
+            </div>
+
+            <!-- Phone Number -->
+            <div>
+              <label class="form-label" for="signupPhone">Mobile / Phone *</label>
+              <input type="tel" id="signupPhone" required placeholder="+91 98765 43210" class="form-input">
+            </div>
+
+            <!-- Employer Organization -->
+            <div class="signup-full-width">
+              <label class="form-label" for="signupEmployerSelect">Employer Organization *</label>
+              <select id="signupEmployerSelect" class="form-select" required>
+                <option value="ORG-001">Apex Innovations Ltd. (ORG-001)</option>
+                <option value="ORG-002">Cyberdyne Systems Corp (ORG-002)</option>
+              </select>
+            </div>
+
+            <!-- Department -->
+            <div>
+              <label class="form-label" for="signupDepartment">Department *</label>
+              <select id="signupDepartment" class="form-select" required>
+                <option value="Engineering">Engineering</option>
+                <option value="Field Operations">Field Operations</option>
+                <option value="Healthcare & Audit">Healthcare & Audit</option>
+                <option value="Product Design">Product Design</option>
+                <option value="Cyber Security">Cyber Security</option>
+                <option value="Administration">Administration</option>
+              </select>
+            </div>
+
+            <!-- Designation -->
+            <div>
+              <label class="form-label" for="signupDesignation">Designation *</label>
+              <input type="text" id="signupDesignation" required placeholder="e.g. Field Officer" class="form-input">
+            </div>
+
+            <!-- Duty State & District (Cascading) -->
+            <div>
+              <label class="form-label" for="signupState">Duty State / UT</label>
+              <select id="signupState" class="form-select">
+                <option value="">Select State / UT</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="form-label" for="signupDistrict">Duty District</label>
+              <select id="signupDistrict" class="form-select" disabled>
+                <option value="">Select District</option>
+              </select>
+            </div>
+
+            <!-- Password -->
+            <div>
+              <label class="form-label" for="signupPassword">Password *</label>
+              <input type="password" id="signupPassword" required minlength="6" placeholder="Min. 6 characters" class="form-input">
+            </div>
+
+            <!-- Confirm Password -->
+            <div>
+              <label class="form-label" for="signupConfirmPassword">Confirm Password *</label>
+              <input type="password" id="signupConfirmPassword" required minlength="6" placeholder="Re-enter password" class="form-input">
+            </div>
+          </div>
+
+          <!-- Face Biometric Enrollment Sub-section -->
+          <div class="enroll-face-box">
+            <div style="font-size: 13px; font-weight: 600; color: var(--color-text-primary); margin-bottom: 2px;">
+              📱 Face ID Enrollment (Screenlock Setup)
+            </div>
+            <div style="font-size: 11px; color: var(--color-text-tertiary); margin-bottom: 8px;">
+              Capture your biometric face signature for mobile-style screenlock unlock
+            </div>
+
+            <div class="enroll-face-preview" id="signupFacePreviewBox">
+              <video id="signupFaceVideo" autoplay playsinline muted style="display: none;"></video>
+              <img id="signupFaceThumb" style="display: none;" alt="Enrolled Face">
+              <span id="signupFacePlaceholder" style="font-size: 28px;">📷</span>
+            </div>
+
+            <div style="display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: wrap;">
+              <button type="button" class="btn btn-secondary" id="btnStartSignupCamera" style="font-size: 11px; padding: 6px 12px;">
+                <span>Start Camera</span>
+              </button>
+              <button type="button" class="btn btn-primary" id="btnCaptureSignupFace" style="font-size: 11px; padding: 6px 12px; display: none;">
+                <span>📸 Capture Face</span>
+              </button>
+              <button type="button" class="btn btn-tertiary" id="btnRetakeSignupFace" style="font-size: 11px; padding: 6px 10px; display: none;">
+                <span>Retake</span>
+              </button>
+            </div>
+
+            <div id="signupFaceStatus" style="font-size: 11px; color: var(--color-text-muted); margin-top: 6px;">
+              Face enrollment is recommended for instant login.
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary" id="btnSubmitSignup" style="width: 100%; padding: 11px; font-size: 14px; font-weight: 600;">
+            Create Account & Enter Workspace
+          </button>
+        </form>
+
+        <div style="text-align: center; margin-top: 14px;">
+          <span style="font-size: 12px; color: var(--color-text-secondary);">Already registered?</span>
+          <button type="button" onclick="switchAuthTab('signin')" style="background: none; border: none; color: #3b82f6; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: underline; margin-left: 4px;">
+            Sign In with Face ID or Password
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="/face_biometric_client.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

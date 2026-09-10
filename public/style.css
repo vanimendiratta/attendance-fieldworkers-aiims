@@ -1,0 +1,862 @@
+@import url('/tokens.css');
+
+/* Employee Application Layout (Mobile-first, quietly premium light theme) */
+.app-viewport {
+  max-width: 520px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background-color: var(--color-bg-surface);
+  border-left: 1px solid var(--color-border-default);
+  border-right: 1px solid var(--color-border-default);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  box-shadow: var(--shadow-sm);
+}
+
+@media (min-width: 768px) {
+  body {
+    background-color: var(--color-bg-app);
+    padding: 24px 0 60px;
+  }
+  .app-viewport {
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    min-height: 840px;
+    border: 1px solid var(--color-border-default);
+  }
+}
+
+/* App Header */
+.employee-header-bar {
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--color-border-default);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #ffffff;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.brand-text-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  line-height: 1.2;
+}
+
+.brand-text-org {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+}
+
+/* Notification & Alert Banner */
+.notification-strip {
+  padding: 12px 20px;
+  font-size: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-bottom: 1px solid transparent;
+}
+.notification-strip.alert-success {
+  background-color: var(--color-success-bg);
+  border-color: var(--color-success-border);
+  color: var(--color-success);
+}
+.notification-strip.alert-danger {
+  background-color: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger);
+}
+
+/* Main Employee Scrollable Container */
+.employee-scroll-body {
+  flex: 1;
+  padding: 24px 20px 80px;
+  overflow-y: auto;
+}
+
+/* Greeting Section */
+.employee-greeting {
+  margin-bottom: 24px;
+}
+
+.greeting-sup {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.greeting-name {
+  font-size: var(--font-size-2xl);
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  color: var(--color-text-primary);
+  line-height: 1.2;
+}
+
+.greeting-date {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-top: 4px;
+}
+
+/* Primary Today Attendance Card (Section 10) */
+.today-attendance-card {
+  background-color: #ffffff;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  padding: 24px 20px;
+  box-shadow: var(--shadow-xs);
+  margin-bottom: 24px;
+}
+
+.today-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.today-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--color-text-muted);
+}
+
+.working-timer-block {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.working-digits {
+  font-family: var(--font-mono);
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: -1px;
+  color: var(--color-text-primary);
+  line-height: 1.1;
+  margin-bottom: 6px;
+}
+
+.working-sublabel {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+}
+
+/* Action Button */
+.btn-attendance-action {
+  width: 100%;
+  padding: 16px;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  letter-spacing: 0.3px;
+  justify-content: center;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+.action-btn-checkin {
+  background-color: var(--color-primary);
+  color: #ffffff;
+}
+.action-btn-checkin:hover {
+  background-color: var(--color-primary-hover);
+}
+
+.action-btn-checkout {
+  background-color: var(--color-danger);
+  color: #ffffff;
+}
+.action-btn-checkout:hover {
+  background-color: #991b1b;
+}
+
+.action-btn-completed {
+  background-color: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+  cursor: not-allowed !important;
+}
+.action-btn-completed:hover {
+  background-color: #f1f5f9;
+}
+
+/* Secondary Break Row */
+.break-control-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.break-control-row .btn {
+  flex: 1;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+/* Location & Sensor Verification Strips */
+.telemetry-status-grid {
+  border-top: 1px solid var(--color-border-subtle);
+  padding-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.telemetry-row-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.telemetry-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-secondary);
+}
+
+.telemetry-right {
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+/* Shift Progress Visualization (Section 15) */
+.shift-progress-box {
+  background-color: #ffffff;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-xs);
+  margin-bottom: 24px;
+}
+
+.shift-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.progress-track {
+  height: 8px;
+  background-color: var(--color-bg-subtle);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background-color: var(--color-primary);
+  border-radius: var(--radius-full);
+  transition: width 0.3s ease;
+}
+
+.progress-meta-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+}
+
+/* Today Timeline (Section 13) */
+.today-timeline-card {
+  background-color: #ffffff;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-xs);
+}
+
+.timeline-title-row {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-muted);
+  margin-bottom: 18px;
+}
+
+.clean-timeline {
+  list-style: none;
+  position: relative;
+  padding-left: 20px;
+}
+
+.clean-timeline::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 6px;
+  width: 2px;
+  background-color: var(--color-border-default);
+}
+
+.timeline-step {
+  position: relative;
+  margin-bottom: 18px;
+}
+.timeline-step:last-child {
+  margin-bottom: 0;
+}
+
+.timeline-step-dot {
+  position: absolute;
+  left: -20px;
+  top: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  border: 3px solid var(--color-primary);
+}
+
+.timeline-step-time {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.timeline-step-desc {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+
+.timeline-step-badge {
+  display: inline-block;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+/* Bottom Navigation Bar (Section 17) */
+.employee-bottom-nav {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background-color: #ffffff;
+  border-top: 1px solid var(--color-border-default);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  z-index: 50;
+}
+
+.bottom-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+  text-decoration: none;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.bottom-nav-item.active {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+/* Camera Modal / Dedicated Capture Experience (Section 11) */
+.camera-overlay-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.camera-overlay-backdrop.active {
+  display: flex;
+}
+
+.camera-dialog-box {
+  background-color: #ffffff;
+  border-radius: var(--radius-xl);
+  width: 100%;
+  max-width: 440px;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+}
+
+.camera-dialog-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border-default);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.viewfinder-box {
+  position: relative;
+  width: 100%;
+  height: 360px;
+  background-color: #0f172a;
+  overflow: hidden;
+}
+
+#videoPreview, #snapshotCanvas {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+#snapshotCanvas {
+  display: none;
+}
+
+/* Subtle, Trustworthy Face Alignment Guide (No glowing cartoon lasers) */
+.camera-face-guide {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 200px;
+  height: 250px;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  border-radius: 50% 50% 45% 45%;
+  pointer-events: none;
+  box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.4);
+}
+
+.camera-hud-pill {
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  background-color: rgba(15, 23, 42, 0.75);
+  color: #ffffff;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+}
+
+.camera-privacy-notice {
+  padding: 12px 20px;
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  background-color: var(--color-bg-app);
+  border-top: 1px solid var(--color-border-default);
+  line-height: 1.4;
+}
+
+.camera-actions-bar {
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #ffffff;
+}
+
+/* Shutter Button */
+.shutter-btn {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  border: 4px solid var(--color-primary);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: transform 0.15s;
+}
+
+.shutter-btn:active {
+  transform: scale(0.94);
+}
+
+/* Employee Sign In Dialog */
+.login-dialog-box {
+  background-color: #ffffff;
+  border-radius: var(--radius-xl);
+  width: 100%;
+  max-width: 400px;
+  padding: 28px;
+  box-shadow: var(--shadow-lg);
+}
+
+/* Work Duty Mode Switcher */
+.duty-mode-container {
+  background: var(--color-bg-subtle, #f8fafc);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  padding: 12px;
+}
+
+.duty-mode-toggle {
+  display: flex;
+  background: #e2e8f0;
+  border-radius: var(--radius-sm);
+  padding: 3px;
+  gap: 3px;
+}
+
+.duty-mode-btn {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.duty-mode-btn.active {
+  background: #ffffff;
+  color: var(--color-text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.duty-mode-btn:hover:not(.active) {
+  color: var(--color-text-primary);
+}
+
+.field-site-input {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 13px;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  color: var(--color-text-primary);
+  transition: border-color 0.15s;
+}
+
+.field-site-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.08);
+}
+
+/* ========================================================
+   AUTHENTICATION PORTAL (Sign In / Sign Up & Mobile Screenlock)
+   ======================================================== */
+.auth-dialog-box {
+  background-color: #ffffff;
+  border-radius: var(--radius-xl);
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 28px 24px;
+  box-shadow: var(--shadow-lg);
+  position: relative;
+  transition: all 0.25s ease;
+}
+
+/* Auth Primary Tabs (Sign In vs Sign Up) */
+.auth-nav-tabs {
+  display: flex;
+  background-color: var(--color-bg-subtle, #f1f5f9);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  margin-bottom: 20px;
+  gap: 4px;
+}
+
+.auth-nav-tab {
+  flex: 1;
+  text-align: center;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.18s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.auth-nav-tab.active {
+  background-color: #ffffff;
+  color: var(--color-text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* Sign In Sub-methods (Face Unlock vs ID/Pass) */
+.signin-method-toggle {
+  display: flex;
+  background-color: #e2e8f0;
+  border-radius: var(--radius-sm);
+  padding: 3px;
+  margin-bottom: 18px;
+  gap: 3px;
+}
+
+.signin-method-btn {
+  flex: 1;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.signin-method-btn.active {
+  background: #ffffff;
+  color: var(--color-text-primary);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+}
+
+/* Mobile Screenlock Biometric Scanner View */
+.screenlock-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0 16px;
+  text-align: center;
+}
+
+.screenlock-padlock {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+  color: var(--color-text-secondary);
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.screenlock-padlock.unlocked {
+  background: #ecfdf5;
+  color: #10b981;
+  transform: scale(1.1);
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.25);
+}
+
+.screenlock-padlock.denied {
+  background: #fef2f2;
+  color: #ef4444;
+  animation: lockShake 0.4s ease-in-out;
+}
+
+@keyframes lockShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  75% { transform: translateX(6px); }
+}
+
+.screenlock-scanner-frame {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  position: relative;
+  overflow: hidden;
+  background-color: #0f172a;
+  box-shadow: 0 0 0 4px #e2e8f0, 0 8px 24px rgba(15, 23, 42, 0.15);
+  margin: 12px auto 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: box-shadow 0.3s ease;
+}
+
+.screenlock-scanner-frame.scanning {
+  box-shadow: 0 0 0 4px #3b82f6, 0 0 24px rgba(59, 130, 246, 0.35);
+  animation: biometricPulse 2s infinite ease-in-out;
+}
+
+.screenlock-scanner-frame.unlocked {
+  box-shadow: 0 0 0 4px #10b981, 0 0 30px rgba(16, 185, 129, 0.45);
+}
+
+@keyframes biometricPulse {
+  0%, 100% { box-shadow: 0 0 0 4px #3b82f6, 0 0 18px rgba(59, 130, 246, 0.25); }
+  50% { box-shadow: 0 0 0 6px #60a5fa, 0 0 28px rgba(59, 130, 246, 0.45); }
+}
+
+.screenlock-scanner-frame video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1); /* Mirror for selfie video */
+}
+
+/* Sweeping Biometric Laser Line */
+.screenlock-laser-beam {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0) 0%, #38bdf8 50%, rgba(59, 130, 246, 0) 100%);
+  box-shadow: 0 0 12px #38bdf8, 0 0 4px #60a5fa;
+  pointer-events: none;
+  display: none;
+  animation: laserSweep 1.8s ease-in-out infinite alternate;
+  z-index: 10;
+}
+
+.screenlock-laser-beam.active {
+  display: block;
+}
+
+@keyframes laserSweep {
+  0% { top: 12%; opacity: 0.3; }
+  50% { opacity: 1; }
+  100% { top: 88%; opacity: 0.3; }
+}
+
+/* Biometric Reticle Corners */
+.reticle-corner {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.65);
+  pointer-events: none;
+  z-index: 12;
+}
+
+.reticle-corner.corner-tl { top: 38px; left: 38px; border-right: none; border-bottom: none; border-top-left-radius: 4px; }
+.reticle-corner.corner-tr { top: 38px; right: 38px; border-left: none; border-bottom: none; border-top-right-radius: 4px; }
+.reticle-corner.corner-bl { bottom: 38px; left: 38px; border-right: none; border-top: none; border-bottom-left-radius: 4px; }
+.reticle-corner.corner-br { bottom: 38px; right: 38px; border-left: none; border-top: none; border-bottom-right-radius: 4px; }
+
+/* Status Badge */
+.screenlock-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: #f8fafc;
+  border: 1px solid var(--color-border-default);
+  border-radius: 20px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+
+.screenlock-status-badge .pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #3b82f6;
+  animation: dotPulse 1.4s infinite;
+}
+
+@keyframes dotPulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+/* Registration / Sign Up Form Grid */
+.signup-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 480px) {
+  .signup-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.signup-full-width {
+  grid-column: 1 / -1;
+}
+
+/* Face ID Enrollment View in Sign Up */
+.enroll-face-box {
+  background: var(--color-bg-subtle, #f8fafc);
+  border: 1px dashed var(--color-border-default);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  text-align: center;
+  margin-top: 4px;
+  margin-bottom: 16px;
+}
+
+.enroll-face-preview {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  border: 2px solid #3b82f6;
+  margin: 8px auto 10px;
+  overflow: hidden;
+  position: relative;
+  background: #0f172a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.enroll-face-preview video,
+.enroll-face-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+

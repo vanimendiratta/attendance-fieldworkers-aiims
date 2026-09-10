@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Attendance Operations | Apex Enterprise</title>
+  <link rel="stylesheet" href="/admin.css">
+  <!-- Leaflet Map CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Client-side States & Districts Dictionary -->
+  <script src="/states_districts_client.js"></script>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%20width=%2232%22%20height=%2232%22><text y=%2224%22 font-size=%2224%22>🛡️</text></svg>">
+</head>
+<body>
+
+  <div class="admin-shell">
+    
+    <!-- 1. Refined Desktop Sidebar (Section 5) -->
+    <aside class="admin-sidebar">
+      <!-- Logo & Org Name -->
+      <div class="sidebar-brand-header">
+        <div class="sidebar-brand-icon">A</div>
+        <div style="flex: 1; min-width: 0;">
+          <div class="sidebar-org-title" id="sidebarOrgName">Apex Innovations</div>
+          <div class="sidebar-org-sub">Operations Workspace</div>
+        </div>
+      </div>
+
+      <!-- Navigation Hierarchy -->
+      <nav class="sidebar-nav">
+        <div>
+          <div class="nav-group-label">Core</div>
+          <ul class="nav-item-list">
+            <li>
+              <a class="nav-link active" data-view="viewDashboard" id="navDashboard">
+                <span class="nav-icon">📊</span>
+                <span>Dashboard</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-link" data-view="viewTeams" id="navTeams">
+                <span class="nav-icon">🗺️</span>
+                <span>Teams & Districts</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-link" data-view="viewEmployees" id="navEmployees">
+                <span class="nav-icon">👥</span>
+                <span>Employees</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-link" data-view="viewAttendance" id="navAttendance">
+                <span class="nav-icon">⏱️</span>
+                <span>Attendance</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-link" data-view="viewLeave" id="navLeave">
+                <span class="nav-icon">🗓️</span>
+                <span>Leave</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-link" data-view="viewShifts" id="navShifts">
+                <span class="nav-icon">🔄</span>
+                <span>Shifts</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-link" data-view="viewReports" id="navReports">
+                <span class="nav-icon">📈</span>
+                <span>Reports</span>
+              </a>
+            </li>
+          </ul>
+        </div>
+
+        <div>
+          <div class="nav-group-label">Administration</div>
+          <ul class="nav-item-list">
+            <li>
+              <a class="nav-link" data-view="viewSettings" id="navSettings">
+                <span class="nav-icon">⚙️</span>
+                <span>Organization & Geofence</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-link" data-view="viewAudit" id="navAudit">
+                <span class="nav-icon">🛡️</span>
+                <span>Security Audit Logs</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-link" data-view="viewRedcap" id="navRedcap">
+                <span class="nav-icon">🔄</span>
+                <span>REDCap Gateway</span>
+              </a>
+            </li>
+          </ul>
+        </div>
+      </nav>
+
+      <!-- Sidebar Profile & Logout at Bottom -->
+      <div class="sidebar-footer">
+        <div class="admin-profile-pill">
+          <div class="admin-avatar" id="sidebarAdminInitial">A</div>
+          <div>
+            <div style="font-size: 12px; font-weight: 600;" id="sidebarAdminUser">admin</div>
+            <div style="font-size: 11px; color: var(--color-text-muted);">Administrator</div>
+          </div>
+        </div>
+        <button id="btnAdminLogout" title="Sign Out" style="background: transparent; border: none; color: var(--color-text-tertiary); cursor: pointer; font-size: 14px; padding: 6px; border-radius: var(--radius-xs);">
+          🚪
+        </button>
+      </div>
+    </aside>
+
+    <!-- 2. Main Wrapper -->
+    <div class="admin-main-wrapper">
+      
+      <!-- Top Header (Section 6) -->
+      <header class="admin-header">
+        <div class="header-left">
+          <span class="page-title" id="topPageTitle">Dashboard</span>
+          <span class="breadcrumb-divider">/</span>
+          <span class="breadcrumb-active" id="topBreadcrumb">Real-time Overview</span>
+        </div>
+
+        <div class="header-right">
+          <!-- Search -->
+          <div class="header-search">
+            <span style="color: var(--color-text-muted); font-size: 13px;">🔍</span>
+            <input type="text" placeholder="Search employees, shifts..." id="adminSearchInput">
+          </div>
+
+          <!-- Switch to Employee Portal -->
+          <a href="/" class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;">
+            <span>📱 Employee Portal</span>
+          </a>
+
+          <!-- Active Organization Badge -->
+          <div class="badge badge-neutral" id="headerOrgBadge">
+            <span class="badge-dot"></span>
+            <span id="headerOrgName">Apex Innovations (ORG-001)</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- 3. Admin Main Content Views -->
+      <main class="admin-content">
+
+        <!-- VIEW 1: EDITORIAL ADMIN DASHBOARD (Section 7) -->
+        <section id="viewDashboard" class="admin-view-panel">
+          <!-- Greeting Bar -->
+          <div class="dashboard-greeting-bar">
+            <div>
+              <h1 class="greeting-headline" id="greetingHeadline">Good morning, Administrator</h1>
+              <p class="greeting-subtext" id="greetingDate">Tuesday, 8 September 2026 · Real-time Attendance & Geofence Active</p>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-secondary" id="btnRefreshDashboard">🔄 Refresh</button>
+              <a href="/api/admin/redcap/data-dictionary.csv" download class="btn btn-secondary">📥 Export REDCap CSV</a>
+            </div>
+          </div>
+
+          <!-- Tabular Attendance Metrics Strip -->
+          <div class="metrics-summary-strip">
+            <div class="metric-strip-item">
+              <div class="metric-strip-label">
+                <span>Present Today</span>
+                <span class="badge badge-success" style="font-size: 10px;">88%</span>
+              </div>
+              <div class="metric-strip-value" id="dashMetricPresent">--</div>
+              <div class="metric-strip-sub">Total verified check-ins</div>
+            </div>
+
+            <div class="metric-strip-item">
+              <div class="metric-strip-label">
+                <span>Currently Working</span>
+                <span class="badge badge-neutral" style="font-size: 10px;">Active</span>
+              </div>
+              <div class="metric-strip-value" style="color: var(--color-accent);" id="dashMetricWorking">--</div>
+              <div class="metric-strip-sub">Live on clock right now</div>
+            </div>
+
+            <div class="metric-strip-item">
+              <div class="metric-strip-label">
+                <span>On Break</span>
+                <span class="badge badge-warning" style="font-size: 10px;">Paused</span>
+              </div>
+              <div class="metric-strip-value" style="color: var(--color-warning);" id="dashMetricBreak">--</div>
+              <div class="metric-strip-sub">Approved breaks ticking</div>
+            </div>
+
+            <div class="metric-strip-item">
+              <div class="metric-strip-label">
+                <span>Completed Shifts</span>
+                <span class="badge badge-neutral" style="font-size: 10px;">Closed</span>
+              </div>
+              <div class="metric-strip-value" id="dashMetricCompleted">--</div>
+              <div class="metric-strip-sub">Signed out with fresh GPS</div>
+            </div>
+          </div>
+
+          <!-- Simultaneous Multi-State & District Operations Matrix (Regional Hub) -->
+          <div class="surface-card" style="margin-bottom: 24px;">
+            <div class="surface-card-header" style="flex-wrap: wrap; gap: 12px;">
+              <div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <h3 class="surface-card-title">🗺️ National Regional Operations Matrix</h3>
+                  <span class="badge badge-success" id="badgeActiveStatesCount" style="font-size: 11px;">Loading States...</span>
+                </div>
+                <p style="font-size: 12px; color: var(--color-text-tertiary);">Simultaneous live attendance tracking across Indian States, Districts, and Assigned Teams</p>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <button class="btn btn-secondary" style="font-size: 11px; padding: 5px 10px;" id="btnRefreshMatrix">🔄 Refresh Matrix</button>
+                <button class="btn btn-primary" style="font-size: 11px; padding: 5px 10px;" onclick="switchView('viewTeams')">Manage Teams ➔</button>
+              </div>
+            </div>
+            <div class="surface-card-body" style="padding: 16px 24px;">
+              <div class="state-matrix-grid" id="containerStateMatrix">
+                <div style="grid-column: 1 / -1; text-align: center; color: var(--color-text-muted); padding: 24px;">
+                  Loading regional operations data...
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Editorial Grid: Distribution & Activity Feed -->
+          <div class="dashboard-editorial-grid">
+            <!-- Left: Currently Working Table -->
+            <div class="surface-card">
+              <div class="surface-card-header">
+                <div>
+                  <h3 class="surface-card-title">Currently Working Employees</h3>
+                  <p style="font-size: 12px; color: var(--color-text-tertiary);">Active on-premise sessions</p>
+                </div>
+                <button class="btn btn-tertiary" style="font-size: 12px;" onclick="switchView('viewAttendance')">View All Attendance ➔</button>
+              </div>
+
+              <!-- Distribution bar -->
+              <div style="padding: 16px 24px 0;">
+                <div style="font-size: 12px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 8px;">
+                  Today's Attendance Status Distribution
+                </div>
+                <div class="attendance-dist-bar">
+                  <div class="dist-segment dist-present" style="width: 75%;" title="Present: 75%"></div>
+                  <div class="dist-segment dist-late" style="width: 10%;" title="Late: 10%"></div>
+                  <div class="dist-segment dist-leave" style="width: 10%;" title="Leave: 10%"></div>
+                  <div class="dist-segment dist-absent" style="width: 5%;" title="Absent: 5%"></div>
+                </div>
+                <div class="dist-legend">
+                  <div class="legend-item"><span class="legend-color dist-present"></span> Present (Verified)</div>
+                  <div class="legend-item"><span class="legend-color dist-late"></span> Late Arrival</div>
+                  <div class="legend-item"><span class="legend-color dist-leave"></span> On Leave</div>
+                  <div class="legend-item"><span class="legend-color dist-absent"></span> Absent</div>
+                </div>
+              </div>
+
+              <div style="padding-top: 14px;">
+                <table class="data-table" id="tableCurrentlyWorking">
+                  <thead>
+                    <tr>
+                      <th>Employee</th>
+                      <th>Department</th>
+                      <th>Check-in</th>
+                      <th>Current Duration</th>
+                      <th>Location Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="bodyCurrentlyWorking">
+                    <tr><td colspan="5" style="text-align: center; color: var(--color-text-muted); padding: 24px;">Loading active shifts...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Right: Real-time Attendance Activity Timeline Feed -->
+            <div class="surface-card">
+              <div class="surface-card-header">
+                <h3 class="surface-card-title">Recent Activity</h3>
+                <span class="badge badge-neutral" style="font-size: 11px;">Live Telemetry</span>
+              </div>
+              <div class="surface-card-body" style="padding-top: 10px;">
+                <ul class="activity-feed" id="feedActivityList">
+                  <li class="activity-feed-item">
+                    <span class="activity-time">09:32</span>
+                    <span class="activity-dot dot-checkin"></span>
+                    <div class="activity-content">
+                      <strong>Alex Johnson</strong> checked in at Office
+                      <div class="activity-sub">GPS Accuracy: ±12m · Geofence Verified</div>
+                    </div>
+                  </li>
+                  <li class="activity-feed-item">
+                    <span class="activity-time">13:10</span>
+                    <span class="activity-dot dot-break"></span>
+                    <div class="activity-content">
+                      <strong>Alex Johnson</strong> started approved break
+                      <div class="activity-sub">Timer ticking</div>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW 2: FULL ATTENDANCE TABLE (Section 8 & 17) -->
+        <section id="viewAttendance" class="admin-view-panel" style="display: none;">
+          <div class="table-container">
+            <div class="table-toolbar">
+              <div class="table-filters" style="flex-wrap: wrap; gap: 8px;">
+                <input type="text" id="attendanceFilterSearch" placeholder="Filter by name, department..." class="form-input" style="width: 170px; padding: 7px 12px; font-size: 13px;">
+                <select id="attendanceFilterStatus" class="form-select" style="width: 130px; padding: 7px 12px; font-size: 13px;">
+                  <option value="ALL">All Statuses</option>
+                  <option value="CHECKED_IN">Working</option>
+                  <option value="ON_BREAK">On Break</option>
+                  <option value="COMPLETED">Completed</option>
+                </select>
+                <select id="attendanceFilterMode" class="form-select" style="width: 140px; padding: 7px 12px; font-size: 13px;">
+                  <option value="ALL">All Work Modes</option>
+                  <option value="OFFICE">🏢 Office Duty</option>
+                  <option value="FIELD_WORK">🚗 Field Work</option>
+                </select>
+                <!-- Territorial Cascading Filters -->
+                <select id="attendanceFilterState" class="form-select" style="width: 155px; padding: 7px 12px; font-size: 13px;">
+                  <option value="ALL">All States / UTs</option>
+                </select>
+                <select id="attendanceFilterDistrict" class="form-select" style="width: 155px; padding: 7px 12px; font-size: 13px;" disabled>
+                  <option value="ALL">All Districts</option>
+                </select>
+                <select id="attendanceFilterTeam" class="form-select" style="width: 155px; padding: 7px 12px; font-size: 13px;">
+                  <option value="ALL">All Teams</option>
+                </select>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="font-size: 12px; color: var(--color-text-tertiary);" id="attendanceCountLabel">
+                  Showing all records
+                </div>
+                <button id="btnExportAttendanceCsv" class="btn btn-secondary" style="font-size: 12px; display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; font-weight: 500; cursor: pointer; white-space: nowrap;" title="Export attendance records in Excel-compatible .csv format">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  <span>Export Excel (.csv)</span>
+                </button>
+              </div>
+            </div>
+
+            <table class="data-table" id="attendanceMainTable">
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>Team & Territory</th>
+                  <th>Department</th>
+                  <th>Check-In Time</th>
+                  <th>Check-In Photo</th>
+                  <th>Check-In Location</th>
+                  <th>Checkout Time</th>
+                  <th>Checkout Photo</th>
+                  <th>Net Hours</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="attendanceMainTableBody">
+                <tr><td colspan="11" style="text-align: center; color: var(--color-text-muted); padding: 32px;">Loading attendance records...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- VIEW 3: EMPLOYEES MANAGEMENT (Section 8 & 9) -->
+        <section id="viewEmployees" class="admin-view-panel" style="display: none;">
+          <div class="table-container">
+            <div class="table-toolbar">
+              <div>
+                <h3 style="font-size: 15px; font-weight: 600;">Organization Employees</h3>
+                <p style="font-size: 12px; color: var(--color-text-tertiary);">Active accounts registered under this employer</p>
+              </div>
+              <button class="btn btn-primary" style="font-size: 12px;">+ Add Employee</button>
+            </div>
+
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>ID</th>
+                  <th>Department</th>
+                  <th>Designation</th>
+                  <th>Shift Schedule</th>
+                  <th>Account Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="employeesTableBody">
+                <tr><td colspan="7" style="text-align: center; color: var(--color-text-muted); padding: 24px;">Loading employees...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- VIEW 4: LEAVE & SHIFTS PLACEHOLDERS (Clean, Enterprise) -->
+        <section id="viewLeave" class="admin-view-panel" style="display: none;">
+          <div class="surface-card" style="padding: 32px; text-align: center;">
+            <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 6px;">Leave Management</h3>
+            <p style="font-size: 13px; color: var(--color-text-tertiary); max-width: 480px; margin: 0 auto 20px;">
+              Manage employee annual leave, sick leave requests, and approved absences.
+            </p>
+            <div class="badge badge-neutral">Standard Shift Calendar Active</div>
+          </div>
+        </section>
+
+        <section id="viewShifts" class="admin-view-panel" style="display: none;">
+          <div class="surface-card" style="padding: 32px; text-align: center;">
+            <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 6px;">Shift Configurations</h3>
+            <p style="font-size: 13px; color: var(--color-text-tertiary); max-width: 480px; margin: 0 auto 20px;">
+              Configured shift: 09:00 AM – 05:00 PM (8.0 Hours). Overtime starts automatically past required shift hours.
+            </p>
+          </div>
+        </section>
+
+        <section id="viewReports" class="admin-view-panel" style="display: none;">
+          <div class="surface-card" style="padding: 32px; text-align: center;">
+            <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 6px;">Attendance Reports</h3>
+            <p style="font-size: 13px; color: var(--color-text-tertiary); max-width: 480px; margin: 0 auto 20px;">
+              Export weekly and monthly payroll attendance summaries synchronized with REDCap.
+            </p>
+            <a href="/api/admin/redcap/data-dictionary.csv" download class="btn btn-primary" style="font-size: 13px;">
+              Download REDCap CSV Dictionary
+            </a>
+          </div>
+        </section>
+
+        <!-- VIEW 5: ORGANIZATION & GEOFENCE SETTINGS -->
+        <section id="viewSettings" class="admin-view-panel" style="display: none;">
+          <div class="surface-card" style="max-width: 780px;">
+            <div class="surface-card-header">
+              <div>
+                <h3 class="surface-card-title">Organization & Geofence Policy</h3>
+                <p style="font-size: 12px; color: var(--color-text-tertiary);">Configured rules for location accuracy and office boundaries</p>
+              </div>
+            </div>
+
+            <div class="surface-card-body">
+              <form id="settingsForm">
+                <div style="margin-bottom: 20px;">
+                  <label class="form-label" for="settingOfficeName">Worksite / Office Name</label>
+                  <input type="text" id="settingOfficeName" class="form-input" required>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+                  <div>
+                    <label class="form-label" for="settingOfficeLat">Office Latitude (°N)</label>
+                    <input type="number" step="any" id="settingOfficeLat" class="form-input" required>
+                  </div>
+                  <div>
+                    <label class="form-label" for="settingOfficeLng">Office Longitude (°E)</label>
+                    <input type="number" step="any" id="settingOfficeLng" class="form-input" required>
+                  </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+                  <div>
+                    <label class="form-label" for="settingGeofenceRadius">Geofence Radius (meters)</label>
+                    <input type="number" id="settingGeofenceRadius" class="form-input" min="10" max="5000" required>
+                  </div>
+                  <div>
+                    <label class="form-label" for="settingMaxAccuracy">Max Allowed GPS Accuracy (meters)</label>
+                    <input type="number" id="settingMaxAccuracy" class="form-input" min="5" max="1000" required>
+                    <span style="font-size: 11px; color: var(--color-text-muted);">Readings with accuracy > threshold are rejected.</span>
+                  </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+                  <div>
+                    <label class="form-label" for="settingGeofencePolicy">Enforcement Policy</label>
+                    <select id="settingGeofencePolicy" class="form-select">
+                      <option value="ALLOW_WITH_FLAG">Allow Attendance & Flag as Outside Geofence</option>
+                      <option value="STRICT_BLOCK">Strictly Block Attendance Outside Radius</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="form-label" for="settingShiftHours">Required Daily Shift Hours</label>
+                    <input type="number" step="0.5" id="settingShiftHours" class="form-input" min="1" max="24" required>
+                  </div>
+                </div>
+
+                <div style="margin-bottom: 24px;">
+                  <label class="form-label" for="settingTimezone">Timezone</label>
+                  <input type="text" id="settingTimezone" class="form-input" required>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 14px;">
+                  <button type="submit" class="btn btn-primary">Save Policy Changes</button>
+                  <span id="saveSettingsFeedback" style="font-size: 13px; color: var(--color-success); display: none;">✓ Policy updated successfully</span>
+                </div>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW 6: SECURITY AUDIT LOGS -->
+        <section id="viewAudit" class="admin-view-panel" style="display: none;">
+          <div class="table-container">
+            <div class="table-toolbar">
+              <div>
+                <h3 style="font-size: 15px; font-weight: 600;">Immutable Security Audit Logs</h3>
+                <p style="font-size: 12px; color: var(--color-text-tertiary);">Tamper-proof log of check-in events, accuracy rejections, and geofence evaluations</p>
+              </div>
+              <button id="btnRefreshAudit" class="btn btn-secondary" style="font-size: 12px;">🔄 Refresh Logs</button>
+            </div>
+
+            <table class="data-table" id="auditTable">
+              <thead>
+                <tr>
+                  <th>Timestamp (UTC)</th>
+                  <th>Event Type</th>
+                  <th>Actor / Employee</th>
+                  <th>Status</th>
+                  <th>Client IP</th>
+                  <th>Telemetry Details</th>
+                </tr>
+              </thead>
+              <tbody id="auditTableBody">
+                <tr><td colspan="6" style="text-align: center; color: var(--color-text-muted); padding: 24px;">Loading audit events...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- VIEW 7: REDCAP GATEWAY -->
+        <section id="viewRedcap" class="admin-view-panel" style="display: none;">
+          <div class="surface-card" style="max-width: 960px;">
+            <div class="surface-card-header">
+              <div>
+                <h3 class="surface-card-title">REDCap Electronic Data Capture (EDC) Gateway</h3>
+                <p style="font-size: 12px; color: var(--color-text-tertiary);">All 22 attendance fields are synchronized to backend REDCap</p>
+              </div>
+              <a href="/api/admin/redcap/data-dictionary.csv" download class="btn btn-secondary" style="font-size: 12px;">
+                📥 Download Data Dictionary CSV
+              </a>
+            </div>
+
+            <div class="surface-card-body">
+              <div style="background-color: #f8fafc; border: 1px solid var(--color-border-default); border-radius: var(--radius-md); padding: 16px; margin-bottom: 24px; font-size: 13px; color: var(--color-text-secondary); line-height: 1.6;">
+                <strong>Architecture:</strong> Employee App ➔ Backend API Gateway ➔ Validation & Server Timestamping ➔ REDCap REST API Adapter.<br>
+                REDCap credentials are held exclusively in backend environment variables and are never transmitted to clients.
+              </div>
+
+              <h4 style="font-size: 13px; font-weight: 600; text-transform: uppercase; color: var(--color-text-tertiary); margin-bottom: 12px;">
+                Synced Records (Current Tenant)
+              </h4>
+
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Record ID</th>
+                    <th>Employee ID</th>
+                    <th>Check-in Lat/Lng</th>
+                    <th>Check-in UTC</th>
+                    <th>Net Working</th>
+                    <th>REDCap Sync</th>
+                  </tr>
+                </thead>
+                <tbody id="redcapRecordsBody">
+                  <tr><td colspan="6" style="text-align: center; color: var(--color-text-muted); padding: 20px;">No synced records found.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW 8: TEAMS & REGIONAL DISTRICTS MANAGEMENT -->
+        <section id="viewTeams" class="admin-view-panel" style="display: none;">
+          <div style="display: grid; grid-template-columns: 340px 1fr; gap: 24px; align-items: start;">
+            
+            <!-- Left: Create Team Form -->
+            <div class="surface-card">
+              <div class="surface-card-header">
+                <div>
+                  <h3 class="surface-card-title">Create Regional Team</h3>
+                  <p style="font-size: 12px; color: var(--color-text-tertiary);">Divide workforce by State & District</p>
+                </div>
+              </div>
+              <div class="surface-card-body">
+                <form id="formCreateTeam">
+                  <div style="margin-bottom: 14px;">
+                    <label class="form-label" for="teamStateSelect">Indian State / Union Territory</label>
+                    <select id="teamStateSelect" class="form-select" required>
+                      <option value="">Select State / UT</option>
+                    </select>
+                  </div>
+                  <div style="margin-bottom: 14px;">
+                    <label class="form-label" for="teamDistrictSelect">District</label>
+                    <select id="teamDistrictSelect" class="form-select" required disabled>
+                      <option value="">Select State First</option>
+                    </select>
+                  </div>
+                  <div style="margin-bottom: 14px;">
+                    <label class="form-label" for="teamNameInput">Team / Unit Name</label>
+                    <input type="text" id="teamNameInput" class="form-input" placeholder="e.g. Pune Field Inspection Team" required>
+                  </div>
+                  <div style="margin-bottom: 18px;">
+                    <label class="form-label" for="teamDescInput">Territory Description (Optional)</label>
+                    <textarea id="teamDescInput" class="form-input" rows="2" placeholder="e.g. Healthcare facility audit patrol in Pune district" style="resize: vertical;"></textarea>
+                  </div>
+                  <button type="submit" class="btn btn-primary" style="width: 100%;" id="btnSubmitCreateTeam">
+                    + Add Regional Team
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            <!-- Right: Teams Directory Table & State Filter -->
+            <div class="table-container">
+              <div class="table-toolbar">
+                <div class="table-filters" style="gap: 8px;">
+                  <select id="teamFilterState" class="form-select" style="width: 180px; padding: 7px 12px; font-size: 13px;">
+                    <option value="ALL">All States / UTs</option>
+                  </select>
+                  <select id="teamFilterDistrict" class="form-select" style="width: 180px; padding: 7px 12px; font-size: 13px;" disabled>
+                    <option value="ALL">All Districts</option>
+                  </select>
+                </div>
+                <div style="font-size: 12px; color: var(--color-text-tertiary);" id="teamCountLabel">
+                  Showing all teams
+                </div>
+              </div>
+
+              <table class="data-table" id="teamsTable">
+                <thead>
+                  <tr>
+                    <th>Team Name</th>
+                    <th>State</th>
+                    <th>District</th>
+                    <th>Assigned Members</th>
+                    <th>Active Today</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="teamsTableBody">
+                  <tr><td colspan="6" style="text-align: center; color: var(--color-text-muted); padding: 24px;">Loading teams...</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- 5. SLIDE-OUT ATTENDANCE DETAIL DRAWER (Section 29) -->
+  <div class="drawer-backdrop" id="attendanceDrawerBackdrop">
+    <div class="drawer-panel" id="attendanceDrawerPanel">
+      
+      <!-- Drawer Header -->
+      <div class="drawer-header">
+        <div>
+          <h3 class="drawer-title" id="drawerEmployeeName">Employee Attendance Record</h3>
+          <p style="font-size: 12px; color: var(--color-text-tertiary);" id="drawerRecordMeta">Record ID: --</p>
+        </div>
+        <button class="btn-close-icon" id="btnCloseDrawer" title="Close Drawer">&times;</button>
+      </div>
+
+      <!-- Drawer Body -->
+      <div class="drawer-body">
+
+        <!-- Team & Territorial Assignment -->
+        <div class="drawer-section" style="padding-bottom: 12px; border-bottom: 1px solid var(--color-border-subtle);">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
+            <div>
+              <div style="font-size: 11px; font-weight: 600; color: var(--color-text-tertiary); text-transform: uppercase;">Team & Territory</div>
+              <div style="font-size: 14px; font-weight: 600; color: var(--color-text-primary); margin-top: 2px;" id="drwTeamName">--</div>
+            </div>
+            <span class="badge badge-neutral" id="drwTerritoryBadge" style="font-size: 12px;">--</span>
+          </div>
+        </div>
+        
+        <!-- Working Hours Summary Block -->
+        <div class="drawer-section">
+          <div class="drawer-section-title">
+            <span>Official Working Hours</span>
+            <span class="badge badge-success" id="drawerStatusBadge">Verified</span>
+          </div>
+
+          <div class="drawer-hours-row">
+            <div class="hours-cell">
+              <div class="hours-cell-label">Gross</div>
+              <div class="hours-cell-value" id="drwGrossTime">--</div>
+            </div>
+            <div class="hours-cell">
+              <div class="hours-cell-label">Breaks</div>
+              <div class="hours-cell-value" id="drwBreakTime">--</div>
+            </div>
+            <div class="hours-cell">
+              <div class="hours-cell-label">Net Working</div>
+              <div class="hours-cell-value" style="color: var(--color-success);" id="drwNetTime">--</div>
+            </div>
+            <div class="hours-cell">
+              <div class="hours-cell-label">Overtime</div>
+              <div class="hours-cell-value" style="color: var(--color-accent);" id="drwOvertime">--</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Check-In & Check-Out Photos (Section 30) -->
+        <div class="drawer-section">
+          <div class="drawer-section-title">
+            <span>Verified Attendance Photographs</span>
+            <span style="font-size: 11px; color: var(--color-text-muted);">Real-time Camera Only</span>
+          </div>
+
+          <div class="drawer-photo-grid">
+            <!-- Checkin Photo Card -->
+            <div class="photo-card-box">
+              <img id="drwCheckinPhoto" src="" alt="Check-in Photo" class="photo-card-img">
+              <div class="photo-card-meta">
+                <div style="font-weight: 600; margin-bottom: 2px;">CHECK-IN PHOTO</div>
+                <div style="color: var(--color-text-tertiary);" id="drwCheckinPhotoTime">Time: --</div>
+                <div style="color: var(--color-text-tertiary);" id="drwCheckinPhotoAcc">Accuracy: --</div>
+              </div>
+            </div>
+
+            <!-- Checkout Photo Card -->
+            <div class="photo-card-box" id="drwCheckoutBox">
+              <img id="drwCheckoutPhoto" src="" alt="Checkout Photo" class="photo-card-img">
+              <div class="photo-card-meta">
+                <div style="font-weight: 600; margin-bottom: 2px;">CHECK-OUT PHOTO</div>
+                <div style="color: var(--color-text-tertiary);" id="drwCheckoutPhotoTime">Time: --</div>
+                <div style="color: var(--color-text-tertiary);" id="drwCheckoutPhotoAcc">Accuracy: --</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Interactive Map (Section 14) -->
+        <div class="drawer-section">
+          <div class="drawer-section-title">
+            <span>Location Verification</span>
+            <span class="badge badge-neutral" id="drwGeofenceBadge">Geofence Checked</span>
+          </div>
+
+          <div class="drawer-map-container" id="drawerMap"></div>
+          <div style="font-size: 12px; color: var(--color-text-tertiary); margin-top: 10px;" id="drwAddressText">
+            Coordinates: --
+          </div>
+        </div>
+
+        <!-- Approved Breaks List -->
+        <div class="drawer-section">
+          <div class="drawer-section-title">
+            <span>Approved Breaks</span>
+            <span style="font-size: 11px; color: var(--color-text-muted);" id="drwBreakCountLabel">0 breaks</span>
+          </div>
+          <div id="drwBreaksList" style="font-size: 13px; color: var(--color-text-secondary);">
+            No breaks recorded.
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. EMPLOYER ADMIN SIGN-IN MODAL (Quiet, Trustworthy) -->
+  <div class="auth-modal-backdrop" id="adminLoginModal">
+    <div class="auth-modal-dialog">
+      <div style="text-align: center; margin-bottom: 24px;">
+        <div class="sidebar-brand-icon" style="margin: 0 auto 12px; width: 44px; height: 44px; font-size: 20px;">A</div>
+        <h2 style="font-size: 18px; font-weight: 700; color: var(--color-text-primary);">Employer Administrator Sign In</h2>
+        <p style="font-size: 13px; color: var(--color-text-tertiary); margin-top: 4px;">Sign in with your organization's administrator credentials</p>
+      </div>
+
+      <div id="adminLoginError" class="badge badge-danger" style="display: none; width: 100%; padding: 8px 12px; margin-bottom: 16px;">
+        Invalid credentials.
+      </div>
+
+      <form id="adminLoginForm">
+        <div style="margin-bottom: 16px;">
+          <label class="form-label" for="loginAdminEmployer">Employer Organization</label>
+          <select id="loginAdminEmployer" class="form-select">
+            <option value="ORG-001">Apex Innovations Ltd. (ORG-001)</option>
+            <option value="ORG-002">Cyberdyne Systems Corp (ORG-002)</option>
+          </select>
+        </div>
+
+        <div style="margin-bottom: 16px;">
+          <label class="form-label" for="loginAdminUsername">Administrator Username</label>
+          <input type="text" id="loginAdminUsername" class="form-input" required placeholder="e.g. apex_admin">
+        </div>
+
+        <div style="margin-bottom: 20px;">
+          <label class="form-label" for="loginAdminPassword">Password</label>
+          <input type="password" id="loginAdminPassword" class="form-input" required placeholder="Enter admin password">
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 10px; font-size: 14px;">
+          Sign In to Workspace
+        </button>
+      </form>
+
+      <!-- Demo Credentials Helper -->
+      <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--color-border-default);">
+        <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 8px;">
+          Demo Quick-Fill:
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <button type="button" class="btn btn-secondary" onclick="fillAdminCreds('ORG-001', 'apex_admin', 'ApexSecure@123')" style="justify-content: space-between; font-size: 11px; padding: 6px 10px;">
+            <span><strong>Apex Innovations:</strong> apex_admin</span>
+            <span style="color: var(--color-text-muted);">Pass: ApexSecure@123</span>
+          </button>
+          <button type="button" class="btn btn-secondary" onclick="fillAdminCreds('ORG-002', 'cyberdyne_admin', 'Cyberdyne@456')" style="justify-content: space-between; font-size: 11px; padding: 6px 10px;">
+            <span><strong>Cyberdyne Systems:</strong> cyberdyne_admin</span>
+            <span style="color: var(--color-text-muted);">Pass: Cyberdyne@456</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="/admin.js"></script>
+</body>
+</html>
