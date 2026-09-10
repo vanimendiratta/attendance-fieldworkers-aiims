@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Attendance Operations | AIIMS</title>
   <meta name="description" content="Verified real-time photo and geolocation attendance for enterprise employees.">
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="./style.css">
   <!-- Client-side States & Districts Dictionary -->
-  <script src="/states_districts_client.js"></script>
+  <script src="./states_districts_client.js?v=3"></script>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%20width=%2232%22%20height=%2232%22><text y=%2224%22 font-size=%2224%22>🛡️</text></svg>">
 </head>
 <body>
@@ -476,7 +476,7 @@
             <!-- Duty State & District (Cascading) -->
             <div>
               <label class="form-label" for="signupState">Duty State / UT *</label>
-              <select id="signupState" class="form-select" required>
+              <select id="signupState" class="form-select" required onchange="if(window.handleStateChange)window.handleStateChange(this.value)" oninput="if(window.handleStateChange)window.handleStateChange(this.value)">
                 <option value="">Select State / UT</option>
                 <option value="Andaman and Nicobar Islands">Andaman and Nicobar Islands</option>
                 <option value="Andhra Pradesh">Andhra Pradesh</option>
@@ -519,7 +519,7 @@
 
             <div>
               <label class="form-label" for="signupDistrict">Duty District *</label>
-              <select id="signupDistrict" class="form-select" required disabled>
+              <select id="signupDistrict" class="form-select" required>
                 <option value="">Select District</option>
               </select>
             </div>
@@ -595,7 +595,7 @@
     </div>
   </div>
 
-  <script src="/face_biometric_client.js"></script>
-  <script src="/app.js"></script>
+  <script src="./face_biometric_client.js"></script>
+  <script src="./app.js?v=3"></script>
 </body>
 </html>

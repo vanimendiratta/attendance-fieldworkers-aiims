@@ -184,11 +184,19 @@ window.INDIA_STATES_DISTRICTS = {
   "Dadra & Nagar Haveli and Daman & Diu": [
     "Dadra and Nagar Haveli", "Daman", "Diu"
   ],
+  "Dadra and Nagar Haveli and Daman and Diu": [
+    "Dadra and Nagar Haveli", "Daman", "Diu"
+  ],
   "Delhi": [
     "Central Delhi", "East Delhi", "New Delhi", "North Delhi", "North East Delhi",
     "North West Delhi", "Shahdara", "South Delhi", "South East Delhi", "South West Delhi", "West Delhi"
   ],
   "Jammu & Kashmir": [
+    "Anantnag", "Bandipora", "Baramulla", "Budgam", "Doda", "Ganderbal", "Jammu",
+    "Kathua", "Kishtwar", "Kulgam", "Kupwara", "Poonch", "Pulwama", "Rajouri",
+    "Ramban", "Reasi", "Samba", "Shopian", "Srinagar", "Udhampur"
+  ],
+  "Jammu and Kashmir": [
     "Anantnag", "Bandipora", "Baramulla", "Budgam", "Doda", "Ganderbal", "Jammu",
     "Kathua", "Kishtwar", "Kulgam", "Kupwara", "Poonch", "Pulwama", "Rajouri",
     "Ramban", "Reasi", "Samba", "Shopian", "Srinagar", "Udhampur"
@@ -300,3 +308,46 @@ window.setupStateDistrictCascade = function(stateSelectEl, districtSelectEl, opt
 };
 
 window.initCascadingStateDistrictDropdowns = window.setupStateDistrictCascade;
+
+// Standalone global handler for Duty State / UT -> Duty District dropdown cascade
+window.handleStateChange = function(selectedState) {
+  const distEl = document.getElementById('signupDistrict');
+  if (!distEl) return;
+  distEl.innerHTML = '';
+  if (!selectedState) {
+    distEl.innerHTML = '<option value="">Select State First</option>';
+    return;
+  }
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Select District';
+  distEl.appendChild(placeholder);
+
+  const districts = window.getDistrictsForIndianState(selectedState);
+  (districts || []).forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d;
+    opt.textContent = d;
+    distEl.appendChild(opt);
+  });
+  distEl.disabled = false;
+};
+
+// Auto-attach listeners on DOMContentLoaded
+if (typeof document !== 'undefined') {
+  const initSignupStateCascade = () => {
+    const stateEl = document.getElementById('signupState');
+    if (stateEl) {
+      stateEl.addEventListener('change', () => window.handleStateChange(stateEl.value));
+      stateEl.addEventListener('input', () => window.handleStateChange(stateEl.value));
+      if (stateEl.value) {
+        window.handleStateChange(stateEl.value);
+      }
+    }
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initSignupStateCascade);
+  } else {
+    initSignupStateCascade();
+  }
+}
