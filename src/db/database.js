@@ -206,11 +206,11 @@ function initSchema() {
       updated_at=excluded.updated_at
   `);
 
-  // Employer 1: Apex Innovations Ltd. (CDER AIIMS Campus, New Delhi)
+  // Employer: AIIMS (AIIMS Campus, New Delhi)
   upsertOrg.run(
     'ORG-001',
-    'Apex Innovations Ltd.',
-    'CDER AIIMS Campus, New Delhi',
+    'AIIMS',
+    'AIIMS, New Delhi',
     28.5662,
     77.2136,
     1000,
@@ -218,29 +218,28 @@ function initSchema() {
     500,
     8.0,
     'Asia/Kolkata',
-    'apex_admin',
-    'ApexSecure@123',
+    'aiims_admin',
+    'Aiims@123',
     new Date().toISOString()
   );
 
-  // Employer 2: Cyberdyne Systems Corp (CDER AIIMS Campus, New Delhi)
-  upsertOrg.run(
-    'ORG-002',
-    'Cyberdyne Systems Corp',
-    'CDER AIIMS Campus, New Delhi',
-    28.5662,
-    77.2136,
-    1000,
-    'ALLOW_WITH_FLAG',
-    500,
-    8.5,
-    'Asia/Kolkata',
-    'cyberdyne_admin',
-    'Cyberdyne@456',
-    new Date().toISOString()
-  );
+  // Clean up any legacy dummy organizations, teams, and employees (Alex, Priya, Marcus, etc.)
+  try {
+    const dummyEmpIds = db.prepare(`SELECT id FROM employees WHERE name LIKE '%Alex%' OR name LIKE '%Marcus%' OR name LIKE '%Priya%' OR name LIKE '%Rohan%' OR name LIKE '%Sarah%' OR name LIKE '%Elena%' OR email LIKE '%apexcorp.internal%' OR email LIKE '%cyberdyne.io%'`).all().map(r => r.id);
+    if (dummyEmpIds.length > 0) {
+      const placeholders = dummyEmpIds.map(() => '?').join(',');
+      db.prepare(`DELETE FROM breaks WHERE attendance_id IN (SELECT id FROM attendance WHERE employee_id IN (${placeholders}))`).run(...dummyEmpIds);
+      db.prepare(`DELETE FROM attendance WHERE employee_id IN (${placeholders})`).run(...dummyEmpIds);
+      db.prepare(`DELETE FROM audit_logs WHERE employee_id IN (${placeholders})`).run(...dummyEmpIds);
+      db.prepare(`DELETE FROM employees WHERE id IN (${placeholders})`).run(...dummyEmpIds);
+    }
+    db.prepare(`DELETE FROM teams WHERE employer_id = 'ORG-002'`).run();
+    db.prepare(`DELETE FROM organizations WHERE id = 'ORG-002'`).run();
+  } catch (cleanErr) {
+    // ignore
+  }
 
-  // Seed / Upsert Regional Teams by State and District
+  // Seed / Upsert Regional Teams by State and District for AIIMS
   const upsertTeam = db.prepare(`
     INSERT INTO teams (id, employer_id, name, state, district, description, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -251,37 +250,11 @@ function initSchema() {
       description=excluded.description
   `);
 
-  // ORG-001 Regional Teams
-  upsertTeam.run('TEAM-101', 'ORG-001', 'Delhi Regional Headquarters', 'Delhi', 'New Delhi', 'Primary operations & engineering at AIIMS campus', new Date().toISOString());
-  upsertTeam.run('TEAM-102', 'ORG-001', 'Central Delhi Field Unit', 'Delhi', 'Central Delhi', 'Active field deployment & healthcare audit', new Date().toISOString());
-  upsertTeam.run('TEAM-103', 'ORG-001', 'Maharashtra West Operations', 'Maharashtra', 'Mumbai Suburban', 'Western territory inspection & client liaison', new Date().toISOString());
-  upsertTeam.run('TEAM-104', 'ORG-001', 'Karnataka Tech Hub', 'Karnataka', 'Bengaluru Urban', 'Southern technology outreach and on-site support', new Date().toISOString());
-
-  // ORG-002 Regional Teams
-  upsertTeam.run('TEAM-201', 'ORG-002', 'NCR Cyber Security Unit', 'Haryana', 'Gurugram', 'Cyber defense operations & cloud monitoring', new Date().toISOString());
-  upsertTeam.run('TEAM-202', 'ORG-002', 'Delhi Autonomous Systems', 'Delhi', 'North Delhi', 'Robotics and field sensor deployment', new Date().toISOString());
-
-  // Seed / Upsert employees for Employer 1 & 2
-  const upsertEmp = db.prepare(`
-    INSERT INTO employees (id, employer_id, name, email, department, designation, pin, password, is_active, is_admin, team_id, state, district, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      employer_id=excluded.employer_id,
-      name=excluded.name,
-      password=excluded.password,
-      team_id=excluded.team_id,
-      state=excluded.state,
-      district=excluded.district
-  `);
-
-  // ORG-001 employees
-  upsertEmp.run('EMP-1001', 'ORG-001', 'Alex Johnson', 'alex.johnson@apexcorp.internal', 'Engineering', 'Senior Systems Architect', '1234', 'Password@1001', 1, 0, 'TEAM-101', 'Delhi', 'New Delhi', new Date().toISOString());
-  upsertEmp.run('EMP-1002', 'ORG-001', 'Priya Sharma', 'priya.sharma@apexcorp.internal', 'Product Design', 'Lead Experience Designer', '1234', 'Password@1002', 1, 0, 'TEAM-102', 'Delhi', 'Central Delhi', new Date().toISOString());
-  upsertEmp.run('EMP-1003', 'ORG-001', 'Rohan Verma', 'rohan.verma@apexcorp.internal', 'Field Operations', 'Regional Field Auditor', '1234', 'Password@1003', 1, 0, 'TEAM-103', 'Maharashtra', 'Mumbai Suburban', new Date().toISOString());
-
-  // ORG-002 employees
-  upsertEmp.run('EMP-2001', 'ORG-002', 'Marcus Wright', 'marcus.wright@cyberdyne.io', 'Cyber Security', 'Principal Security Architect', '5678', 'Password@2001', 1, 0, 'TEAM-201', 'Haryana', 'Gurugram', new Date().toISOString());
-  upsertEmp.run('EMP-2002', 'ORG-002', 'Sarah Reese', 'sarah.reese@cyberdyne.io', 'Robotics & AI', 'Lead Autonomous Robotics Engineer', '5678', 'Password@2002', 1, 0, 'TEAM-202', 'Delhi', 'North Delhi', new Date().toISOString());
+  // AIIMS Regional Teams
+  upsertTeam.run('TEAM-101', 'ORG-001', 'Delhi Regional Headquarters', 'Delhi', 'New Delhi', 'Primary dental healthcare and research operations at AIIMS campus', new Date().toISOString());
+  upsertTeam.run('TEAM-102', 'ORG-001', 'Central Delhi Field Unit', 'Delhi', 'Central Delhi', 'Active field deployment & dental healthcare audit', new Date().toISOString());
+  upsertTeam.run('TEAM-103', 'ORG-001', 'Maharashtra West Operations', 'Maharashtra', 'Mumbai Suburban', 'Western territory inspection & dental clinical audit', new Date().toISOString());
+  upsertTeam.run('TEAM-104', 'ORG-001', 'Karnataka Tech Hub', 'Karnataka', 'Bengaluru Urban', 'Southern outreach and clinical field survey', new Date().toISOString());
 }
 
 initSchema();

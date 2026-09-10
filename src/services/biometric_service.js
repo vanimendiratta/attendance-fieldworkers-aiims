@@ -144,41 +144,10 @@ function enrollEmployeeFace(employeeId, facePhoto, faceDescriptor) {
   return db.prepare('SELECT id, name, email, face_enrolled, employer_id FROM employees WHERE id = ?').get(employeeId);
 }
 
-/**
- * Initialize seed descriptors for demo employees so Face Unlock works out of the box
- */
-function initDemoFaceBiometrics() {
-  try {
-    const alex = db.prepare('SELECT id, face_descriptor FROM employees WHERE id = ?').get('EMP-1001');
-    if (alex && !alex.face_descriptor) {
-      const alexDesc = JSON.stringify(createDeterministicDescriptor('ALEX_JOHNSON_APEX_EMP_1001'));
-      db.prepare('UPDATE employees SET face_descriptor = ?, face_enrolled = 1 WHERE id = ?').run(alexDesc, 'EMP-1001');
-    }
-
-    const priya = db.prepare('SELECT id, face_descriptor FROM employees WHERE id = ?').get('EMP-1002');
-    if (priya && !priya.face_descriptor) {
-      const priyaDesc = JSON.stringify(createDeterministicDescriptor('PRIYA_SHARMA_APEX_EMP_1002'));
-      db.prepare('UPDATE employees SET face_descriptor = ?, face_enrolled = 1 WHERE id = ?').run(priyaDesc, 'EMP-1002');
-    }
-
-    const marcus = db.prepare('SELECT id, face_descriptor FROM employees WHERE id = ?').get('EMP-2001');
-    if (marcus && !marcus.face_descriptor) {
-      const marcusDesc = JSON.stringify(createDeterministicDescriptor('MARCUS_WRIGHT_CYBERDYNE_EMP_2001'));
-      db.prepare('UPDATE employees SET face_descriptor = ?, face_enrolled = 1 WHERE id = ?').run(marcusDesc, 'EMP-2001');
-    }
-  } catch (err) {
-    console.warn('Demo face enrollment initialization note:', err.message);
-  }
-}
-
-// Run seed enrollment
-initDemoFaceBiometrics();
-
 module.exports = {
   MATCH_THRESHOLD,
   createDeterministicDescriptor,
   computeCosineSimilarity,
   matchFaceToEmployee,
-  enrollEmployeeFace,
-  initDemoFaceBiometrics
+  enrollEmployeeFace
 };

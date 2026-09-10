@@ -70,7 +70,13 @@ async function runSinglePunchLimitTests() {
   const testEmpId = 'EMP-1001';
   const testEmployerId = 'ORG-001';
 
-  // Step 0: Clean up prior attendance records for today for a clean test state
+  // Step 0: Ensure test employee exists and clean up prior attendance
+  db.prepare(`
+    INSERT INTO employees (id, employer_id, name, email, department, designation, password, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET employer_id=excluded.employer_id, department=excluded.department, designation=excluded.designation
+  `).run(testEmpId, testEmployerId, 'Dental Officer Test', 'dental.field@aiims.edu', 'Dental', 'PRS-1', 'Password@123', new Date().toISOString());
+
   db.prepare("DELETE FROM breaks WHERE attendance_id IN (SELECT id FROM attendance WHERE employee_id = ?)").run(testEmpId);
   db.prepare("DELETE FROM attendance WHERE employee_id = ?").run(testEmpId);
 

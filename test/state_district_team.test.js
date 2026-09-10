@@ -65,6 +65,17 @@ async function runStateDistrictTeamTests() {
   console.log('🇮🇳 TESTING INDIAN STATES, DISTRICTS & REGIONAL TEAMS OPERATIONS');
   console.log('===============================================================\n');
 
+  // Ensure test employees exist for AIIMS Dental Department
+  const upsertEmp = db.prepare(`
+    INSERT INTO employees (id, employer_id, name, email, department, designation, password, created_at)
+    VALUES (?, 'ORG-001', ?, ?, 'Dental', ?, 'Password@123', ?)
+    ON CONFLICT(id) DO UPDATE SET employer_id='ORG-001', department='Dental'
+  `);
+  const nowStr = new Date().toISOString();
+  upsertEmp.run('EMP-1001', 'Dental Researcher 1', 'prs1.dental@aiims.edu', 'PRS-1', nowStr);
+  upsertEmp.run('EMP-1002', 'Dental Researcher 2', 'prs2.dental@aiims.edu', 'PRS-2', nowStr);
+  upsertEmp.run('EMP-1003', 'Dental Researcher 3', 'prs3.dental@aiims.edu', 'PRS-3', nowStr);
+
   // Test 1: Validate Indian States & Districts Dictionary
   console.log('1. Testing State & District Dictionary...');
   const states = getAllStates();

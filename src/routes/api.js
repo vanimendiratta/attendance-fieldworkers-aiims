@@ -107,14 +107,13 @@ router.post('/auth/employee/login', (req, res) => {
 
 // Helper to generate next sequential employee ID
 function generateEmployeeId(employerId) {
-  const prefix = employerId === 'ORG-002' ? 'EMP-2' : 'EMP-1';
-  const existing = db.prepare(`SELECT id FROM employees WHERE id LIKE ? ORDER BY id DESC LIMIT 1`).get(`${prefix}%`);
+  const existing = db.prepare(`SELECT id FROM employees WHERE id LIKE 'EMP-%' ORDER BY id DESC LIMIT 1`).get();
   if (!existing) {
-    return `${prefix}001`;
+    return 'EMP-1001';
   }
   const match = existing.id.match(/\d+/);
   if (match) {
-    const nextNum = parseInt(match[0], 10) + 1;
+    const nextNum = Math.max(1001, parseInt(match[0], 10) + 1);
     return `EMP-${nextNum}`;
   }
   return `EMP-${Date.now().toString().slice(-4)}`;
@@ -126,9 +125,9 @@ router.post('/auth/employee/signup', (req, res) => {
     name,
     email,
     phone,
-    employer_id,
-    department,
-    designation,
+    employer_id = 'ORG-001',
+    department = 'Dental',
+    designation = 'PRS-1',
     state,
     district,
     password,
@@ -145,20 +144,13 @@ router.post('/auth/employee/signup', (req, res) => {
   if (!email || !email.trim() || !email.includes('@')) {
     return res.status(400).json({ success: false, error: 'Valid email address is required.' });
   }
-  if (!employer_id) {
-    return res.status(400).json({ success: false, error: 'Please select an Employer Organization.' });
-  }
-  if (!department || !department.trim()) {
-    return res.status(400).json({ success: false, error: 'Department is required.' });
-  }
-  if (!designation || !designation.trim()) {
-    return res.status(400).json({ success: false, error: 'Designation is required.' });
-  }
   if (!password || password.length < 6) {
     return res.status(400).json({ success: false, error: 'Password must be at least 6 characters.' });
   }
 
-  const employer = db.prepare('SELECT * FROM organizations WHERE id = ?').get(employer_id);
+  const effectiveOrgId = employer_id || 'ORG-001';
+  const employer = db.prepare('SELECT * FROM organizations WHERE id = ?').get(effectiveOrgId) 
+    || db.prepare('SELECT * FROM organizations WHERE id = ?').get('ORG-001');
   if (!employer) {
     return res.status(404).json({ success: false, error: 'Employer organization not found.' });
   }

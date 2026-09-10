@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Attendance | Apex Workspace</title>
+  <title>Attendance Operations | AIIMS</title>
   <meta name="description" content="Verified real-time photo and geolocation attendance for enterprise employees.">
   <link rel="stylesheet" href="/style.css">
   <!-- Client-side States & Districts Dictionary -->
@@ -19,8 +19,8 @@
       <div class="brand-row">
         <div class="brand-avatar" id="headerAvatar">A</div>
         <div>
-          <div class="brand-text-name" id="headerEmpName">Alex Johnson</div>
-          <div class="brand-text-org" id="headerEmployerName">Apex Innovations</div>
+          <div class="brand-text-name" id="headerEmpName">Field Officer</div>
+          <div class="brand-text-org" id="headerEmployerName">AIIMS</div>
         </div>
       </div>
 
@@ -47,7 +47,7 @@
       <!-- Greeting (Section 10) -->
       <section class="employee-greeting">
         <div class="greeting-sup">TODAY'S ATTENDANCE</div>
-        <h1 class="greeting-name" id="displayGreetingName">Good morning, Alex</h1>
+        <h1 class="greeting-name" id="displayGreetingName">Welcome to AIIMS Workspace</h1>
         <div class="greeting-date" id="displayGreetingDate">Tuesday · 08 September 2026</div>
         <div style="display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap;" id="profileTeamBadgeContainer">
           <span class="badge badge-neutral" id="displayEmployeeTeam" style="font-size: 11px;">👥 Team: Loading...</span>
@@ -361,11 +361,9 @@
 
           <!-- Employer Selection for Scoped Matching -->
           <div style="width: 100%; margin-bottom: 12px; text-align: left;">
-            <label class="form-label" style="font-size: 11px; margin-bottom: 4px;">Organization (Optional scope)</label>
+            <label class="form-label" style="font-size: 11px; margin-bottom: 4px;">Organization</label>
             <select id="faceLoginOrgSelect" class="form-select" style="font-size: 12px; padding: 6px 10px;">
-              <option value="ALL">All Enrolled Organizations</option>
-              <option value="ORG-001">Apex Innovations Ltd. (ORG-001)</option>
-              <option value="ORG-002">Cyberdyne Systems Corp (ORG-002)</option>
+              <option value="ORG-001">AIIMS</option>
             </select>
           </div>
 
@@ -377,23 +375,6 @@
             <button type="button" class="btn btn-secondary" onclick="switchSignInMethod('creds')" style="font-size: 12px; padding: 9px 12px;">
               <span>Use Password</span>
             </button>
-          </div>
-
-          <!-- Demo Quick Face Unlock -->
-          <div style="margin-top: 18px; width: 100%; padding-top: 14px; border-top: 1px solid var(--color-border-default); text-align: left;">
-            <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 6px;">
-              Demo Biometric One-Click:
-            </div>
-            <div style="display: flex; flex-direction: column; gap: 6px;">
-              <button type="button" class="btn btn-secondary" onclick="quickFaceUnlock('EMP-1001')" style="justify-content: space-between; font-size: 11px; padding: 6px 10px;">
-                <span>👤 <strong>Alex Johnson</strong> (Apex · Engineering)</span>
-                <span style="color: #3b82f6; font-weight: 600;">Unlock Face ID</span>
-              </button>
-              <button type="button" class="btn btn-secondary" onclick="quickFaceUnlock('EMP-2001')" style="justify-content: space-between; font-size: 11px; padding: 6px 10px;">
-                <span>👤 <strong>Marcus Wright</strong> (Cyberdyne · Security)</span>
-                <span style="color: #3b82f6; font-weight: 600;">Unlock Face ID</span>
-              </button>
-            </div>
           </div>
         </div>
 
@@ -409,8 +390,7 @@
             <div style="margin-bottom: 14px;">
               <label class="form-label" for="loginEmployerSelect">Employer Organization</label>
               <select id="loginEmployerSelect" class="form-select">
-                <option value="ORG-001">Apex Innovations Ltd. (ORG-001)</option>
-                <option value="ORG-002">Cyberdyne Systems Corp (ORG-002)</option>
+                <option value="ORG-001">AIIMS</option>
               </select>
             </div>
 
@@ -428,23 +408,6 @@
               Sign In
             </button>
           </form>
-
-          <!-- Quick Demo Fill -->
-          <div style="margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--color-border-default);">
-            <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 8px;">
-              Demo Quick-Fill:
-            </div>
-            <div style="display: flex; flex-direction: column; gap: 6px;">
-              <button type="button" class="btn btn-secondary" onclick="fillEmployeeCreds('ORG-001', 'EMP-1001', 'Password@1001')" style="justify-content: space-between; font-size: 11px; padding: 6px 10px;">
-                <span><strong>Apex:</strong> EMP-1001 (Alex Johnson)</span>
-                <span style="color: var(--color-text-muted);">Pass: Password@1001</span>
-              </button>
-              <button type="button" class="btn btn-secondary" onclick="fillEmployeeCreds('ORG-002', 'EMP-2001', 'Password@2001')" style="justify-content: space-between; font-size: 11px; padding: 6px 10px;">
-                <span><strong>Cyberdyne:</strong> EMP-2001 (Marcus Wright)</span>
-                <span style="color: var(--color-text-muted);">Pass: Password@2001</span>
-              </button>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -462,13 +425,13 @@
             <!-- Full Name -->
             <div class="signup-full-width">
               <label class="form-label" for="signupName">Full Name *</label>
-              <input type="text" id="signupName" required placeholder="e.g. Ananya Sharma" class="form-input">
+              <input type="text" id="signupName" required placeholder="e.g. Dr. Ananya Sharma" class="form-input">
             </div>
 
             <!-- Email Address -->
             <div>
               <label class="form-label" for="signupEmail">Corporate Email *</label>
-              <input type="email" id="signupEmail" required placeholder="ananya@apexcorp.internal" class="form-input">
+              <input type="email" id="signupEmail" required placeholder="ananya@aiims.edu" class="form-input">
             </div>
 
             <!-- Phone Number -->
@@ -481,41 +444,77 @@
             <div class="signup-full-width">
               <label class="form-label" for="signupEmployerSelect">Employer Organization *</label>
               <select id="signupEmployerSelect" class="form-select" required>
-                <option value="ORG-001">Apex Innovations Ltd. (ORG-001)</option>
-                <option value="ORG-002">Cyberdyne Systems Corp (ORG-002)</option>
+                <option value="ORG-001">AIIMS</option>
               </select>
             </div>
 
-            <!-- Department -->
+            <!-- Department (Dental Only) -->
             <div>
               <label class="form-label" for="signupDepartment">Department *</label>
               <select id="signupDepartment" class="form-select" required>
-                <option value="Engineering">Engineering</option>
-                <option value="Field Operations">Field Operations</option>
-                <option value="Healthcare & Audit">Healthcare & Audit</option>
-                <option value="Product Design">Product Design</option>
-                <option value="Cyber Security">Cyber Security</option>
-                <option value="Administration">Administration</option>
+                <option value="Dental" selected>Dental</option>
               </select>
             </div>
 
-            <!-- Designation -->
+            <!-- Designation (PRS-1, PRS-2, PRS-3, MTS) -->
             <div>
               <label class="form-label" for="signupDesignation">Designation *</label>
-              <input type="text" id="signupDesignation" required placeholder="e.g. Field Officer" class="form-input">
+              <select id="signupDesignation" class="form-select" required>
+                <option value="">Select Designation</option>
+                <option value="PRS-1">PRS-1</option>
+                <option value="PRS-2">PRS-2</option>
+                <option value="PRS-3">PRS-3</option>
+                <option value="MTS">MTS</option>
+              </select>
             </div>
 
             <!-- Duty State & District (Cascading) -->
             <div>
-              <label class="form-label" for="signupState">Duty State / UT</label>
-              <select id="signupState" class="form-select">
+              <label class="form-label" for="signupState">Duty State / UT *</label>
+              <select id="signupState" class="form-select" required>
                 <option value="">Select State / UT</option>
+                <option value="Andaman and Nicobar Islands">Andaman and Nicobar Islands</option>
+                <option value="Andhra Pradesh">Andhra Pradesh</option>
+                <option value="Arunachal Pradesh">Arunachal Pradesh</option>
+                <option value="Assam">Assam</option>
+                <option value="Bihar">Bihar</option>
+                <option value="Chandigarh">Chandigarh</option>
+                <option value="Chhattisgarh">Chhattisgarh</option>
+                <option value="Dadra and Nagar Haveli and Daman and Diu">Dadra and Nagar Haveli and Daman and Diu</option>
+                <option value="Delhi">Delhi</option>
+                <option value="Goa">Goa</option>
+                <option value="Gujarat">Gujarat</option>
+                <option value="Haryana">Haryana</option>
+                <option value="Himachal Pradesh">Himachal Pradesh</option>
+                <option value="Jammu and Kashmir">Jammu and Kashmir</option>
+                <option value="Jharkhand">Jharkhand</option>
+                <option value="Karnataka">Karnataka</option>
+                <option value="Kerala">Kerala</option>
+                <option value="Ladakh">Ladakh</option>
+                <option value="Lakshadweep">Lakshadweep</option>
+                <option value="Madhya Pradesh">Madhya Pradesh</option>
+                <option value="Maharashtra">Maharashtra</option>
+                <option value="Manipur">Manipur</option>
+                <option value="Meghalaya">Meghalaya</option>
+                <option value="Mizoram">Mizoram</option>
+                <option value="Nagaland">Nagaland</option>
+                <option value="Odisha">Odisha</option>
+                <option value="Puducherry">Puducherry</option>
+                <option value="Punjab">Punjab</option>
+                <option value="Rajasthan">Rajasthan</option>
+                <option value="Sikkim">Sikkim</option>
+                <option value="Tamil Nadu">Tamil Nadu</option>
+                <option value="Telangana">Telangana</option>
+                <option value="Tripura">Tripura</option>
+                <option value="Uttar Pradesh">Uttar Pradesh</option>
+                <option value="Uttarakhand">Uttarakhand</option>
+                <option value="West Bengal">West Bengal</option>
               </select>
             </div>
 
             <div>
-              <label class="form-label" for="signupDistrict">Duty District</label>
-              <select id="signupDistrict" class="form-select" disabled>
+              <label class="form-label" for="signupDistrict">Duty District *</label>
+              <select id="signupDistrict" class="form-select" required disabled>
                 <option value="">Select District</option>
               </select>
             </div>

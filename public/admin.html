@@ -3,26 +3,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Attendance Operations | Apex Enterprise</title>
+  <title>Attendance Operations | AIIMS</title>
+  <meta name="description" content="AIIMS verified real-time photo and geolocation attendance monitoring dashboard.">
   <link rel="stylesheet" href="/admin.css">
-  <!-- Leaflet Map CSS & JS -->
+  <!-- Dynamic Indian States & Districts Map -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <!-- Client-side States & Districts Dictionary -->
   <script src="/states_districts_client.js"></script>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%20width=%2232%22%20height=%2232%22><text y=%2224%22 font-size=%2224%22>🛡️</text></svg>">
 </head>
-<body>
+<body class="admin-body">
 
-  <div class="admin-shell">
+  <div class="admin-layout">
     
-    <!-- 1. Refined Desktop Sidebar (Section 5) -->
+    <!-- LEFT SIDEBAR -->
     <aside class="admin-sidebar">
       <!-- Logo & Org Name -->
       <div class="sidebar-brand-header">
         <div class="sidebar-brand-icon">A</div>
         <div style="flex: 1; min-width: 0;">
-          <div class="sidebar-org-title" id="sidebarOrgName">Apex Innovations</div>
+          <div class="sidebar-org-title" id="sidebarOrgName">AIIMS</div>
           <div class="sidebar-org-sub">Operations Workspace</div>
         </div>
       </div>
@@ -143,7 +144,7 @@
           <!-- Active Organization Badge -->
           <div class="badge badge-neutral" id="headerOrgBadge">
             <span class="badge-dot"></span>
-            <span id="headerOrgName">Apex Innovations (ORG-001)</span>
+            <span id="headerOrgName">AIIMS (ORG-001)</span>
           </div>
         </div>
       </header>
@@ -285,22 +286,7 @@
               </div>
               <div class="surface-card-body" style="padding-top: 10px;">
                 <ul class="activity-feed" id="feedActivityList">
-                  <li class="activity-feed-item">
-                    <span class="activity-time">09:32</span>
-                    <span class="activity-dot dot-checkin"></span>
-                    <div class="activity-content">
-                      <strong>Alex Johnson</strong> checked in at Office
-                      <div class="activity-sub">GPS Accuracy: ±12m · Geofence Verified</div>
-                    </div>
-                  </li>
-                  <li class="activity-feed-item">
-                    <span class="activity-time">13:10</span>
-                    <span class="activity-dot dot-break"></span>
-                    <div class="activity-content">
-                      <strong>Alex Johnson</strong> started approved break
-                      <div class="activity-sub">Timer ticking</div>
-                    </div>
-                  </li>
+                  <li style="color: var(--color-text-muted); font-size: 13px; padding: 12px 0;">Awaiting attendance events for today...</li>
                 </ul>
               </div>
             </div>
@@ -780,14 +766,13 @@
         <div style="margin-bottom: 16px;">
           <label class="form-label" for="loginAdminEmployer">Employer Organization</label>
           <select id="loginAdminEmployer" class="form-select">
-            <option value="ORG-001">Apex Innovations Ltd. (ORG-001)</option>
-            <option value="ORG-002">Cyberdyne Systems Corp (ORG-002)</option>
+            <option value="ORG-001">AIIMS</option>
           </select>
         </div>
 
         <div style="margin-bottom: 16px;">
           <label class="form-label" for="loginAdminUsername">Administrator Username</label>
-          <input type="text" id="loginAdminUsername" class="form-input" required placeholder="e.g. apex_admin">
+          <input type="text" id="loginAdminUsername" class="form-input" required placeholder="e.g. aiims_admin">
         </div>
 
         <div style="margin-bottom: 20px;">
@@ -796,23 +781,19 @@
         </div>
 
         <button type="submit" class="btn btn-primary" style="width: 100%; padding: 10px; font-size: 14px;">
-          Sign In to Workspace
+          Sign In to AIIMS Operations
         </button>
       </form>
 
-      <!-- Demo Credentials Helper -->
+      <!-- AIIMS Admin Credentials Helper -->
       <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--color-border-default);">
         <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 8px;">
-          Demo Quick-Fill:
+          AIIMS Operations Login:
         </div>
         <div style="display: flex; flex-direction: column; gap: 6px;">
-          <button type="button" class="btn btn-secondary" onclick="fillAdminCreds('ORG-001', 'apex_admin', 'ApexSecure@123')" style="justify-content: space-between; font-size: 11px; padding: 6px 10px;">
-            <span><strong>Apex Innovations:</strong> apex_admin</span>
-            <span style="color: var(--color-text-muted);">Pass: ApexSecure@123</span>
-          </button>
-          <button type="button" class="btn btn-secondary" onclick="fillAdminCreds('ORG-002', 'cyberdyne_admin', 'Cyberdyne@456')" style="justify-content: space-between; font-size: 11px; padding: 6px 10px;">
-            <span><strong>Cyberdyne Systems:</strong> cyberdyne_admin</span>
-            <span style="color: var(--color-text-muted);">Pass: Cyberdyne@456</span>
+          <button type="button" class="btn btn-secondary" onclick="fillAdminCreds('ORG-001', 'aiims_admin', 'Aiims@123')" style="justify-content: space-between; font-size: 11px; padding: 6px 10px;">
+            <span><strong>AIIMS:</strong> aiims_admin</span>
+            <span style="color: var(--color-text-muted);">Pass: Aiims@123</span>
           </button>
         </div>
       </div>

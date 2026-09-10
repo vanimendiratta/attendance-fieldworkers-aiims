@@ -95,8 +95,8 @@ async function runTests() {
     email: testEmail,
     phone: '+91 98310 99887',
     employer_id: 'ORG-001',
-    department: 'Healthcare & Audit',
-    designation: 'Senior Clinical Field Officer',
+    department: 'Dental',
+    designation: 'PRS-1',
     state: 'Delhi',
     district: 'New Delhi',
     password: 'SecurePass@2026',
@@ -108,6 +108,8 @@ async function runTests() {
   assert.ok(resSignup.data.success, 'Sign Up must report success');
   assert.ok(resSignup.data.employee.id, 'New employee must have generated ID');
   assert.strictEqual(resSignup.data.employee.name, 'Dr. Samir Sengupta');
+  assert.strictEqual(resSignup.data.employee.department, 'Dental');
+  assert.strictEqual(resSignup.data.employee.designation, 'PRS-1');
   assert.strictEqual(resSignup.data.employee.phone, '+91 98310 99887');
   assert.strictEqual(resSignup.data.employee.face_enrolled, 1, 'Face must be flagged as enrolled');
   assert.ok(resSignup.data.employee.team_name, 'Regional team must be resolved from Delhi / New Delhi');
@@ -121,8 +123,8 @@ async function runTests() {
     email: testEmail,
     phone: '+91 99999 99999',
     employer_id: 'ORG-001',
-    department: 'Operations',
-    designation: 'Staff',
+    department: 'Dental',
+    designation: 'MTS',
     password: 'Password@123'
   });
   assert.strictEqual(resDuplicate.status, 409, 'Must reject duplicate email with 409');
@@ -164,15 +166,15 @@ async function runTests() {
   assert.strictEqual(resFaceFail.data.success, false);
   console.log('   ✓ Unknown face correctly blocked: ' + resFaceFail.data.error);
 
-  // Test 7: Demo Face Recognition Quick-Unlock (Alex Johnson EMP-1001)
-  console.log('\n7. Testing Demo Quick Face Unlock (Alex Johnson EMP-1001)...');
+  // Test 7: Face Recognition Quick-Unlock with registered employee
+  console.log('\n7. Testing Face Unlock with registered employee...');
   const resDemoFace = await apiRequest('POST', '/api/auth/employee/face-login', {
     employer_id: 'ORG-001',
-    mock_employee_id: 'EMP-1001'
+    mock_employee_id: newEmpId
   });
   assert.strictEqual(resDemoFace.status, 200);
-  assert.strictEqual(resDemoFace.data.employee.name, 'Alex Johnson');
-  console.log(`   ✓ Demo Face Unlock verified: Welcome, ${resDemoFace.data.employee.name}`);
+  assert.strictEqual(resDemoFace.data.employee.name, 'Dr. Samir Sengupta');
+  console.log(`   ✓ Face Unlock verified: Welcome, ${resDemoFace.data.employee.name}`);
 
   console.log('\n===============================================================');
   console.log('🎉 ALL SIGN UP & SCREENLOCK FACE RECOGNITION TESTS PASSED 100%!');

@@ -670,21 +670,85 @@ async function triggerFaceRecognition(mockEmpId = null) {
   }
 }
 
-// One-click quick demo face unlock
-window.quickFaceUnlock = function(empId) {
-  triggerFaceRecognition(empId);
-};
-
 // Initialize Cascading State & District dropdowns for Sign Up
 function initSignupDropdowns() {
   const stateEl = document.getElementById('signupState');
   const distEl = document.getElementById('signupDistrict');
-  if (stateEl && distEl && window.initCascadingStateDistrictDropdowns) {
-    window.initCascadingStateDistrictDropdowns(stateEl, distEl, {
-      allowAll: false,
-      placeholderState: 'Select State / UT',
-      placeholderDistrict: 'Select District'
+  if (!stateEl || !distEl) return;
+
+  function populateDistricts(selectedState) {
+    distEl.innerHTML = '';
+    if (!selectedState) {
+      distEl.innerHTML = '<option value="">Select State First</option>';
+      distEl.disabled = true;
+      return;
+    }
+
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Select District';
+    distEl.appendChild(placeholder);
+
+    const data = window.INDIA_STATES_DISTRICTS || {};
+    let districts = data[selectedState] || [];
+    if (districts.length === 0 && typeof window.getDistrictsForIndianState === 'function') {
+      districts = window.getDistrictsForIndianState(selectedState);
+    }
+
+    districts.forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = d;
+      opt.textContent = d;
+      distEl.appendChild(opt);
     });
+    distEl.disabled = false;
+  }
+
+  // Ensure states are populated if not already present
+  if (stateEl.options.length <= 1) {
+    const states = (window.INDIA_STATES_DISTRICTS ? Object.keys(window.INDIA_STATES_DISTRICTS).sort() : []);
+    states.forEach(st => {
+      const opt = document.createElement('option');
+      opt.value = st;
+      opt.textContent = st;
+      stateEl.appendChild(opt);
+    });
+  }
+
+  // Bind change event listener once using dataset flag
+  if (!stateEl.dataset.cascadeAttached) {
+    stateEl.dataset.cascadeAttached = 'true';
+    stateEl.addEventListener('change', () => {
+      populateDistricts(stateEl.value);
+    });
+  }
+
+  // If a state is already selected, populate its districts
+  if (stateEl.value) {
+    populateDistricts(stateEl.value);
+  }
+
+  // If dictionary not yet available, fetch from API and populate
+  if (!window.INDIA_STATES_DISTRICTS || Object.keys(window.INDIA_STATES_DISTRICTS).length === 0) {
+    fetch('/api/geo/states-districts')
+      .then(r => r.json())
+      .then(res => {
+        if (res.data) {
+          window.INDIA_STATES_DISTRICTS = res.data;
+          if (stateEl.options.length <= 1) {
+            Object.keys(res.data).sort().forEach(st => {
+              const opt = document.createElement('option');
+              opt.value = st;
+              opt.textContent = st;
+              stateEl.appendChild(opt);
+            });
+          }
+          if (stateEl.value) {
+            populateDistricts(stateEl.value);
+          }
+        }
+      })
+      .catch(e => console.warn('Could not fetch states-districts dict:', e));
   }
 }
 
@@ -755,13 +819,6 @@ function stopSignupCamera() {
     signupCameraStream = null;
   }
 }
-
-window.fillEmployeeCreds = function(employerId, empId, password) {
-  DOM.loginEmployerSelect.value = employerId;
-  DOM.loginEmployeeId.value = empId;
-  DOM.loginEmployeePassword.value = password;
-  DOM.loginErrorBanner.style.display = 'none';
-};
 
 // ID & Password Sign In Handler
 DOM.employeeLoginForm.addEventListener('submit', async (e) => {
@@ -1416,7 +1473,7 @@ DOM.btnShutterCapture.addEventListener('click', () => {
   const selDist = DOM.selectFieldDistrict?.value || state.currentEmployee?.district || '';
   const territoryLabel = selState ? ` [${selDist ? selDist + ', ' : ''}${selState}]` : '';
 
-  ctx.fillText(`APEX ATTENDANCE · ${state.currentEmployee?.id} · ${state.flowMode} · ${modeLabel}${teamLabel}`, 26, h - 36);
+  ctx.fillText(`AIIMS ATTENDANCE · ${state.currentEmployee?.id} · ${state.flowMode} · ${modeLabel}${teamLabel}`, 26, h - 36);
   ctx.font = '10px monospace';
   ctx.fillStyle = '#bbf7d0';
   const locNote = state.resolvedAddress ? ` · ${state.resolvedAddress.substring(0, 36)}` : '';
@@ -1532,3 +1589,4 @@ DOM.btnConfirmSubmission.addEventListener('click', async () => {
 // Initialization
 initGeolocation();
 checkSession();
+initSignupDropdowns();

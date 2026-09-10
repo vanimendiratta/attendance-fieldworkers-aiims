@@ -298,3 +298,5 @@ window.setupStateDistrictCascade = function(stateSelectEl, districtSelectEl, opt
     }
   };
 };
+
+window.initCascadingStateDistrictDropdowns = window.setupStateDistrictCascade;
