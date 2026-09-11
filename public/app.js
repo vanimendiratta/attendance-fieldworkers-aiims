@@ -1749,13 +1749,13 @@ async function openCaptureModal(flowMode) {
   }
 
   DOM.modalFlowTitle.textContent = flowMode === 'CHECK_IN' ? 'Check-In Verification' : 'Check-Out Verification';
-  DOM.modalFlowSubtitle.textContent = 'Position your face inside the guide frame';
+  DOM.modalFlowSubtitle.textContent = 'Ensure your face is clearly visible in the camera frame';
   
   DOM.controlsCapturePhase.style.display = 'flex';
   DOM.controlsReviewPhase.style.display = 'none';
   DOM.videoPreview.style.display = 'block';
   DOM.snapshotCanvas.style.display = 'none';
-  DOM.reticleGuide.style.display = 'block';
+  if (DOM.reticleGuide) DOM.reticleGuide.style.display = 'none';
   DOM.cameraModal.classList.add('active');
 
   await startLiveCamera();
@@ -1982,7 +1982,7 @@ DOM.btnRetakePhoto.addEventListener('click', () => {
   state.capturedPhotoBase64 = null;
   DOM.snapshotCanvas.style.display = 'none';
   DOM.videoPreview.style.display = 'block';
-  DOM.reticleGuide.style.display = 'block';
+  if (DOM.reticleGuide) DOM.reticleGuide.style.display = 'none';
   DOM.controlsCapturePhase.style.display = 'flex';
   DOM.controlsReviewPhase.style.display = 'none';
   if (DOM.modalFeedbackBox) {

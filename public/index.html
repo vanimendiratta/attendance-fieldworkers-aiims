@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Attendance Operations | AIIMS</title>
   <meta name="description" content="Verified real-time photo and geolocation attendance for enterprise employees.">
-  <link rel="stylesheet" href="./style.css?v=7">
+  <link rel="stylesheet" href="./style.css?v=8">
   <!-- Client-side States & Districts Dictionary & Professional SVG Iconography -->
   <script src="./states_districts_client.js?v=4"></script>
   <script src="./icons.js?v=1"></script>
@@ -287,7 +287,7 @@
       <div class="camera-dialog-header">
         <div>
           <h3 style="font-size: 15px; font-weight: 600;" id="modalFlowTitle">Attendance Verification</h3>
-          <p style="font-size: 11px; color: var(--color-text-tertiary);" id="modalFlowSubtitle">Position your face inside the guide</p>
+          <p style="font-size: 11px; color: var(--color-text-tertiary);" id="modalFlowSubtitle">Ensure your face is clearly visible in the camera frame</p>
         </div>
         <button id="modalCloseBtn" class="btn-close-icon" aria-label="Close modal">&times;</button>
       </div>
@@ -297,22 +297,8 @@
         <video id="videoPreview" autoplay playsinline muted></video>
         <canvas id="snapshotCanvas"></canvas>
 
-        <!-- SVG face guide — fill="none" guarantees zero background rendering -->
-        <svg id="reticleGuide" class="camera-face-svg" viewBox="0 0 440 360"
-             preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"
-             aria-hidden="true">
-          <!-- Oval face guide -->
-          <ellipse cx="220" cy="180" rx="105" ry="130"
-                   fill="none"
-                   stroke="rgba(255,255,255,0.92)"
-                   stroke-width="2.5"/>
-          <!-- Top accent bar -->
-          <line x1="202" y1="48" x2="238" y2="48"
-                stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/>
-          <!-- Bottom accent bar -->
-          <line x1="202" y1="312" x2="238" y2="312"
-                stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/>
-        </svg>
+        <!-- Hidden reticleGuide placeholder to avoid JS null reference errors -->
+        <div id="reticleGuide" style="display: none !important;" aria-hidden="true"></div>
 
         <!-- Telemetry HUD -->
         <div class="camera-hud-pill" id="hudGpsBadge">
@@ -667,6 +653,6 @@
   </div>
 
   <script src="./face_biometric_client.js?v=2"></script>
-  <script src="./app.js?v=8"></script>
+  <script src="./app.js?v=9"></script>
 </body>
 </html>
