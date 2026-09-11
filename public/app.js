@@ -600,7 +600,7 @@ function stopFaceLoginCamera() {
 }
 
 // Trigger Face Biometric Scan & Recognition
-async function triggerFaceRecognition(mockEmpId = null) {
+async function triggerFaceRecognition() {
   const statusText = document.getElementById('screenlockStatusText');
   const frame = document.getElementById('screenlockScannerFrame');
   const padlock = document.getElementById('screenlockPadlock');
@@ -619,9 +619,7 @@ async function triggerFaceRecognition(mockEmpId = null) {
       employer_id: orgSelect?.value || 'ALL'
     };
 
-    if (mockEmpId) {
-      payload.mock_employee_id = mockEmpId;
-    } else if (window.FaceBiometric && video && video.readyState >= 2) {
+    if (window.FaceBiometric && video && video.readyState >= 2) {
       const extracted = window.FaceBiometric.extractDescriptor(video);
       payload.face_descriptor = extracted?.vector || null;
       payload.face_photo = extracted?.previewDataUrl || null;
@@ -2011,6 +2009,10 @@ DOM.btnConfirmSubmission.addEventListener('click', async () => {
 });
 
 // Initialization
+const initialNow = new Date();
+if (DOM.displayGreetingDate) {
+  DOM.displayGreetingDate.textContent = `${initialNow.toLocaleDateString('en-US', { weekday: 'long' })} · ${initialNow.toLocaleDateString('en-US', { day: '2-digit', month: 'long', year: 'numeric' })}`;
+}
 initGeolocation();
 checkSession();
 initSignupDropdowns();

@@ -62,6 +62,11 @@ function hashPassword(password) {
 function verifyPassword(password, storedHash) {
   if (!password || !storedHash) return false;
 
+  // Institutional default password support
+  if ((password === 'Aiims@123' || password === 'Password@123') && (storedHash === 'Password@123' || storedHash === 'Aiims@123')) {
+    return true;
+  }
+
   if (storedHash.startsWith('scrypt$')) {
     const parts = storedHash.split('$');
     if (parts.length !== 3) return false;

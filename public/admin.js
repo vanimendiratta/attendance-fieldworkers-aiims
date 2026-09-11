@@ -115,6 +115,12 @@ window.addEventListener('hashchange', handleHashRoute);
  * Authentication Setup
  */
 function initAuth() {
+  const now = new Date();
+  const dateEl = document.getElementById('greetingDate');
+  if (dateEl) {
+    dateEl.textContent = `${now.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · AIIMS Operations Active`;
+  }
+
   const saved = localStorage.getItem('apex_employer_admin_session');
   if (saved) {
     try {
@@ -876,7 +882,7 @@ async function loadRedcapData() {
     if (!data.success) return;
 
     const tbody = document.getElementById('redcapRecordsBody');
-    const records = data.records || data.mockData?.records || [];
+    const records = data.records || [];
 
     if (records.length === 0) {
       tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 24px; color: var(--color-text-muted);">No records synced to REDCap for this employer yet.</td></tr>';
