@@ -907,7 +907,6 @@ function startSimulatedSignupCamera() {
     signupSimCanvas.height = 320;
     signupSimCanvas.style.width = '100%';
     signupSimCanvas.style.height = '100%';
-    signupSimCanvas.style.borderRadius = '50%';
     signupSimCanvas.style.objectFit = 'cover';
   }
 
@@ -922,32 +921,6 @@ function startSimulatedSignupCamera() {
     grad.addColorStop(1, '#334155');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 320, 320);
-
-    // Oval face silhouette
-    ctx.fillStyle = '#475569';
-    ctx.beginPath();
-    ctx.ellipse(160, 140, 65, 85, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Eyes
-    ctx.fillStyle = '#94a3b8';
-    ctx.beginPath();
-    ctx.arc(138, 125, 7, 0, Math.PI * 2);
-    ctx.arc(182, 125, 7, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Smile
-    ctx.strokeStyle = '#94a3b8';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(160, 155, 18, 0.2 * Math.PI, 0.8 * Math.PI, false);
-    ctx.stroke();
-
-    // Shoulders
-    ctx.fillStyle = '#0f172a';
-    ctx.beginPath();
-    ctx.ellipse(160, 290, 110, 65, 0, 0, Math.PI * 2);
-    ctx.fill();
 
     // Animated scanner line
     const scanY = 65 + ((Math.sin(frame) + 1) / 2) * 150;
@@ -1843,32 +1816,6 @@ function startSimulatedCameraStream() {
     ctx.strokeStyle = 'rgba(56, 189, 248, 0.15)';
     ctx.lineWidth = 1;
     ctx.strokeRect(60, 40, 520, 400);
-
-    // Face silhouette
-    ctx.fillStyle = '#334155';
-    ctx.beginPath();
-    ctx.ellipse(320, 210, 85, 110, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Eyes
-    ctx.fillStyle = '#94a3b8';
-    ctx.beginPath();
-    ctx.arc(290, 190, 9, 0, Math.PI * 2);
-    ctx.arc(350, 190, 9, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Smile
-    ctx.strokeStyle = '#94a3b8';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(320, 230, 24, 0.2 * Math.PI, 0.8 * Math.PI, false);
-    ctx.stroke();
-
-    // Shoulders
-    ctx.fillStyle = '#1e293b';
-    ctx.beginPath();
-    ctx.ellipse(320, 440, 160, 80, 0, 0, Math.PI * 2);
-    ctx.fill();
 
     // Animated scanner line
     const scanY = 100 + ((Math.sin(animFrame * 0.05) + 1) / 2) * 220;
