@@ -25,26 +25,28 @@ app.use((req, res, next) => {
   next();
 });
 
-// Configure CORS
+// Configure CORS — allow Netlify frontend + localhost dev
+const DEFAULT_ALLOWED_ORIGINS = [
+  'https://checkin-checkout-aiims.netlify.app',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000'
+];
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
-  : null;
+  : DEFAULT_ALLOWED_ORIGINS;
 
 app.use(cors({
   origin: (origin, callback) => {
+    // Allow same-origin and server-to-server (no Origin header)
     if (!origin) return callback(null, true);
-    if (!allowedOrigins) {
-      const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
-      const isProd = (process.env.NODE_ENV || process.env.APP_ENV || '').toLowerCase().trim() === 'production';
-      if (isProd && !isLocalhost) {
-        return callback(new Error('CORS blocked: Origin not allowed in production'));
-      }
+    // Allow Netlify proxy requests (they appear as same-origin, but just in case)
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    // Allow any localhost in development
+    const isProd = (process.env.NODE_ENV || '').toLowerCase() === 'production';
+    if (!isProd && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
       return callback(null, true);
     }
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-    return callback(new Error('CORS blocked by origin policy'));
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
   },
   credentials: true
 }));

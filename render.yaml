@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: aiims-attendance-api
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /api/organizations
+    disk:
+      name: sqlite-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_PATH
+        value: /data/attendance.db
+      - key: PORT
+        value: 10000

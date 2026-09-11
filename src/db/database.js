@@ -3,7 +3,13 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 
-const dbPath = path.join(__dirname, '../../attendance.db');
+// Use DB_PATH env var (Render persistent disk) or fall back to local path
+const dbPath = process.env.DB_PATH || path.join(__dirname, '../../attendance.db');
+
+// Ensure the directory exists (important for Render's /data mount)
+const dbDir = path.dirname(dbPath);
+if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+
 const db = new Database(dbPath);
 
 // Enable WAL mode for high concurrency

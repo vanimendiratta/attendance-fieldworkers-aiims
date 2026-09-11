@@ -1,9 +1,14 @@
 {
   "name": "attendance",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
   "scripts": {
     "start": "node server.js",
+    "dev": "node server.js",
     "test": "node test/api.test.js",
     "lint": "node scripts/lint.js",
     "build": "node scripts/build.js"
@@ -11,7 +16,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "AIIMS Real-Time Attendance System",
   "dependencies": {
     "better-sqlite3": "^12.11.1",
     "cors": "^2.8.6",
