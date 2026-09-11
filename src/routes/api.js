@@ -7,6 +7,7 @@ const redcapClient = require('../redcap/redcap_client');
 const teamService = require('../services/team_service');
 const biometricService = require('../services/biometric_service');
 const { STATE_DISTRICTS_MAP, getAllStates, getDistrictsForState, matchStateAndDistrict } = require('../data/india_states_districts');
+const authService = require('../services/auth_service');
 
 // Helper to resolve employee identity
 function resolveEmployee(req) {
@@ -50,7 +51,7 @@ router.get('/employees', (req, res) => {
 });
 
 // 4. EMPLOYEE LOGIN with ID & Password (against backend details of each employer)
-router.post('/auth/employee/login', (req, res) => {
+router.post('/auth/employee/login', authService.rateLimitMiddleware(authService.loginRateLimiter, 'Login'), (req, res) => {
   const { employer_id, login_id, password } = req.body;
   const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
   const userAgent = req.headers['user-agent'] || 'Unknown';
@@ -80,11 +81,21 @@ router.post('/auth/employee/login', (req, res) => {
     return res.status(401).json({ success: false, error: 'Invalid Employee ID or credentials for this employer.' });
   }
 
-  // Check password against backend details
-  const isMatch = (employee.password === password) || (employee.pin === password);
+  // Check password against backend details using constant-time verification & scrypt support
+  const isMatch = authService.verifyPassword(password, employee.password) || (employee.pin && authService.verifyPassword(password, employee.pin));
   if (!isMatch) {
     attendanceService.logAudit('AUTH_FAILED_INVALID_PASSWORD', employee.id, employer_id, 'EMPLOYEE_LOGIN', 'BLOCKED', { login_id }, clientIp, userAgent);
     return res.status(401).json({ success: false, error: 'Invalid password. Please check backend employee details and try again.' });
+  }
+
+  // Auto-upgrade legacy unhashed password to salted scrypt hash upon successful login
+  if (employee.password && !employee.password.startsWith('scrypt$')) {
+    try {
+      const newHash = authService.hashPassword(password);
+      db.prepare('UPDATE employees SET password = ? WHERE id = ?').run(newHash, employee.id);
+    } catch (migErr) {
+      // non-fatal
+    }
   }
 
   if (!employee.is_active) {
@@ -105,22 +116,20 @@ router.post('/auth/employee/login', (req, res) => {
   });
 });
 
-// Helper to generate next sequential employee ID
-function generateEmployeeId(employerId) {
-  const existing = db.prepare(`SELECT id FROM employees WHERE id LIKE 'EMP-%' ORDER BY id DESC LIMIT 1`).get();
-  if (!existing) {
-    return 'EMP-1001';
-  }
-  const match = existing.id.match(/\d+/);
-  if (match) {
-    const nextNum = Math.max(1001, parseInt(match[0], 10) + 1);
-    return `EMP-${nextNum}`;
-  }
-  return `EMP-${Date.now().toString().slice(-4)}`;
+// Helper to generate next sequential employee ID atomically using database sequences
+function generateEmployeeId(employerId = 'ORG-001') {
+  const getSeqStmt = db.prepare(`
+    INSERT INTO employee_sequences (employer_id, last_seq)
+    VALUES (?, 1001)
+    ON CONFLICT(employer_id) DO UPDATE SET last_seq = last_seq + 1
+    RETURNING last_seq;
+  `);
+  const row = getSeqStmt.get(employerId);
+  return `EMP-${row.last_seq}`;
 }
 
 // 4a. EMPLOYEE SIGN UP (Registration with basic enquiries + face biometric enrollment)
-router.post('/auth/employee/signup', (req, res) => {
+router.post('/auth/employee/signup', authService.rateLimitMiddleware(authService.signupRateLimiter, 'Signup'), (req, res) => {
   const {
     name,
     employee_id,
@@ -148,8 +157,30 @@ router.post('/auth/employee/signup', (req, res) => {
     return res.status(400).json({ success: false, error: 'Employee ID is required.' });
   }
 
-  if (!password || password.length < 6) {
-    return res.status(400).json({ success: false, error: 'Password must be at least 6 characters.' });
+  // Enforce password security policy
+  const policyCheck = authService.validatePasswordPolicy(password);
+  if (!policyCheck.valid) {
+    return res.status(400).json({ success: false, error: policyCheck.error });
+  }
+
+  // Cross-validate State and District
+  if (state && String(state).trim()) {
+    const validStates = getAllStates();
+    const cleanState = String(state).trim();
+    const matchedStateName = validStates.find(s => s.toLowerCase() === cleanState.toLowerCase());
+    if (!matchedStateName) {
+      return res.status(400).json({ success: false, error: `Invalid State/UT '${state}'. Please select a valid Indian State or Union Territory.` });
+    }
+    if (district && String(district).trim()) {
+      const cleanDistrict = String(district).trim();
+      const validDistricts = getDistrictsForState(matchedStateName);
+      const matchedDistName = validDistricts.find(d => d.toLowerCase() === cleanDistrict.toLowerCase());
+      if (!matchedDistName) {
+        return res.status(400).json({ success: false, error: `District '${district}' does not belong to State '${matchedStateName}'. Please select a valid district.` });
+      }
+    }
+  } else if (district && String(district).trim()) {
+    return res.status(400).json({ success: false, error: 'State must be specified when district is provided.' });
   }
 
   const effectiveOrgId = employer_id || 'ORG-001';
@@ -202,6 +233,9 @@ router.post('/auth/employee/signup', (req, res) => {
     hasFaceEnrolled = 1;
   }
 
+  // Hash password using scrypt
+  const hashedPassword = authService.hashPassword(password);
+
   db.prepare(`
     INSERT INTO employees (
       id, employer_id, name, email, phone, department, designation,
@@ -217,7 +251,7 @@ router.post('/auth/employee/signup', (req, res) => {
     department ? department.trim() : 'Dental',
     designation ? designation.trim() : 'PRS-1',
     '1234',
-    password,
+    hashedPassword,
     face_photo || null,
     descriptorToSave,
     hasFaceEnrolled,
@@ -255,15 +289,18 @@ router.post('/auth/employee/signup', (req, res) => {
 });
 
 // 4b. EMPLOYEE FACE LOGIN (Screenlock-style biometric unlock)
-router.post('/auth/employee/face-login', (req, res) => {
+router.post('/auth/employee/face-login', authService.rateLimitMiddleware(authService.faceRateLimiter, 'Face Unlock'), (req, res) => {
   const { employer_id, face_descriptor, face_photo, mock_employee_id } = req.body;
   const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
   const userAgent = req.headers['user-agent'] || 'Unknown';
 
   let candidateDescriptor = face_descriptor;
 
-  // If mock_employee_id passed for quick demo testing
+  // If mock_employee_id passed: strictly forbid in production
   if (mock_employee_id) {
+    if (process.env.NODE_ENV === 'production' || req.headers['x-environment'] === 'production') {
+      return res.status(403).json({ success: false, error: 'Demo quick-unlock is disabled in production environment.' });
+    }
     const demoEmp = db.prepare('SELECT * FROM employees WHERE id = ?').get(mock_employee_id);
     if (demoEmp && demoEmp.face_descriptor) {
       candidateDescriptor = demoEmp.face_descriptor;
@@ -329,6 +366,10 @@ router.post('/auth/employee/enroll-face', (req, res) => {
 
 // 4d. DEMO FACE RECOGNITION CREDENTIALS
 router.get('/auth/demo-face-credentials', (req, res) => {
+  if (process.env.NODE_ENV === 'production' || req.headers['x-environment'] === 'production') {
+    return res.status(403).json({ success: false, error: 'Demo credentials endpoint is disabled in production environment.' });
+  }
+
   const demoEmployees = db.prepare(`
     SELECT e.id, e.name, e.department, e.designation, e.employer_id, o.name as employer_name, e.face_enrolled
     FROM employees e
@@ -341,7 +382,7 @@ router.get('/auth/demo-face-credentials', (req, res) => {
 });
 
 // 5. EMPLOYER / ADMIN LOGIN with ID & Password (against backend details of each employer)
-router.post('/auth/employer/login', (req, res) => {
+router.post('/auth/employer/login', authService.rateLimitMiddleware(authService.loginRateLimiter, 'Employer Login'), (req, res) => {
   const { employer_id, admin_username, admin_password } = req.body;
   const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
   const userAgent = req.headers['user-agent'] || 'Unknown';
@@ -357,7 +398,7 @@ router.post('/auth/employer/login', (req, res) => {
 
   // Verify credentials against employer backend record
   const usernameMatch = employer.admin_username.toLowerCase() === admin_username.trim().toLowerCase();
-  const passwordMatch = employer.admin_password === admin_password;
+  const passwordMatch = authService.verifyPassword(admin_password, employer.admin_password);
 
   if (!usernameMatch || !passwordMatch) {
     attendanceService.logAudit('ADMIN_AUTH_FAILED', null, employer_id, 'EMPLOYER_LOGIN', 'BLOCKED', { admin_username }, clientIp, userAgent);
@@ -666,7 +707,12 @@ function getFilteredAttendanceRecords({ employerId, work_mode, status, state, di
 
 function escapeCsvCell(val) {
   if (val === null || val === undefined) return '';
-  const str = String(val);
+  let str = String(val);
+  // OWASP CSV / Excel Formula Injection sanitization
+  // If cell begins with =, +, -, @, \t, or \r, prepend a single quote to force text interpretation in spreadsheet software
+  if (/^[=+\-@\t\r]/.test(str)) {
+    str = "'" + str;
+  }
   if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
     return `"${str.replace(/"/g, '""')}"`;
   }

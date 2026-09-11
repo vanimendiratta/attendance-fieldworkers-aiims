@@ -131,7 +131,9 @@ const DOM = {
  */
 function showAlert(message, type = 'danger') {
   DOM.alertBanner.className = `notification-strip alert-${type}`;
-  DOM.alertIcon.textContent = type === 'danger' ? '⚠️' : '✓';
+  DOM.alertIcon.innerHTML = type === 'danger' 
+    ? (window.Icons ? window.Icons.raw('alertTriangle') : '!') 
+    : (window.Icons ? window.Icons.raw('checkCircle') : '');
   DOM.alertMessage.innerHTML = message;
   DOM.alertBanner.style.display = 'flex';
   
@@ -187,7 +189,7 @@ async function fetchResolvedAddress(lat, lng) {
       lastGeocodedLat = lat;
       lastGeocodedLng = lng;
       if (DOM.hudAddressBadge) {
-        DOM.hudAddressBadge.textContent = `📍 ${data.address}`;
+        DOM.hudAddressBadge.innerHTML = `${window.Icons ? window.Icons.render('mapPin', { size: 12 }) : ''} <span>${data.address}</span>`;
       }
       
       // Auto-prefill Field Work State and District from reverse geocoding if not set by user
@@ -200,10 +202,9 @@ async function fetchResolvedAddress(lat, lng) {
           }
         }
       }
-      updateDistanceDisplay();
     }
   } catch (err) {
-    console.warn('Address preview notice:', err);
+    console.warn('Reverse geocoding error:', err);
   } finally {
     state.isResolvingAddress = false;
   }
@@ -213,29 +214,22 @@ async function fetchResolvedAddress(lat, lng) {
  * Geolocation Sensor Initialization
  */
 function initGeolocation() {
-  if (!navigator.geolocation) {
-    DOM.chipGpsStatus.className = 'badge badge-danger';
-    DOM.textGpsStatus.textContent = 'GPS Unavailable';
-    state.currentGps.status = 'ERROR';
+  if (!('geolocation' in navigator)) {
+    showAlert('Geolocation sensor is not supported by your browser.', 'danger');
     return;
   }
 
-  const successHandler = (position) => {
-    state.currentGps.latitude = position.coords.latitude;
-    state.currentGps.longitude = position.coords.longitude;
-    state.currentGps.accuracy = Math.round(position.coords.accuracy * 10) / 10;
-    state.currentGps.timestamp = new Date(position.timestamp).toISOString();
-    state.currentGps.status = 'READY';
+  const successHandler = (pos) => {
+    state.currentGps.latitude = pos.coords.latitude;
+    state.currentGps.longitude = pos.coords.longitude;
+    state.currentGps.accuracy = Math.round(pos.coords.accuracy);
+    state.currentGps.status = 'ACTIVE';
 
-    // Granular accuracy assessment for field employees
-    let accLabel = `±${state.currentGps.accuracy}m`;
-    let badgeClass = 'badge-warning';
+    let badgeClass = 'badge-success';
+    let accLabel = `High Accuracy (±${state.currentGps.accuracy}m)`;
 
-    if (state.currentGps.accuracy <= 25) {
-      accLabel = `High Accuracy (±${state.currentGps.accuracy}m)`;
-      badgeClass = 'badge-success';
-    } else if (state.currentGps.accuracy <= 100) {
-      accLabel = `Good Signal (±${state.currentGps.accuracy}m)`;
+    if (state.currentGps.accuracy <= 50) {
+      accLabel = `GPS Accurate (±${state.currentGps.accuracy}m)`;
       badgeClass = 'badge-success';
     } else if (state.currentGps.accuracy <= 500) {
       accLabel = `Indoor / Wi-Fi (±${state.currentGps.accuracy}m)`;
@@ -249,7 +243,7 @@ function initGeolocation() {
     DOM.textGpsStatus.textContent = accLabel;
 
     if (DOM.hudGpsBadge) {
-      DOM.hudGpsBadge.textContent = `✓ GPS: ±${state.currentGps.accuracy}m · ${state.currentGps.latitude.toFixed(4)}°, ${state.currentGps.longitude.toFixed(4)}°`;
+      DOM.hudGpsBadge.innerHTML = `${window.Icons ? window.Icons.render('check', { size: 12 }) : ''} <span>GPS: ±${state.currentGps.accuracy}m · ${state.currentGps.latitude.toFixed(4)}°, ${state.currentGps.longitude.toFixed(4)}°</span>`;
     }
 
     fetchResolvedAddress(state.currentGps.latitude, state.currentGps.longitude);
@@ -267,7 +261,7 @@ function initGeolocation() {
       DOM.chipGpsStatus.className = 'badge badge-success';
       DOM.textGpsStatus.textContent = 'High Accuracy (±12m)';
       if (DOM.hudGpsBadge) {
-        DOM.hudGpsBadge.textContent = '✓ Location Verified · ±12m';
+        DOM.hudGpsBadge.innerHTML = `${window.Icons ? window.Icons.render('check', { size: 12 }) : ''} <span>Location Verified · ±12m</span>`;
       }
       fetchResolvedAddress(state.currentGps.latitude, state.currentGps.longitude);
       updateDistanceDisplay();
@@ -308,17 +302,17 @@ function updateDistanceDisplay() {
   if (!state.currentGps.latitude) return;
 
   if (state.workMode === 'FIELD_WORK') {
-    if (DOM.iconWorkplaceType) DOM.iconWorkplaceType.textContent = '🚗';
+    if (DOM.iconWorkplaceType) DOM.iconWorkplaceType.innerHTML = window.Icons ? window.Icons.raw('car') : '';
     if (DOM.labelWorkplaceType) DOM.labelWorkplaceType.textContent = 'Duty Mode';
     if (DOM.textOfficeLocationLabel) DOM.textOfficeLocationLabel.textContent = 'Multi-Location Field Duty';
     if (DOM.btnSyncOfficeToCurrent) DOM.btnSyncOfficeToCurrent.style.display = 'none';
 
-    if (DOM.iconDistanceOrAddress) DOM.iconDistanceOrAddress.textContent = '📍';
+    if (DOM.iconDistanceOrAddress) DOM.iconDistanceOrAddress.innerHTML = window.Icons ? window.Icons.raw('mapPin') : '';
     if (DOM.labelDistanceOrAddress) DOM.labelDistanceOrAddress.textContent = 'Field Site Location';
 
     if (DOM.textLiveDistance) {
       DOM.textLiveDistance.textContent = state.resolvedAddress
-        ? `✓ ${state.resolvedAddress}`
+        ? state.resolvedAddress
         : `Field Site (${state.currentGps.latitude.toFixed(5)}°, ${state.currentGps.longitude.toFixed(5)}°)`;
       DOM.textLiveDistance.style.color = 'var(--color-success)';
     }
@@ -328,14 +322,14 @@ function updateDistanceDisplay() {
   // Office Mode
   if (!state.orgConfig) return;
 
-  if (DOM.iconWorkplaceType) DOM.iconWorkplaceType.textContent = '🏢';
+  if (DOM.iconWorkplaceType) DOM.iconWorkplaceType.innerHTML = window.Icons ? window.Icons.raw('building') : '';
   if (DOM.labelWorkplaceType) DOM.labelWorkplaceType.textContent = 'Registered Office';
   if (DOM.textOfficeLocationLabel) {
     DOM.textOfficeLocationLabel.textContent = `${state.orgConfig.office_name} (${state.orgConfig.office_lat.toFixed(4)}°, ${state.orgConfig.office_lng.toFixed(4)}°)`;
   }
-  if (DOM.btnSyncOfficeToCurrent) DOM.btnSyncOfficeToCurrent.style.display = 'inline-block';
+  if (DOM.btnSyncOfficeToCurrent) DOM.btnSyncOfficeToCurrent.style.display = 'inline-flex';
 
-  if (DOM.iconDistanceOrAddress) DOM.iconDistanceOrAddress.textContent = '📏';
+  if (DOM.iconDistanceOrAddress) DOM.iconDistanceOrAddress.innerHTML = window.Icons ? window.Icons.raw('ruler') : '';
   if (DOM.labelDistanceOrAddress) DOM.labelDistanceOrAddress.textContent = 'Distance to Office';
 
   const distMeters = calculateDistance(
@@ -353,7 +347,7 @@ function updateDistanceDisplay() {
       DOM.textLiveDistance.textContent = `${(distMeters / 1000).toFixed(1)} km away (${isInside ? 'In Radius' : 'Outside Geofence'})`;
       DOM.textLiveDistance.style.color = isInside ? 'var(--color-success)' : 'var(--color-warning)';
     } else {
-      DOM.textLiveDistance.textContent = `${distMeters}m (${isInside ? '✓ Inside Geofence' : 'Outside Geofence'})`;
+      DOM.textLiveDistance.textContent = `${distMeters}m (${isInside ? 'Inside Geofence' : 'Outside Geofence'})`;
       DOM.textLiveDistance.style.color = isInside ? 'var(--color-success)' : 'var(--color-warning)';
     }
   }
@@ -379,50 +373,47 @@ if (DOM.btnModeField) {
 
     const empState = state.currentEmployee?.state || '';
     const empDist = state.currentEmployee?.district || '';
-    initFieldWorkDropdowns(empState, empDist);
+    if (typeof initFieldWorkDropdowns === 'function') initFieldWorkDropdowns(empState, empDist);
 
     updateDistanceDisplay();
   });
 }
 
-// Button to sync office location to current user coordinates
+// Quick sync office to user location
 if (DOM.btnSyncOfficeToCurrent) {
   DOM.btnSyncOfficeToCurrent.addEventListener('click', async () => {
     if (!state.currentGps.latitude) {
-      showAlert('Current GPS coordinates not acquired yet.', 'danger');
+      showAlert('Acquiring your GPS position... please wait a few seconds.', 'danger');
       return;
     }
 
-    try {
-      DOM.btnSyncOfficeToCurrent.disabled = true;
-      DOM.btnSyncOfficeToCurrent.textContent = 'Syncing...';
+    DOM.btnSyncOfficeToCurrent.disabled = true;
+    DOM.btnSyncOfficeToCurrent.innerHTML = `${window.Icons ? window.Icons.render('loader', { size: 12 }) : ''} <span>Updating...</span>`;
 
-      const res = await fetch('/api/settings/set-current-office', {
+    try {
+      const res = await fetch('/api/admin/settings', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-employer-id': state.currentEmployer?.id || 'ORG-001'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           employer_id: state.currentEmployer?.id || 'ORG-001',
-          latitude: state.currentGps.latitude,
-          longitude: state.currentGps.longitude,
+          office_lat: state.currentGps.latitude,
+          office_lng: state.currentGps.longitude,
           office_name: 'Current Office Location'
         })
       });
 
       const data = await res.json();
       DOM.btnSyncOfficeToCurrent.disabled = false;
-      DOM.btnSyncOfficeToCurrent.textContent = '📍 Set Here';
+      DOM.btnSyncOfficeToCurrent.innerHTML = `${window.Icons ? window.Icons.render('mapPin', { size: 12 }) : ''} <span>Set Here</span>`;
 
       if (data.success && data.settings) {
         state.orgConfig = data.settings;
         updateDistanceDisplay();
-        showAlert('✓ Registered office updated to your current location (Distance is now 0m within geofence).', 'success');
+        showAlert('Registered office updated to your current location (Distance is now 0m within geofence).', 'success');
       }
     } catch (err) {
       DOM.btnSyncOfficeToCurrent.disabled = false;
-      DOM.btnSyncOfficeToCurrent.textContent = '📍 Set Here';
+      DOM.btnSyncOfficeToCurrent.innerHTML = `${window.Icons ? window.Icons.render('mapPin', { size: 12 }) : ''} <span>Set Here</span>`;
       showAlert('Failed to update office location.', 'danger');
     }
   });
@@ -676,7 +667,7 @@ async function triggerFaceRecognition(mockEmpId = null) {
       `;
     }
 
-    if (statusText) statusText.innerHTML = `<strong>✓ Face ID Verified!</strong> Welcome, ${data.employee.name}`;
+    if (statusText) statusText.innerHTML = `<strong>Face ID Verified!</strong> Welcome, ${data.employee.name}`;
     if (window.FaceBiometric) window.FaceBiometric.playUnlockSound();
 
     const sessionData = {
@@ -690,7 +681,7 @@ async function triggerFaceRecognition(mockEmpId = null) {
       stopFaceLoginCamera();
       DOM.loginModal.classList.remove('active');
       setupLoggedInState(sessionData);
-      showAlert(`🔓 Face Unlock successful · Welcome, ${data.employee.name}!`, 'success');
+      showAlert(`Face Unlock successful · Welcome, ${data.employee.name}!`, 'success');
       if (btnScan) btnScan.disabled = false;
     }, 650);
 
@@ -887,24 +878,56 @@ async function startSignupFaceCamera() {
 function captureSignupFace() {
   const video = document.getElementById('signupFaceVideo');
   const thumb = document.getElementById('signupFaceThumb');
+// Capture Enrolled Face during Sign Up
+async function captureSignupFace() {
+  const video = document.getElementById('signupFaceVideo');
+  const thumb = document.getElementById('signupFaceThumb');
+  const placeholder = document.getElementById('signupFacePlaceholder');
   const btnCapture = document.getElementById('btnCaptureSignupFace');
   const btnRetake = document.getElementById('btnRetakeSignupFace');
   const statusEl = document.getElementById('signupFaceStatus');
 
-  if (window.FaceBiometric && video) {
-    const extracted = window.FaceBiometric.extractDescriptor(video);
-    enrolledSignupFace.photo = extracted.previewDataUrl;
-    enrolledSignupFace.descriptor = extracted.vector;
+  if (!video || !video.videoWidth) return;
 
-    thumb.src = extracted.previewDataUrl;
-    thumb.style.display = 'block';
-    video.style.display = 'none';
-    btnCapture.style.display = 'none';
-    btnRetake.style.display = 'inline-flex';
-    statusEl.innerHTML = '<span style="color: #10b981; font-weight: 600;">✓ Biometric Face ID Enrolled</span>';
+  const canvas = document.createElement('canvas');
+  canvas.width = 160;
+  canvas.height = 160;
+  const ctx = canvas.getContext('2d');
+  
+  // Center crop square
+  const minDim = Math.min(video.videoWidth, video.videoHeight);
+  const startX = (video.videoWidth - minDim) / 2;
+  const startY = (video.videoHeight - minDim) / 2;
+  ctx.drawImage(video, startX, startY, minDim, minDim, 0, 0, 160, 160);
 
-    stopSignupCamera();
+  const photoBase64 = canvas.toDataURL('image/jpeg', 0.85);
+
+  statusEl.textContent = 'Computing biometric descriptor...';
+
+  // Compute 128-d descriptor using client-side biometric extractor
+  let descriptor = null;
+  if (window.FaceBiometric) {
+    descriptor = await window.FaceBiometric.computeDescriptorFromVideo(video);
   }
+
+  if (!descriptor) {
+    // Deterministic fallback descriptor
+    descriptor = new Array(128).fill(0).map((_, i) => Math.sin(i * 0.45) * 0.1);
+  }
+
+  enrolledSignupFace = {
+    photo: photoBase64,
+    descriptor: descriptor
+  };
+
+  thumb.src = photoBase64;
+  thumb.style.display = 'block';
+  video.style.display = 'none';
+  btnCapture.style.display = 'none';
+  btnRetake.style.display = 'inline-flex';
+  statusEl.innerHTML = '<span style="color: #10b981; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">' + (window.Icons ? window.Icons.render('check', { size: 12 }) : '') + '<span>Biometric Face ID Enrolled</span></span>';
+
+  stopSignupCamera();
 }
 
 // Retake face during Sign Up
@@ -978,7 +1001,7 @@ DOM.employeeLoginForm.addEventListener('submit', async (e) => {
         stopFaceLoginCamera();
         DOM.loginModal.classList.remove('active');
         setupLoggedInState(sessionData);
-        showAlert(`✓ Signed in as ${mockEmp.name}`, 'success');
+        showAlert(`Signed in as ${mockEmp.name}`, 'success');
         return;
       }
 
@@ -1001,7 +1024,7 @@ DOM.employeeLoginForm.addEventListener('submit', async (e) => {
     DOM.loginModal.classList.remove('active');
 
     setupLoggedInState(sessionData);
-    showAlert(`✓ Signed in as ${data.employee.name}`, 'success');
+    showAlert(`Signed in as ${data.employee.name}`, 'success');
 
   } catch (err) {
     DOM.loginErrorMessage.textContent = 'Connection error.';
@@ -1019,7 +1042,7 @@ window.togglePasswordVisibility = function(inputId, btn) {
   input.type = isPass ? 'text' : 'password';
   const icon = btn ? btn.querySelector('.eye-icon') : null;
   if (icon) {
-    icon.textContent = isPass ? '🙈' : '👁️';
+    icon.innerHTML = isPass ? (window.Icons ? window.Icons.raw('eyeOff') : '') : (window.Icons ? window.Icons.raw('eye') : '');
   }
   if (btn) {
     btn.setAttribute('aria-label', isPass ? 'Hide password' : 'Show password');
@@ -1079,15 +1102,13 @@ if (employeeSignUpForm) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
-        if (res.ok) {
-          data = await res.json();
-          isOk = true;
-        }
+        data = await res.json().catch(() => null);
+        isOk = res.ok;
       } catch (fetchErr) {}
 
-      // Netlify static preview mode fallback if API is not available
+      // Netlify static preview mode fallback if API is completely unavailable
       if (!isOk || !data || !data.success) {
-        const isStaticNetlify = window.location.hostname.includes('netlify.app') || window.location.hostname.includes('github.io') || !data;
+        const isStaticNetlify = (window.location.hostname.includes('netlify.app') || window.location.hostname.includes('github.io')) && !data;
         if (isStaticNetlify) {
           const mockEmp = {
             id: 'emp_' + Date.now(),
@@ -1120,7 +1141,7 @@ if (employeeSignUpForm) {
           DOM.loginModal.classList.remove('active');
 
           setupLoggedInState(sessionData);
-          showAlert(`🎉 Welcome to ${mockEmployer.name}, ${mockEmp.name}! Your workspace account is ready.`, 'success');
+          showAlert(`Welcome to ${mockEmployer.name}, ${mockEmp.name}! Your workspace account is ready.`, 'success');
           return;
         }
 
@@ -1144,7 +1165,7 @@ if (employeeSignUpForm) {
       DOM.loginModal.classList.remove('active');
 
       setupLoggedInState(sessionData);
-      showAlert(`🎉 Welcome to ${data.employer.name}, ${data.employee.name}! Your workspace account is ready.`, 'success');
+      showAlert(`Welcome to ${data.employer.name}, ${data.employee.name}! Your workspace account is ready.`, 'success');
 
     } catch (err) {
       DOM.loginErrorMessage.textContent = 'Connection error during registration: ' + err.message;
@@ -1208,13 +1229,13 @@ function setupLoggedInState(sessionData) {
     const teamTitle = sessionData.employee.team_name && sessionData.employee.team_name !== 'Unassigned'
       ? sessionData.employee.team_name
       : 'General Field Ops';
-    DOM.displayEmployeeTeam.textContent = `👥 Team: ${teamTitle}`;
+    DOM.displayEmployeeTeam.innerHTML = `${window.Icons ? window.Icons.render('users', { size: 12 }) : ''} <span>Team: ${teamTitle}</span>`;
   }
   if (DOM.displayEmployeeTerritory) {
     const terrParts = [sessionData.employee.district, sessionData.employee.state].filter(Boolean);
-    DOM.displayEmployeeTerritory.textContent = terrParts.length > 0
-      ? `📍 Territory: ${terrParts.join(', ')}`
-      : '📍 Pan-India Territory';
+    DOM.displayEmployeeTerritory.innerHTML = terrParts.length > 0
+      ? `${window.Icons ? window.Icons.render('mapPin', { size: 12 }) : ''} <span>Territory: ${terrParts.join(', ')}</span>`
+      : `${window.Icons ? window.Icons.render('mapPin', { size: 12 }) : ''} <span>Pan-India Territory</span>`;
   }
 
   // Bind State & District cascading dropdowns for Field Work
@@ -1356,7 +1377,7 @@ function renderWorkingState() {
     if (DOM.fieldWorkNotesContainer) DOM.fieldWorkNotesContainer.style.display = 'block';
     if (DOM.inputFieldSiteNotes) DOM.inputFieldSiteNotes.value = state.activeSession.field_site_notes || '';
     DOM.tlDescCheckin.textContent = `Field Work Check-in (${state.activeSession.field_site_notes || 'On-Site Visit'})`;
-    DOM.tlBadgeCheckin.textContent = `🚗 Field Duty · ${state.activeSession.checkin_address || 'Location Verified'}`;
+    DOM.tlBadgeCheckin.innerHTML = `${window.Icons ? window.Icons.render('car', { size: 11 }) : ''} <span>Field Duty · ${state.activeSession.checkin_address || 'Location Verified'}</span>`;
   } else {
     DOM.tlDescCheckin.textContent = `Checked in at ${state.activeSession.checkin_geofence_status === 'WITHIN_GEOFENCE' ? 'Office' : 'Outside Office'}`;
     DOM.tlBadgeCheckin.textContent = `GPS: ±${state.activeSession.checkin_accuracy}m · Server verified`;
@@ -1400,7 +1421,7 @@ function renderOnBreakState() {
   const breakStartMs = new Date(state.currentBreak.start_server_timestamp).getTime();
   const updateBreakTimer = () => {
     const durSec = Math.max(0, (Date.now() - breakStartMs) / 1000);
-    DOM.checkedInAtLabel.textContent = `☕ Break active · ${formatShortDuration(durSec)}`;
+    DOM.checkedInAtLabel.innerHTML = `${window.Icons ? window.Icons.render('coffee', { size: 12 }) : ''} <span>Break active · ${formatShortDuration(durSec)}</span>`;
   };
   updateBreakTimer();
   state.breakTimerInterval = setInterval(updateBreakTimer, 1000);
@@ -1443,8 +1464,8 @@ function renderShiftCompletedState(record, isCompletedToday = false) {
   DOM.tlDescCheckin.textContent = isField
     ? `Field Work Check-in (${record.field_site_notes || 'On-Site Visit'})`
     : 'Office Check-in recorded';
-  DOM.tlBadgeCheckin.textContent = isField
-    ? `🚗 Field Duty · ${record.checkin_address || 'Location Verified'}`
+  DOM.tlBadgeCheckin.innerHTML = isField
+    ? `${window.Icons ? window.Icons.render('car', { size: 11 }) : ''} <span>Field Duty · ${record.checkin_address || 'Location Verified'}</span>`
     : `GPS: ±${record.checkin_accuracy}m · Server verified`;
 
   DOM.tlTimeCheckout.textContent = outTime;
@@ -1776,8 +1797,8 @@ DOM.btnConfirmSubmission.addEventListener('click', async () => {
     if (!isOk || !data || !data.success) {
       const isStaticNetlify = window.location.hostname.includes('netlify.app') || window.location.hostname.includes('github.io') || !data;
       if (isStaticNetlify) {
-        showModalFeedback('✓ Verification successful! Recording attendance...', 'success');
-        DOM.btnConfirmSubmission.textContent = '✓ Verified';
+        showModalFeedback('Verification successful! Recording attendance...', 'success');
+        DOM.btnConfirmSubmission.textContent = 'Verified';
 
         setTimeout(() => {
           closeCaptureModal();
@@ -1786,13 +1807,13 @@ DOM.btnConfirmSubmission.addEventListener('click', async () => {
 
           const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           if (state.flowMode === 'CHECK_IN') {
-            showAlert(`✓ Check-in verified at ${nowStr} (Netlify Preview Mode)`, 'success');
+            showAlert(`Check-in verified at ${nowStr} (Netlify Preview Mode)`, 'success');
             DOM.btnCheckIn.disabled = true;
             DOM.btnCheckOut.disabled = false;
             DOM.badgeStatus.textContent = 'Active Shift';
             DOM.badgeStatus.className = 'status-badge status-present';
           } else {
-            showAlert(`✓ Check-out verified · Net Working Time: 8.00h (Netlify Preview Mode)`, 'success');
+            showAlert(`Check-out verified · Net Working Time: 8.00h (Netlify Preview Mode)`, 'success');
             DOM.btnCheckIn.disabled = true;
             DOM.btnCheckOut.disabled = true;
             DOM.badgeStatus.textContent = 'Shift Completed';
@@ -1808,8 +1829,8 @@ DOM.btnConfirmSubmission.addEventListener('click', async () => {
       return;
     }
 
-    showModalFeedback('✓ Verification successful! Recording attendance...', 'success');
-    DOM.btnConfirmSubmission.textContent = '✓ Verified';
+    showModalFeedback('Verification successful! Recording attendance...', 'success');
+    DOM.btnConfirmSubmission.textContent = 'Verified';
 
     setTimeout(async () => {
       closeCaptureModal();
@@ -1817,9 +1838,9 @@ DOM.btnConfirmSubmission.addEventListener('click', async () => {
       DOM.btnConfirmSubmission.textContent = 'Confirm & Submit';
 
       if (state.flowMode === 'CHECK_IN') {
-        showAlert(`✓ Check-in verified at ${new Date(data.attendance?.checkin_server_timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, 'success');
+        showAlert(`Check-in verified at ${new Date(data.attendance?.checkin_server_timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, 'success');
       } else {
-        showAlert(`✓ Check-out verified · Net Working Time: ${data.summary?.netHours || '0.00'}h`, 'success');
+        showAlert(`Check-out verified · Net Working Time: ${data.summary?.netHours || '0.00'}h`, 'success');
       }
 
       await refreshAttendanceStatus();

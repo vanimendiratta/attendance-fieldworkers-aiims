@@ -92,18 +92,20 @@ async function runTests() {
   );
   console.log('✓ Excel BOM is present at index 0');
 
-  // Test 3: Columns structure
-  console.log('\n[Test 3] Verify CSV Header row structure and required columns');
+  // Test 3: Complete 37 Columns Structure
+  console.log('\n[Test 3] Verify complete 37-column enterprise CSV header structure');
   const lines = res1.text.replace(/^\uFEFF/, '').split(/\r?\n/).filter(line => line.trim().length > 0);
   assert.ok(lines.length >= 1, 'CSV must have at least 1 line (headers)');
   const headerLine = lines[0];
+  const headerColumns = headerLine.split(',');
 
-  const expectedColumns = [
+  const authoritative37Columns = [
     'Attendance ID',
     'Employee ID',
     'Employee Name',
     'Department',
     'Designation',
+    'Email',
     'Organization',
     'Team Name',
     'State / UT',
@@ -116,22 +118,39 @@ async function runTests() {
     'Check-In Latitude',
     'Check-In Longitude',
     'Check-In GPS Accuracy (m)',
+    'Check-In Geofence Distance (m)',
+    'Check-In Geofence Status',
     'Check-In Address',
     'Checkout Date',
     'Checkout Time',
+    'Checkout Server Timestamp (UTC)',
+    'Checkout Latitude',
+    'Checkout Longitude',
+    'Checkout GPS Accuracy (m)',
+    'Checkout Geofence Distance (m)',
+    'Checkout Geofence Status',
+    'Checkout Address',
     'Gross Working Hours',
+    'Break Minutes',
     'Net Working Hours',
+    'Overtime Hours',
     'Field Site Notes',
-    'REDCap Sync Status'
+    'REDCap Sync Status',
+    'Created At'
   ];
 
-  for (const col of expectedColumns) {
-    assert.ok(
-      headerLine.includes(col),
-      `Header line missing required column: "${col}"`
+  assert.strictEqual(
+    headerColumns.length, 37,
+    `Authoritative enterprise attendance CSV must have exactly 37 columns, but found ${headerColumns.length}`
+  );
+
+  for (let i = 0; i < authoritative37Columns.length; i++) {
+    assert.strictEqual(
+      headerColumns[i], authoritative37Columns[i],
+      `Column ${i + 1} mismatch: expected "${authoritative37Columns[i]}", got "${headerColumns[i]}"`
     );
   }
-  console.log(`✓ All ${expectedColumns.length} expected columns found in CSV header`);
+  console.log(`✓ All ${authoritative37Columns.length} authoritative enterprise columns verified in exact sequence`);
 
   // Test 4: Tenant isolation
   console.log('\n[Test 4] Multi-tenant isolation in CSV export');
@@ -140,10 +159,9 @@ async function runTests() {
   });
   assert.strictEqual(resOrg2.statusCode, 200);
   const linesOrg2 = resOrg2.text.replace(/^\uFEFF/, '').split(/\r?\n/).filter(line => line.trim().length > 0);
-  // Any rows in Org2 should only have ORG-002 organization name
   for (let i = 1; i < linesOrg2.length; i++) {
     assert.ok(
-      !linesOrg2[i].includes('Apex Technologies Inc') || linesOrg2[i].includes('Beacon Health Systems'),
+      !linesOrg2[i].includes('AIIMS') || linesOrg2[i].includes('Cyberdyne'),
       'Org 2 CSV should not leak Org 1 records'
     );
   }
@@ -178,6 +196,34 @@ async function runTests() {
     );
   }
   console.log(`✓ Search filter correctly exported ${linesSearch.length - 1} matching records`);
+
+  // Test 7: CSV / Excel Formula Injection Sanitization
+  console.log('\n[Test 7] Verify CSV / Excel formula injection sanitization (=, +, -, @)');
+  const db = require('../src/db/database');
+  const testAttId = 'TEST-FORMULA-ATT-' + Date.now();
+  db.prepare(`
+    INSERT INTO attendance (
+      id, employee_id, employer_id, attendance_status, checkin_photo,
+      checkin_lat, checkin_lng, checkin_accuracy, checkin_server_timestamp,
+      work_mode, field_site_notes, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    testAttId, 'EMP-1001', 'ORG-001', 'CHECKED_IN', 'data:image/png;base64,test',
+    28.5662, 77.2136, 10, new Date().toISOString(),
+    'FIELD_WORK', '=SUM(1+1)*cmd|', new Date().toISOString(), new Date().toISOString()
+  );
+
+  const resFormula = await fetchRaw(`/api/admin/attendance/export.csv?employer_id=ORG-001&search=${encodeURIComponent('=SUM')}`, {
+    'x-employer-id': 'ORG-001'
+  });
+  assert.strictEqual(resFormula.statusCode, 200);
+  assert.ok(
+    resFormula.text.includes("'=SUM(1+1)*cmd|"),
+    'Formula injection must be safely prefixed with single quote in CSV output'
+  );
+  // Cleanup test record
+  db.prepare('DELETE FROM attendance WHERE id = ?').run(testAttId);
+  console.log('✓ Excel formula injection strictly neutralized with leading quote escape');
 
   console.log('\n===========================================');
   console.log('🎉 ALL ATTENDANCE CSV EXPORT TESTS PASSED!');

@@ -11,7 +11,9 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <!-- Client-side States & Districts Dictionary -->
   <script src="/states_districts_client.js"></script>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%20width=%2232%22%20height=%2232%22><text y=%2224%22 font-size=%2224%22>🛡️</text></svg>">
+  <!-- Unified SVG Iconography System -->
+  <script src="/icons.js?v=1"></script>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%232563eb%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><path d=%22M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z%22/><path d=%22m9 12 2 2 4-4%22/></svg>">
 </head>
 <body class="admin-body">
 
@@ -35,43 +37,43 @@
           <ul class="nav-item-list">
             <li>
               <a class="nav-link active" data-view="viewDashboard" id="navDashboard">
-                <span class="nav-icon">📊</span>
+                <span class="nav-icon"><span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg></span></span>
                 <span>Dashboard</span>
               </a>
             </li>
             <li>
               <a class="nav-link" data-view="viewTeams" id="navTeams">
-                <span class="nav-icon">🗺️</span>
+                <span class="nav-icon"><span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg></span></span>
                 <span>Teams & Districts</span>
               </a>
             </li>
             <li>
               <a class="nav-link" data-view="viewEmployees" id="navEmployees">
-                <span class="nav-icon">👥</span>
+                <span class="nav-icon"><span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span></span>
                 <span>Employees</span>
               </a>
             </li>
             <li>
               <a class="nav-link" data-view="viewAttendance" id="navAttendance">
-                <span class="nav-icon">⏱️</span>
+                <span class="nav-icon"><span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span></span>
                 <span>Attendance</span>
               </a>
             </li>
             <li>
               <a class="nav-link" data-view="viewLeave" id="navLeave">
-                <span class="nav-icon">🗓️</span>
+                <span class="nav-icon"><span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span></span>
                 <span>Leave</span>
               </a>
             </li>
             <li>
               <a class="nav-link" data-view="viewShifts" id="navShifts">
-                <span class="nav-icon">🔄</span>
+                <span class="nav-icon"><span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg></span></span>
                 <span>Shifts</span>
               </a>
             </li>
             <li>
               <a class="nav-link" data-view="viewReports" id="navReports">
-                <span class="nav-icon">📈</span>
+                <span class="nav-icon"><span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg></span></span>
                 <span>Reports</span>
               </a>
             </li>
@@ -83,19 +85,19 @@
           <ul class="nav-item-list">
             <li>
               <a class="nav-link" data-view="viewSettings" id="navSettings">
-                <span class="nav-icon">⚙️</span>
+                <span class="nav-icon"><span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span></span>
                 <span>Organization & Geofence</span>
               </a>
             </li>
             <li>
               <a class="nav-link" data-view="viewAudit" id="navAudit">
-                <span class="nav-icon">🛡️</span>
+                <span class="nav-icon"><span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span></span>
                 <span>Security Audit Logs</span>
               </a>
             </li>
             <li>
               <a class="nav-link" data-view="viewRedcap" id="navRedcap">
-                <span class="nav-icon">🔄</span>
+                <span class="nav-icon"><span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span></span>
                 <span>REDCap Gateway</span>
               </a>
             </li>
@@ -112,8 +114,8 @@
             <div style="font-size: 11px; color: var(--color-text-muted);">Administrator</div>
           </div>
         </div>
-        <button id="btnAdminLogout" title="Sign Out" style="background: transparent; border: none; color: var(--color-text-tertiary); cursor: pointer; font-size: 14px; padding: 6px; border-radius: var(--radius-xs);">
-          🚪
+        <button id="btnAdminLogout" title="Sign Out" style="background: transparent; border: none; color: var(--color-text-tertiary); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 6px; border-radius: var(--radius-xs);">
+          <span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>
         </button>
       </div>
     </aside>
@@ -132,13 +134,14 @@
         <div class="header-right">
           <!-- Search -->
           <div class="header-search">
-            <span style="color: var(--color-text-muted); font-size: 13px;">🔍</span>
+            <span class="ui-icon ui-icon-xs" style="color: var(--color-text-muted);"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
             <input type="text" placeholder="Search employees, shifts..." id="adminSearchInput">
           </div>
 
           <!-- Switch to Employee Portal -->
-          <a href="/" class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;">
-            <span>📱 Employee Portal</span>
+          <a href="/" class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px; display: inline-flex; align-items: center; gap: 6px;">
+            <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg></span>
+            <span>Employee Portal</span>
           </a>
 
           <!-- Active Organization Badge -->
@@ -161,8 +164,14 @@
               <p class="greeting-subtext" id="greetingDate">Tuesday, 8 September 2026 · Real-time Attendance & Geofence Active</p>
             </div>
             <div style="display: flex; gap: 8px;">
-              <button class="btn btn-secondary" id="btnRefreshDashboard">🔄 Refresh</button>
-              <a href="/api/admin/redcap/data-dictionary.csv" download class="btn btn-secondary">📥 Export REDCap CSV</a>
+              <button class="btn btn-secondary" id="btnRefreshDashboard" style="display: inline-flex; align-items: center; gap: 6px;">
+                <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg></span>
+                <span>Refresh</span>
+              </button>
+              <a href="/api/admin/redcap/data-dictionary.csv" download class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 6px;">
+                <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+                <span>Export REDCap CSV</span>
+              </a>
             </div>
           </div>
 
@@ -210,14 +219,23 @@
             <div class="surface-card-header" style="flex-wrap: wrap; gap: 12px;">
               <div>
                 <div style="display: flex; align-items: center; gap: 8px;">
-                  <h3 class="surface-card-title">🗺️ National Regional Operations Matrix</h3>
+                  <h3 class="surface-card-title" style="display: inline-flex; align-items: center; gap: 6px;">
+                    <span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg></span>
+                    <span>National Regional Operations Matrix</span>
+                  </h3>
                   <span class="badge badge-success" id="badgeActiveStatesCount" style="font-size: 11px;">Loading States...</span>
                 </div>
                 <p style="font-size: 12px; color: var(--color-text-tertiary);">Simultaneous live attendance tracking across Indian States, Districts, and Assigned Teams</p>
               </div>
               <div style="display: flex; align-items: center; gap: 8px;">
-                <button class="btn btn-secondary" style="font-size: 11px; padding: 5px 10px;" id="btnRefreshMatrix">🔄 Refresh Matrix</button>
-                <button class="btn btn-primary" style="font-size: 11px; padding: 5px 10px;" onclick="switchView('viewTeams')">Manage Teams ➔</button>
+                <button class="btn btn-secondary" style="font-size: 11px; padding: 5px 10px; display: inline-flex; align-items: center; gap: 4px;" id="btnRefreshMatrix">
+                  <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg></span>
+                  <span>Refresh Matrix</span>
+                </button>
+                <button class="btn btn-primary" style="font-size: 11px; padding: 5px 10px; display: inline-flex; align-items: center; gap: 4px;" onclick="switchView('viewTeams')">
+                  <span>Manage Teams</span>
+                  <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span>
+                </button>
               </div>
             </div>
             <div class="surface-card-body" style="padding: 16px 24px;">
@@ -238,7 +256,10 @@
                   <h3 class="surface-card-title">Currently Working Employees</h3>
                   <p style="font-size: 12px; color: var(--color-text-tertiary);">Active on-premise sessions</p>
                 </div>
-                <button class="btn btn-tertiary" style="font-size: 12px;" onclick="switchView('viewAttendance')">View All Attendance ➔</button>
+                <button class="btn btn-tertiary" style="font-size: 12px; display: inline-flex; align-items: center; gap: 4px;" onclick="switchView('viewAttendance')">
+                  <span>View All Attendance</span>
+                  <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span>
+                </button>
               </div>
 
               <!-- Distribution bar -->
@@ -307,8 +328,8 @@
                 </select>
                 <select id="attendanceFilterMode" class="form-select" style="width: 140px; padding: 7px 12px; font-size: 13px;">
                   <option value="ALL">All Work Modes</option>
-                  <option value="OFFICE">🏢 Office Duty</option>
-                  <option value="FIELD_WORK">🚗 Field Work</option>
+                  <option value="OFFICE">Office Duty</option>
+                  <option value="FIELD_WORK">Field Work</option>
                 </select>
                 <!-- Territorial Cascading Filters -->
                 <select id="attendanceFilterState" class="form-select" style="width: 155px; padding: 7px 12px; font-size: 13px;">
@@ -363,7 +384,10 @@
                 <h3 style="font-size: 15px; font-weight: 600;">Organization Employees</h3>
                 <p style="font-size: 12px; color: var(--color-text-tertiary);">Active accounts registered under this employer</p>
               </div>
-              <button class="btn btn-primary" style="font-size: 12px;">+ Add Employee</button>
+              <button class="btn btn-primary" style="font-size: 12px; display: inline-flex; align-items: center; gap: 6px;">
+                <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+                <span>Add Employee</span>
+              </button>
             </div>
 
             <table class="data-table">
@@ -478,7 +502,10 @@
 
                 <div style="display: flex; align-items: center; gap: 14px;">
                   <button type="submit" class="btn btn-primary">Save Policy Changes</button>
-                  <span id="saveSettingsFeedback" style="font-size: 13px; color: var(--color-success); display: none;">✓ Policy updated successfully</span>
+                  <span id="saveSettingsFeedback" style="font-size: 13px; color: var(--color-success); display: none; align-items: center; gap: 4px;">
+                    <span class="ui-icon ui-icon-xs" style="color: var(--color-success);"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                    <span>Policy updated successfully</span>
+                  </span>
                 </div>
               </form>
             </div>
@@ -493,7 +520,10 @@
                 <h3 style="font-size: 15px; font-weight: 600;">Immutable Security Audit Logs</h3>
                 <p style="font-size: 12px; color: var(--color-text-tertiary);">Tamper-proof log of check-in events, accuracy rejections, and geofence evaluations</p>
               </div>
-              <button id="btnRefreshAudit" class="btn btn-secondary" style="font-size: 12px;">🔄 Refresh Logs</button>
+              <button id="btnRefreshAudit" class="btn btn-secondary" style="font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">
+                <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg></span>
+                <span>Refresh Logs</span>
+              </button>
             </div>
 
             <table class="data-table" id="auditTable">
@@ -522,14 +552,15 @@
                 <h3 class="surface-card-title">REDCap Electronic Data Capture (EDC) Gateway</h3>
                 <p style="font-size: 12px; color: var(--color-text-tertiary);">All 22 attendance fields are synchronized to backend REDCap</p>
               </div>
-              <a href="/api/admin/redcap/data-dictionary.csv" download class="btn btn-secondary" style="font-size: 12px;">
-                📥 Download Data Dictionary CSV
+              <a href="/api/admin/redcap/data-dictionary.csv" download class="btn btn-secondary" style="font-size: 12px; display: inline-flex; align-items: center; gap: 6px;">
+                <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+                <span>Download Data Dictionary CSV</span>
               </a>
             </div>
 
             <div class="surface-card-body">
               <div style="background-color: #f8fafc; border: 1px solid var(--color-border-default); border-radius: var(--radius-md); padding: 16px; margin-bottom: 24px; font-size: 13px; color: var(--color-text-secondary); line-height: 1.6;">
-                <strong>Architecture:</strong> Employee App ➔ Backend API Gateway ➔ Validation & Server Timestamping ➔ REDCap REST API Adapter.<br>
+                <strong>Architecture:</strong> Employee App &rarr; Backend API Gateway &rarr; Validation & Server Timestamping &rarr; REDCap REST API Adapter.<br>
                 REDCap credentials are held exclusively in backend environment variables and are never transmitted to clients.
               </div>
 

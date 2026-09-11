@@ -131,6 +131,11 @@ function initSchema() {
       created_at TEXT NOT NULL,
       FOREIGN KEY (employer_id) REFERENCES organizations(id)
     );
+
+    CREATE TABLE IF NOT EXISTS employee_sequences (
+      employer_id TEXT PRIMARY KEY,
+      last_seq INTEGER NOT NULL
+    );
   `);
 
   // Migrate columns if upgrading existing db
@@ -254,7 +259,25 @@ function initSchema() {
   upsertTeam.run('TEAM-101', 'ORG-001', 'Delhi Regional Headquarters', 'Delhi', 'New Delhi', 'Primary dental healthcare and research operations at AIIMS campus', new Date().toISOString());
   upsertTeam.run('TEAM-102', 'ORG-001', 'Central Delhi Field Unit', 'Delhi', 'Central Delhi', 'Active field deployment & dental healthcare audit', new Date().toISOString());
   upsertTeam.run('TEAM-103', 'ORG-001', 'Maharashtra West Operations', 'Maharashtra', 'Mumbai Suburban', 'Western territory inspection & dental clinical audit', new Date().toISOString());
-  upsertTeam.run('TEAM-104', 'ORG-001', 'Karnataka Tech Hub', 'Karnataka', 'Bengaluru Urban', 'Southern outreach and clinical field survey', new Date().toISOString());
+  // Initialize sequence counters for atomic, race-condition-safe ID generation
+  try {
+    const existingEmployees = db.prepare(`SELECT id FROM employees WHERE id LIKE 'EMP-%'`).all();
+    let maxNum = 1000;
+    for (const emp of existingEmployees) {
+      const m = emp.id.match(/\d+/);
+      if (m) {
+        const n = parseInt(m[0], 10);
+        if (n > maxNum) maxNum = n;
+      }
+    }
+    db.prepare(`
+      INSERT INTO employee_sequences (employer_id, last_seq)
+      VALUES ('ORG-001', ?)
+      ON CONFLICT(employer_id) DO UPDATE SET last_seq = MAX(last_seq, excluded.last_seq)
+    `).run(maxNum);
+  } catch (seqErr) {
+    console.warn('Sequence initialization note:', seqErr.message);
+  }
 }
 
 initSchema();

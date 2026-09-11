@@ -302,12 +302,15 @@ function renderCurrentlyWorkingTable(records) {
         <td style="font-family: var(--font-mono); font-weight: 600; color: var(--color-primary);">${durationStr}</td>
         <td>
           ${r.work_mode === 'FIELD_WORK' ? `
-            <span class="badge" style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; font-size: 10px;">
-              🚗 Field Work
+            <span class="badge" style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; font-size: 10px; display: inline-flex; align-items: center; gap: 4px;">
+              ${window.Icons ? window.Icons.render('car', { size: 11 }) : ''}
+              <span>Field Work</span>
             </span>
           ` : `
-            <span class="badge ${r.checkin_geofence_status === 'WITHIN_GEOFENCE' ? 'badge-neutral' : 'badge-warning'}" style="font-size: 10px;">
-              ${r.checkin_geofence_status === 'WITHIN_GEOFENCE' ? '🏢 In Office' : `⚠️ ${Math.round(r.checkin_geofence_distance || 0)}m`}
+            <span class="badge ${r.checkin_geofence_status === 'WITHIN_GEOFENCE' ? 'badge-neutral' : 'badge-warning'}" style="font-size: 10px; display: inline-flex; align-items: center; gap: 4px;">
+              ${r.checkin_geofence_status === 'WITHIN_GEOFENCE' 
+                ? `${window.Icons ? window.Icons.render('building', { size: 11 }) : ''} <span>In Office</span>` 
+                : `${window.Icons ? window.Icons.render('alertTriangle', { size: 11 }) : ''} <span>${Math.round(r.checkin_geofence_distance || 0)}m</span>`}
             </span>
           `}
         </td>
@@ -334,7 +337,7 @@ function renderActivityFeed(records) {
         <span class="activity-dot ${isCompleted ? 'dot-checkout' : 'dot-checkin'}"></span>
         <div class="activity-content">
           <strong>${r.employee_name}</strong> ${isCompleted ? 'completed shift' : (isField ? `checked in on Field Work (${r.field_site_notes || 'On-Site'})` : 'checked in at Office')}
-          <div class="activity-sub">GPS: ±${r.checkin_accuracy}m · ${isField ? `🚗 Field Duty · ${r.checkin_address || 'Verified'}` : (r.checkin_geofence_status === 'WITHIN_GEOFENCE' ? 'Verified In Geofence' : 'Outside Geofence Flagged')}</div>
+          <div class="activity-sub">GPS: ±${r.checkin_accuracy}m · ${isField ? `${window.Icons ? window.Icons.render('car', { size: 11 }) : ''} Field Duty · ${r.checkin_address || 'Verified'}` : (r.checkin_geofence_status === 'WITHIN_GEOFENCE' ? 'Verified In Geofence' : 'Outside Geofence Flagged')}</div>
         </div>
       </li>
     `;
@@ -401,7 +404,7 @@ async function handleExportAttendanceCsv() {
 
   const originalContent = btnExport.innerHTML;
   btnExport.disabled = true;
-  btnExport.innerHTML = `<span style="display: inline-block;">⏳</span> <span>Exporting...</span>`;
+  btnExport.innerHTML = `${window.Icons ? window.Icons.render('loader', { size: 14 }) : ''} <span>Exporting...</span>`;
 
   try {
     const searchTerm = (document.getElementById('attendanceFilterSearch')?.value || '').trim();
@@ -424,76 +427,84 @@ async function handleExportAttendanceCsv() {
     });
 
     if (!res.ok) {
-      throw new Error(`Export request returned status ${res.status}`);
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Export request failed');
     }
 
     const blob = await res.blob();
-    let filename = `attendance_export_${new Date().toISOString().split('T')[0]}.csv`;
-    const disposition = res.headers.get('content-disposition');
-    if (disposition && disposition.includes('filename=')) {
-      const match = disposition.match(/filename=["']?([^"';]+)["']?/i);
-      if (match && match[1]) filename = match[1].trim();
-    }
-
     const downloadUrl = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = downloadUrl;
+
+    const contentDisposition = res.headers.get('Content-Disposition');
+    let filename = 'aiims_attendance_export.csv';
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="?([^"]+)"?/);
+      if (match && match[1]) filename = match[1];
+    }
+
     a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(downloadUrl);
 
-    btnExport.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> <span style="color: #059669; font-weight: 600;">Downloaded!</span>`;
-    setTimeout(() => {
-      btnExport.disabled = false;
-      btnExport.innerHTML = originalContent;
-    }, 2200);
   } catch (err) {
-    console.error('Attendance CSV export error:', err);
-    alert(`Failed to export attendance CSV: ${err.message}`);
+    console.error('Export CSV error:', err);
+    alert('Failed to export CSV: ' + err.message);
+  } finally {
     btnExport.disabled = false;
     btnExport.innerHTML = originalContent;
   }
 }
 
-function renderAttendanceMainTable(records) {
+/**
+ * Filter & Render Attendance Table
+ */
+function renderAttendanceTable(records) {
   const tbody = document.getElementById('attendanceMainTableBody');
+  const countLabel = document.getElementById('attendanceCountLabel');
+
+  if (countLabel) {
+    countLabel.textContent = `Showing ${records.length} record${records.length === 1 ? '' : 's'}`;
+  }
+
   if (records.length === 0) {
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="11" style="text-align: center; color: var(--color-text-muted); padding: 36px;">
-          No matching attendance records found.
-        </td>
-      </tr>
-    `;
+    tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; color: var(--color-text-muted); padding: 32px;">No matching attendance records found.</td></tr>`;
     return;
   }
 
   tbody.innerHTML = records.map(r => {
     const checkinTime = new Date(r.checkin_server_timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const checkoutTime = r.checkout_server_timestamp ? new Date(r.checkout_server_timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
-    const netHours = r.net_working_seconds ? `${(r.net_working_seconds / 3600).toFixed(2)}h` : '—';
+    const checkoutTime = r.checkout_server_timestamp
+      ? new Date(r.checkout_server_timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : '--:--';
 
-    let statusBadge = '<span class="badge badge-success"><span class="badge-dot"></span>Working</span>';
-    if (r.attendance_status === 'ON_BREAK') statusBadge = '<span class="badge badge-warning"><span class="badge-dot"></span>On Break</span>';
-    if (r.attendance_status === 'COMPLETED') statusBadge = '<span class="badge badge-neutral"><span class="badge-dot"></span>Completed</span>';
+    const netHours = r.net_working_seconds
+      ? `${(r.net_working_seconds / 3600).toFixed(2)}h`
+      : (r.attendance_status === 'COMPLETED' ? '0.00h' : 'In Progress');
 
-    const checkinPhoto = r.checkin_photo 
-      ? `<img src="${r.checkin_photo}" class="table-thumb-photo" alt="Check-in">` 
-      : '—';
-    
-    const checkoutPhoto = r.checkout_photo 
-      ? `<img src="${r.checkout_photo}" class="table-thumb-photo" alt="Checkout">` 
-      : '<span style="color: var(--color-text-muted); font-size: 11px;">Pending</span>';
+    const statusBadge = r.attendance_status === 'COMPLETED'
+      ? '<span class="badge badge-neutral">Completed</span>'
+      : (r.attendance_status === 'ON_BREAK'
+        ? '<span class="badge badge-warning">On Break</span>'
+        : '<span class="badge badge-success">Working</span>');
+
+    const checkinPhoto = r.checkin_photo
+      ? `<img src="${r.checkin_photo}" class="table-photo-thumb" alt="Checkin" onclick="event.stopPropagation(); openPhotoLightbox('${r.checkin_photo}')" title="Click to view full photo">`
+      : '<span style="color: var(--color-text-muted);">None</span>';
+
+    const checkoutPhoto = r.checkout_photo
+      ? `<img src="${r.checkout_photo}" class="table-photo-thumb" alt="Checkout" onclick="event.stopPropagation(); openPhotoLightbox('${r.checkout_photo}')" title="Click to view full photo">`
+      : '<span style="color: var(--color-text-muted);">--</span>';
 
     const isField = r.work_mode === 'FIELD_WORK';
 
     return `
-      <tr onclick="openAttendanceDrawer('${r.id}')">
+      <tr onclick="openAttendanceDrawer('${r.id}')" style="cursor: pointer;">
         <td>
-          <div class="table-user-cell">
-            <div class="user-avatar">${r.employee_name.charAt(0)}</div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div class="table-emp-avatar">${r.employee_name.charAt(0)}</div>
             <div>
               <div style="font-weight: 600;">${r.employee_name}</div>
               <div style="font-size: 11px; color: var(--color-text-muted);">${r.employee_id}</div>
@@ -502,8 +513,9 @@ function renderAttendanceMainTable(records) {
         </td>
         <td>
           <div style="font-weight: 600; font-size: 13px; color: var(--color-text-primary);">${r.team_name || 'Direct Assignment'}</div>
-          <span class="team-chip-tag" style="margin-top: 3px;">
-            📍 ${r.district ? `${r.district}, ${r.state}` : (r.state || 'Territory Unspecified')}
+          <span class="team-chip-tag" style="margin-top: 3px; display: inline-flex; align-items: center; gap: 4px;">
+            ${window.Icons ? window.Icons.render('mapPin', { size: 10 }) : ''}
+            <span>${r.district ? `${r.district}, ${r.state}` : (r.state || 'Territory Unspecified')}</span>
           </span>
         </td>
         <td style="color: var(--color-text-secondary);">${r.department}</td>
@@ -511,16 +523,19 @@ function renderAttendanceMainTable(records) {
         <td>${checkinPhoto}</td>
         <td>
           ${isField ? `
-            <span class="badge" style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; font-size: 10px; margin-bottom: 3px; display: inline-block;">
-              🚗 Field Work ${r.field_site_notes ? '· ' + r.field_site_notes : ''}
+            <span class="badge" style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; font-size: 10px; margin-bottom: 3px; display: inline-flex; align-items: center; gap: 4px;">
+              ${window.Icons ? window.Icons.render('car', { size: 11 }) : ''}
+              <span>Field Work ${r.field_site_notes ? '· ' + r.field_site_notes : ''}</span>
             </span>
             <div style="font-size: 11px; color: var(--color-text-primary); font-weight: 500; max-width: 210px; white-space: normal; line-height: 1.3;">
               ${r.checkin_address || `${r.checkin_lat.toFixed(4)}°, ${r.checkin_lng.toFixed(4)}°`}
             </div>
             <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">±${r.checkin_accuracy}m accuracy</div>
           ` : `
-            <span class="badge ${r.checkin_geofence_status === 'WITHIN_GEOFENCE' ? 'badge-neutral' : 'badge-warning'}" style="font-size: 10px; margin-bottom: 3px; display: inline-block;">
-              ${r.checkin_geofence_status === 'WITHIN_GEOFENCE' ? '🏢 In Office' : `⚠️ Outside (${Math.round(r.checkin_geofence_distance || 0)}m)`}
+            <span class="badge ${r.checkin_geofence_status === 'WITHIN_GEOFENCE' ? 'badge-neutral' : 'badge-warning'}" style="font-size: 10px; margin-bottom: 3px; display: inline-flex; align-items: center; gap: 4px;">
+              ${r.checkin_geofence_status === 'WITHIN_GEOFENCE' 
+                ? `${window.Icons ? window.Icons.render('building', { size: 11 }) : ''} <span>In Office</span>` 
+                : `${window.Icons ? window.Icons.render('alertTriangle', { size: 11 }) : ''} <span>Outside (${Math.round(r.checkin_geofence_distance || 0)}m)</span>`}
             </span>
             <div style="font-size: 11px; color: var(--color-text-secondary); max-width: 200px; white-space: normal; line-height: 1.3;">
               ${r.checkin_address || 'Office Premises'}
@@ -533,13 +548,18 @@ function renderAttendanceMainTable(records) {
         <td style="font-family: var(--font-mono); font-weight: 600; color: var(--color-primary);">${netHours}</td>
         <td>${statusBadge}</td>
         <td>
-          <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 11px;" onclick="event.stopPropagation(); openAttendanceDrawer('${r.id}')">
-            View Drawer ➔
+          <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;" onclick="event.stopPropagation(); openAttendanceDrawer('${r.id}')">
+            <span>View Details</span>
+            <span class="ui-icon ui-icon-xs">${window.Icons ? window.Icons.raw('arrowRight') : ''}</span>
           </button>
         </td>
       </tr>
     `;
   }).join('');
+}
+
+function renderAttendanceMainTable(records) {
+  return renderAttendanceTable(records);
 }
 
 /**
@@ -583,7 +603,9 @@ async function openAttendanceDrawer(recordId) {
     const territoryBadge = document.getElementById('drwTerritoryBadge');
     if (teamEl) teamEl.textContent = record.team_name || 'Direct Assignment';
     if (territoryBadge) {
-      territoryBadge.textContent = record.district ? `📍 ${record.district}, ${record.state}` : (record.state ? `📍 ${record.state}` : 'Territory Unspecified');
+      territoryBadge.innerHTML = record.district
+        ? `${window.Icons ? window.Icons.render('mapPin', { size: 10 }) : ''} <span>${record.district}, ${record.state}</span>`
+        : (record.state ? `${window.Icons ? window.Icons.render('mapPin', { size: 10 }) : ''} <span>${record.state}</span>` : 'Territory Unspecified');
     }
 
     // Hours summary
@@ -618,10 +640,12 @@ async function openAttendanceDrawer(recordId) {
     const isField = record.work_mode === 'FIELD_WORK';
     const geoBadge = document.getElementById('drwGeofenceBadge');
     if (isField) {
-      geoBadge.textContent = `🚗 Field Duty (${record.field_site_notes || 'On-Site Verified'})`;
+      geoBadge.innerHTML = `${window.Icons ? window.Icons.render('car', { size: 11 }) : ''} <span>Field Duty (${record.field_site_notes || 'On-Site Verified'})</span>`;
       geoBadge.className = 'badge badge-success';
     } else {
-      geoBadge.textContent = record.checkin_geofence_status === 'WITHIN_GEOFENCE' ? '✓ Within Geofence' : `⚠️ Outside Geofence (${Math.round(record.checkin_geofence_distance || 0)}m)`;
+      geoBadge.innerHTML = record.checkin_geofence_status === 'WITHIN_GEOFENCE' 
+        ? `${window.Icons ? window.Icons.render('check', { size: 11 }) : ''} <span>Within Geofence</span>` 
+        : `${window.Icons ? window.Icons.render('alertTriangle', { size: 11 }) : ''} <span>Outside Geofence (${Math.round(record.checkin_geofence_distance || 0)}m)</span>`;
       geoBadge.className = `badge ${record.checkin_geofence_status === 'WITHIN_GEOFENCE' ? 'badge-success' : 'badge-warning'}`;
     }
     document.getElementById('drwAddressText').textContent = record.checkin_address || `Coordinates: ${record.checkin_lat.toFixed(5)}° N, ${record.checkin_lng.toFixed(5)}° E`;
@@ -632,7 +656,7 @@ async function openAttendanceDrawer(recordId) {
     if (breaks && breaks.length > 0) {
       breaksContainer.innerHTML = breaks.map((b, i) => `
         <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--color-border-subtle);">
-          <span>Break #${i + 1}: ${new Date(b.start_server_timestamp).toLocaleTimeString()} ➔ ${b.end_server_timestamp ? new Date(b.end_server_timestamp).toLocaleTimeString() : 'In Progress'}</span>
+          <span>Break #${i + 1}: ${new Date(b.start_server_timestamp).toLocaleTimeString()} &rarr; ${b.end_server_timestamp ? new Date(b.end_server_timestamp).toLocaleTimeString() : 'In Progress'}</span>
           <span style="font-weight: 600;">${Math.round(b.duration_seconds / 60)} min</span>
         </div>
       `).join('');
@@ -685,7 +709,7 @@ function renderDrawerMap(record) {
   // Checkin Pin
   const isField = record.work_mode === 'FIELD_WORK';
   const popupHtml = isField
-    ? `<b>${record.employee_name}</b><br><span style="color:#0284c7;font-weight:600;">🚗 Field Work</span>${record.field_site_notes ? ': ' + record.field_site_notes : ''}<br><small>${record.checkin_address || ''}</small><br>Accuracy: ±${record.checkin_accuracy}m`
+    ? `<b>${record.employee_name}</b><br><span style="color:#0284c7;font-weight:600;display:inline-flex;align-items:center;gap:4px;">${window.Icons ? window.Icons.render('car', { size: 11 }) : ''} <span>Field Work</span></span>${record.field_site_notes ? ': ' + record.field_site_notes : ''}<br><small>${record.checkin_address || ''}</small><br>Accuracy: ±${record.checkin_accuracy}m`
     : `<b>${record.employee_name}</b><br>${record.checkin_address || 'Office'}<br>Accuracy: ±${record.checkin_accuracy}m`;
 
   L.marker([record.checkin_lat, record.checkin_lng]).addTo(drawerMapInstance)
@@ -958,11 +982,11 @@ async function loadMultiStateMatrix() {
         <div class="state-matrix-card">
           <div class="state-matrix-header">
             <div class="state-matrix-title">
-              <span>🏛️</span>
+              <span class="ui-icon ui-icon-xs">${window.Icons ? window.Icons.raw('landmark') : ''}</span>
               <span>${s.state}</span>
             </div>
             <span class="state-matrix-badge ${isStateActive ? 'badge-success' : 'badge-neutral'}">
-              ${isStateActive ? `🟢 ${s.total_active} Active` : `${s.total_records} Records`}
+              ${isStateActive ? `<span class="badge-dot" style="background: #10b981; margin-right: 4px;"></span><span>${s.total_active} Active</span>` : `<span>${s.total_records} Records</span>`}
             </span>
           </div>
 
@@ -971,8 +995,9 @@ async function loadMultiStateMatrix() {
               const hasActive = d.active > 0 || d.on_break > 0;
               return `
                 <div class="district-pill-item" onclick="filterByDistrict('${s.state}', '${d.district}')" title="Filter attendance for ${d.district}, ${s.state}">
-                  <div class="district-pill-name">
-                    ${hasActive ? '🟢 ' : '⚪ '}${d.district}
+                  <div class="district-pill-name" style="display: flex; align-items: center;">
+                    <span class="badge-dot" style="background: ${hasActive ? '#10b981' : '#94a3b8'}; margin-right: 6px; display: inline-block; flex-shrink: 0;"></span>
+                    <span>${d.district}</span>
                   </div>
                   <div class="district-pill-stat">
                     ${d.active} working · ${d.completed} done
@@ -980,7 +1005,7 @@ async function loadMultiStateMatrix() {
                 </div>
                 ${d.teams && d.teams.length > 0 ? `
                   <div style="display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 4px 6px;">
-                    ${d.teams.map(t => `<span class="team-chip-tag" onclick="filterByTeam('${t.id}')" style="cursor: pointer;" title="Filter by ${t.name}">👥 ${t.name}</span>`).join('')}
+                    ${d.teams.map(t => `<span class="team-chip-tag" onclick="filterByTeam('${t.id}')" style="cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" title="Filter by ${t.name}"><span class="ui-icon ui-icon-xs">${window.Icons ? window.Icons.raw('users') : ''}</span><span>${t.name}</span></span>`).join('')}
                   </div>
                 ` : ''}
               `;
@@ -1076,17 +1101,18 @@ function renderTeamsTable(teams) {
           <div style="font-weight: 600; color: var(--color-text-primary); font-size: 13px;">${t.name}</div>
           <div style="font-size: 11px; color: var(--color-text-muted);">${t.description || 'Regional field & operations unit'}</div>
         </td>
-        <td><span class="badge badge-neutral" style="font-size: 11px;">🏛️ ${t.state}</span></td>
+        <td><span class="badge badge-neutral" style="font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><span class="ui-icon ui-icon-xs">${window.Icons ? window.Icons.raw('landmark') : ''}</span><span>${t.state}</span></span></td>
         <td><span style="font-weight: 500; font-size: 12px;">${t.district}</span></td>
         <td style="font-family: var(--font-mono); font-weight: 600;">${t.member_count} member${t.member_count === 1 ? '' : 's'}</td>
         <td>
           <span class="badge ${t.active_attendance_count > 0 ? 'badge-success' : 'badge-neutral'}">
-            ${t.active_attendance_count > 0 ? `🟢 ${t.active_attendance_count} Active` : '0 Active'}
+            ${t.active_attendance_count > 0 ? `<span class="badge-dot" style="background: #10b981; margin-right: 4px;"></span><span>${t.active_attendance_count} Active</span>` : '0 Active'}
           </span>
         </td>
         <td>
-          <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="filterByTeam('${t.id}')">
-            View Attendance ➔
+          <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;" onclick="filterByTeam('${t.id}')">
+            <span>View Attendance</span>
+            <span class="ui-icon ui-icon-xs">${window.Icons ? window.Icons.raw('arrowRight') : ''}</span>
           </button>
         </td>
       </tr>

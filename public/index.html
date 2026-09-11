@@ -6,9 +6,10 @@
   <title>Attendance Operations | AIIMS</title>
   <meta name="description" content="Verified real-time photo and geolocation attendance for enterprise employees.">
   <link rel="stylesheet" href="./style.css?v=5">
-  <!-- Client-side States & Districts Dictionary -->
+  <!-- Client-side States & Districts Dictionary & Professional SVG Iconography -->
   <script src="./states_districts_client.js?v=4"></script>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%20width=%2232%22%20height=%2232%22><text y=%2224%22 font-size=%2224%22>🛡️</text></svg>">
+  <script src="./icons.js?v=1"></script>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%230f172a'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3C/svg%3E">
 </head>
 <body>
 
@@ -28,15 +29,16 @@
         <a href="/admin.html" class="btn btn-secondary" style="font-size: 11px; padding: 5px 10px;">
           <span>Admin</span>
         </a>
-        <button id="btnLogoutEmployee" class="btn btn-tertiary" style="font-size: 11px; padding: 5px 8px;" title="Sign Out">
-          🚪 Logout
+        <button id="btnLogoutEmployee" class="btn btn-tertiary" style="font-size: 11px; padding: 5px 8px; display: inline-flex; align-items: center; gap: 5px;" title="Sign Out">
+          <span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>
+          <span>Logout</span>
         </button>
       </div>
     </header>
 
     <!-- 2. Notification Banner -->
     <div id="alertBanner" class="notification-strip alert-danger" style="display: none;" role="alert">
-      <span id="alertIcon">⚠️</span>
+      <span id="alertIcon" class="ui-icon ui-icon-md" style="margin-right: 6px;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
       <div id="alertMessage" style="flex: 1;">Notification</div>
       <button id="alertCloseBtn" style="background: none; border: none; font-size: 16px; cursor: pointer; color: inherit;">&times;</button>
     </div>
@@ -50,8 +52,8 @@
         <h1 class="greeting-name" id="displayGreetingName">Welcome to AIIMS Workspace</h1>
         <div class="greeting-date" id="displayGreetingDate">Tuesday · 08 September 2026</div>
         <div style="display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap;" id="profileTeamBadgeContainer">
-          <span class="badge badge-neutral" id="displayEmployeeTeam" style="font-size: 11px;">👥 Team: Loading...</span>
-          <span class="badge badge-neutral" id="displayEmployeeTerritory" style="font-size: 11px;">📍 Territory: Loading...</span>
+          <span class="badge badge-neutral" id="displayEmployeeTeam" style="font-size: 11px; display: inline-flex; align-items: center; gap: 5px;"><span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Team: Loading...</span>
+          <span class="badge badge-neutral" id="displayEmployeeTerritory" style="font-size: 11px; display: inline-flex; align-items: center; gap: 5px;"><span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></span> Territory: Loading...</span>
         </div>
       </section>
 
@@ -74,11 +76,13 @@
         <!-- Duty Mode Selector (Office vs Field Work) -->
         <div class="duty-mode-container" style="margin-bottom: 20px;">
           <div class="duty-mode-toggle" role="group" aria-label="Duty Work Mode">
-            <button type="button" class="duty-mode-btn active" id="btnModeOffice" data-mode="OFFICE">
-              <span>🏢 Office Duty</span>
+            <button type="button" class="duty-mode-btn active" id="btnModeOffice" data-mode="OFFICE" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+              <span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="20" x="4" y="2" rx="2" ry="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/></svg></span>
+              <span>Office Duty</span>
             </button>
-            <button type="button" class="duty-mode-btn" id="btnModeField" data-mode="FIELD_WORK">
-              <span>🚗 Field Work / On-Site</span>
+            <button type="button" class="duty-mode-btn" id="btnModeField" data-mode="FIELD_WORK" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+              <span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.5 2.8C2.1 11 2 11.5 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg></span>
+              <span>Field Work / On-Site</span>
             </button>
           </div>
           
@@ -153,11 +157,13 @@
 
         <!-- Secondary Break Controls (Visible when working) -->
         <div class="break-control-row" id="rowBreakControls" style="display: none;">
-          <button class="btn btn-secondary" id="btnStartBreak" type="button">
-            <span>☕ Start Break</span>
+          <button class="btn btn-secondary" id="btnStartBreak" type="button" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+            <span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><line x1="6" y1="2" x2="6" y2="4"/><line x1="10" y1="2" x2="10" y2="4"/><line x1="14" y1="2" x2="14" y2="4"/></svg></span>
+            <span>Start Break</span>
           </button>
-          <button class="btn btn-primary" id="btnEndBreak" type="button" style="display: none;">
-            <span>▶️ Resume Work</span>
+          <button class="btn btn-primary" id="btnEndBreak" type="button" style="display: none; align-items: center; justify-content: center; gap: 6px;">
+            <span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg></span>
+            <span>Resume Work</span>
           </button>
         </div>
 
@@ -165,7 +171,7 @@
         <div class="telemetry-status-grid">
           <div class="telemetry-row-item">
             <div class="telemetry-left">
-              <span>📍</span>
+              <span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></span>
               <span>Location Accuracy</span>
             </div>
             <div class="telemetry-right">
@@ -178,20 +184,21 @@
 
           <div class="telemetry-row-item" id="rowRegisteredOffice">
             <div class="telemetry-left">
-              <span id="iconWorkplaceType">🏢</span>
+              <span id="iconWorkplaceType" class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="20" x="4" y="2" rx="2" ry="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/></svg></span>
               <span id="labelWorkplaceType">Registered Office</span>
             </div>
             <div class="telemetry-right" style="display: flex; align-items: center; gap: 8px;">
               <span id="textOfficeLocationLabel" style="font-size: 11px; font-weight: 500;">CDER AIIMS Campus</span>
-              <button id="btnSyncOfficeToCurrent" type="button" class="btn btn-secondary" style="padding: 2px 8px; font-size: 10px;" title="Update registered office to your current coordinates">
-                📍 Set Here
+              <button id="btnSyncOfficeToCurrent" type="button" class="btn btn-secondary" style="padding: 2px 8px; font-size: 10px; display: inline-flex; align-items: center; gap: 4px;" title="Update registered office to your current coordinates">
+                <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></span>
+                <span>Set Location</span>
               </button>
             </div>
           </div>
 
           <div class="telemetry-row-item">
             <div class="telemetry-left">
-              <span id="iconDistanceOrAddress">📏</span>
+              <span id="iconDistanceOrAddress" class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 7.85-5.58-5.58a2.5 2.5 0 0 0-3.54 0L2.27 12.61a2.5 2.5 0 0 0 0 3.54l5.58 5.58a2.5 2.5 0 0 0 3.54 0l10.34-10.34a2.5 2.5 0 0 0 0-3.54Z"/><line x1="7.5" y1="10.5" x2="10.5" y2="7.5"/><line x1="10.5" y1="13.5" x2="13.5" y2="10.5"/><line x1="13.5" y1="16.5" x2="16.5" y2="13.5"/></svg></span>
               <span id="labelDistanceOrAddress">Distance to Office</span>
             </div>
             <div class="telemetry-right" style="max-width: 65%; text-align: right;">
@@ -201,7 +208,7 @@
 
           <div class="telemetry-row-item">
             <div class="telemetry-left">
-              <span>📷</span>
+              <span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></span>
               <span>Live Attendance Photo</span>
             </div>
             <div class="telemetry-right">
@@ -258,15 +265,15 @@
     <!-- 4. Mobile Bottom Navigation Bar (Section 17) -->
     <nav class="employee-bottom-nav">
       <button class="bottom-nav-item active" id="bnavToday">
-        <span style="font-size: 16px;">⏱️</span>
+        <span class="ui-icon ui-icon-md"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
         <span>Today</span>
       </button>
       <button class="bottom-nav-item" id="bnavHistory" onclick="alert('Attendance History: Verified attendance records are synchronized directly with your employer’s REDCap instance.')">
-        <span style="font-size: 16px;">📅</span>
+        <span class="ui-icon ui-icon-md"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
         <span>History</span>
       </button>
       <button class="bottom-nav-item" id="bnavProfile" onclick="alert('Signed in as ' + (state.currentEmployee?.name || 'Employee') + ' · ' + (state.currentEmployer?.name || 'Organization'))">
-        <span style="font-size: 16px;">👤</span>
+        <span class="ui-icon ui-icon-md"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
         <span>Profile</span>
       </button>
     </nav>
@@ -295,16 +302,19 @@
 
         <!-- Telemetry HUD -->
         <div class="camera-hud-pill" id="hudGpsBadge">
-          ✓ Location Verified · ±12m
+          <span class="ui-icon ui-icon-xs" style="color: var(--color-success);"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <span>Location Verified · ±12m</span>
         </div>
         <div class="camera-hud-pill" id="hudAddressBadge" style="top: 48px; font-size: 11px; max-width: 90%; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; background: rgba(15, 23, 42, 0.85);">
-          📍 Resolving Location...
+          <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></span>
+          <span>Resolving Location...</span>
         </div>
       </div>
 
       <!-- Privacy & Verification Notice (Section 31) -->
       <div class="camera-privacy-notice">
-        🔒 <strong>Attendance Verification:</strong> Your photograph and device GPS are captured strictly to authenticate attendance. Gallery uploads and manual entries are disabled.
+        <span class="ui-icon ui-icon-sm" style="display: inline-block; vertical-align: -2px; margin-right: 4px;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+        <strong>Attendance Verification:</strong> Your photograph and device GPS are captured strictly to authenticate attendance. Gallery uploads and manual entries are disabled.
       </div>
 
       <!-- In-Modal Status & Error Feedback Box -->
@@ -336,10 +346,12 @@
       <!-- Primary Tab Switcher: Sign In vs Sign Up -->
       <div class="auth-nav-tabs">
         <button type="button" class="auth-nav-tab active" id="tabAuthSignIn" onclick="switchAuthTab('signin')">
-          <span>🔐 Sign In</span>
+          <span class="ui-icon ui-icon-sm" style="margin-right: 6px;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+          <span>Sign In</span>
         </button>
         <button type="button" class="auth-nav-tab" id="tabAuthSignUp" onclick="switchAuthTab('signup')">
-          <span>📝 Create Account (Sign Up)</span>
+          <span class="ui-icon ui-icon-sm" style="margin-right: 6px;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg></span>
+          <span>Create Account (Sign Up)</span>
         </button>
       </div>
 
@@ -355,10 +367,12 @@
         <!-- Sign-in Mode Selector -->
         <div class="signin-method-toggle">
           <button type="button" class="signin-method-btn active" id="btnMethodFace" onclick="switchSignInMethod('face')">
-            <span>📱 Face Recognition (Screenlock)</span>
+            <span class="ui-icon ui-icon-sm" style="margin-right: 6px;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/><path d="M9 9h.01"/><path d="M15 9h.01"/></svg></span>
+            <span>Face Recognition</span>
           </button>
           <button type="button" class="signin-method-btn" id="btnMethodCreds" onclick="switchSignInMethod('creds')">
-            <span>🔑 ID & Password</span>
+            <span class="ui-icon ui-icon-sm" style="margin-right: 6px;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg></span>
+            <span>ID & Password</span>
           </button>
         </div>
 
@@ -406,7 +420,8 @@
           <!-- Action Button -->
           <div style="display: flex; gap: 8px; width: 100%;">
             <button type="button" class="btn btn-primary" id="btnTriggerFaceScan" style="flex: 1; padding: 9px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
-              <span>⚡ Scan & Unlock</span>
+              <span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>
+              <span>Scan & Unlock</span>
             </button>
             <button type="button" class="btn btn-secondary" onclick="switchSignInMethod('creds')" style="font-size: 12px; padding: 9px 12px;">
               <span>Use Password</span>
@@ -440,7 +455,7 @@
               <div class="password-input-wrap">
                 <input type="password" id="loginEmployeePassword" required placeholder="Enter password" class="form-input" autocomplete="current-password">
                 <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('loginEmployeePassword', this)" title="Show / Hide Password" aria-label="Toggle password visibility">
-                  <span class="eye-icon">👁️</span>
+                  <span class="eye-icon ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></span>
                 </button>
               </div>
             </div>
@@ -564,9 +579,9 @@
             <div>
               <label class="form-label" for="signupPassword">Password *</label>
               <div class="password-input-wrap">
-                <input type="password" id="signupPassword" required minlength="6" placeholder="Min. 6 characters" class="form-input" autocomplete="new-password">
+                <input type="password" id="signupPassword" required minlength="8" placeholder="Min. 8 chars (A-Z, a-z, 0-9, symbol)" class="form-input" autocomplete="new-password">
                 <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('signupPassword', this)" title="Show / Hide Password" aria-label="Toggle password visibility">
-                  <span class="eye-icon">👁️</span>
+                  <span class="eye-icon ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></span>
                 </button>
               </div>
             </div>
@@ -575,9 +590,9 @@
             <div>
               <label class="form-label" for="signupConfirmPassword">Confirm Password *</label>
               <div class="password-input-wrap">
-                <input type="password" id="signupConfirmPassword" required minlength="6" placeholder="Re-enter password" class="form-input" autocomplete="new-password">
+                <input type="password" id="signupConfirmPassword" required minlength="8" placeholder="Re-enter password" class="form-input" autocomplete="new-password">
                 <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('signupConfirmPassword', this)" title="Show / Hide Password" aria-label="Toggle password visibility">
-                  <span class="eye-icon">👁️</span>
+                  <span class="eye-icon ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></span>
                 </button>
               </div>
             </div>
@@ -585,8 +600,9 @@
 
           <!-- Face Biometric Enrollment Sub-section -->
           <div class="enroll-face-box">
-            <div style="font-size: 13px; font-weight: 600; color: var(--color-text-primary); margin-bottom: 2px;">
-              📱 Face ID Enrollment (Screenlock Setup)
+            <div style="font-size: 13px; font-weight: 600; color: var(--color-text-primary); margin-bottom: 2px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+              <span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/><path d="M9 9h.01"/><path d="M15 9h.01"/></svg></span>
+              <span>Face ID Enrollment</span>
             </div>
             <div style="font-size: 11px; color: var(--color-text-tertiary); margin-bottom: 8px;">
               Capture your biometric face signature for mobile-style screenlock unlock
@@ -595,7 +611,7 @@
             <div class="enroll-face-preview" id="signupFacePreviewBox">
               <video id="signupFaceVideo" autoplay playsinline muted style="display: none;"></video>
               <img id="signupFaceThumb" style="display: none;" alt="Enrolled Face">
-              <span id="signupFacePlaceholder" style="font-size: 28px;">📷</span>
+              <span id="signupFacePlaceholder" class="ui-icon ui-icon-xl" style="color: var(--color-text-muted);"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 32px; height: 32px;"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></span>
             </div>
 
             <div style="display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: wrap;">
@@ -603,7 +619,8 @@
                 <span>Start Camera</span>
               </button>
               <button type="button" class="btn btn-primary" id="btnCaptureSignupFace" style="font-size: 11px; padding: 6px 12px; display: none;">
-                <span>📸 Capture Face</span>
+                <span class="ui-icon ui-icon-xs" style="margin-right: 4px;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></span>
+                <span>Capture Face</span>
               </button>
               <button type="button" class="btn btn-tertiary" id="btnRetakeSignupFace" style="font-size: 11px; padding: 6px 10px; display: none;">
                 <span>Retake</span>

@@ -215,45 +215,53 @@ async function runTests() {
 
   // 11. Multi-Employer Authentication & Tenant Isolation Tests
   console.log('\n--- Testing Multi-Employer Authentication & Tenant Isolation ---');
+  const authService = require('../src/services/auth_service');
   
   // A. Employee Login Success (ORG-001)
-  const empApex = db.prepare('SELECT * FROM employees WHERE employer_id = ? AND id = ?').get('ORG-001', 'EMP-1001');
-  assert(empApex, 'EMP-1001 must exist under ORG-001');
-  assert.strictEqual(empApex.password, 'Password@1001', 'Password must match backend detail');
+  const empAiims = db.prepare('SELECT * FROM employees WHERE employer_id = ? AND id = ?').get('ORG-001', 'EMP-1001');
+  assert(empAiims, 'EMP-1001 must exist under ORG-001');
+  assert(authService.verifyPassword('Password@123', empAiims.password), 'Password must verify against backend detail');
   console.log('✓ Employee backend detail verified for Employer 1');
 
-  // B. Employee Login for Employer 2 (Cyberdyne)
-  const empCyber = db.prepare('SELECT * FROM employees WHERE employer_id = ? AND id = ?').get('ORG-002', 'EMP-2001');
-  assert(empCyber, 'EMP-2001 must exist under ORG-002');
-  assert.strictEqual(empCyber.password, 'Password@2001', 'Password must match backend detail for Employer 2');
-  console.log('✓ Employee backend detail verified for Employer 2');
+  // B. Multi-Tenant Organization Isolation Verification
+  db.prepare(`
+    INSERT OR REPLACE INTO organizations (id, name, office_name, office_lat, office_lng, geofence_radius_m, max_gps_accuracy_m, geofence_policy, shift_hours, timezone, admin_username, admin_password)
+    VALUES ('ORG-TENANT-B', 'Tenant B Corp', 'Tenant B HQ', 19.0760, 72.8777, 500, 100, 'STRICT_BLOCK', 8.0, 'Asia/Kolkata', 'tenant_b_admin', 'TenantBSecure@123')
+  `).run();
+  db.prepare(`
+    INSERT OR REPLACE INTO employees (id, employer_id, name, email, department, designation, password, created_at)
+    VALUES ('EMP-TB-01', 'ORG-TENANT-B', 'Tenant B Employee', 'emp_tb@tenantb.com', 'Dental', 'PRS-1', 'Password@123', datetime('now'))
+  `).run();
 
-  // C. Employer Admin Credentials Check
-  const orgApex = db.prepare('SELECT * FROM organizations WHERE id = ?').get('ORG-001');
-  assert.strictEqual(orgApex.admin_username, 'apex_admin');
-  assert.strictEqual(orgApex.admin_password, 'ApexSecure@123');
+  const orgAiims = db.prepare('SELECT * FROM organizations WHERE id = ?').get('ORG-001');
+  assert.strictEqual(orgAiims.admin_username, 'aiims_admin');
+  assert(authService.verifyPassword('Aiims@123', orgAiims.admin_password));
 
-  const orgCyber = db.prepare('SELECT * FROM organizations WHERE id = ?').get('ORG-002');
-  assert.strictEqual(orgCyber.admin_username, 'cyberdyne_admin');
-  assert.strictEqual(orgCyber.admin_password, 'Cyberdyne@456');
+  const orgTenantB = db.prepare('SELECT * FROM organizations WHERE id = ?').get('ORG-TENANT-B');
+  assert.strictEqual(orgTenantB.admin_username, 'tenant_b_admin');
+  assert(authService.verifyPassword('TenantBSecure@123', orgTenantB.admin_password));
   console.log('✓ Distinct Employer Admin credentials verified in backend');
 
-  // D. Tenant Isolation: ORG-002 admin query cannot see ORG-001 attendance
+  // Tenant Isolation: ORG-TENANT-B admin query cannot see ORG-001 attendance
   const org1Records = db.prepare('SELECT * FROM attendance WHERE employer_id = ?').all('ORG-001');
-  const org2Records = db.prepare('SELECT * FROM attendance WHERE employer_id = ?').all('ORG-002');
+  const org2Records = db.prepare('SELECT * FROM attendance WHERE employer_id = ?').all('ORG-TENANT-B');
   assert(org1Records.length > 0, 'ORG-001 has attendance');
   assert(org1Records.every(r => r.employer_id === 'ORG-001'), 'ORG-001 query returns exclusively ORG-001 data');
-  assert(org2Records.every(r => r.employer_id === 'ORG-002'), 'ORG-002 query returns exclusively ORG-002 data');
+  assert(org2Records.every(r => r.employer_id === 'ORG-TENANT-B'), 'ORG-TENANT-B query returns exclusively ORG-TENANT-B data');
   console.log('✓ Strict Employer Tenant Isolation confirmed');
+
+  // Clean up tenant B
+  db.prepare(`DELETE FROM employees WHERE employer_id = 'ORG-TENANT-B'`).run();
+  db.prepare(`DELETE FROM organizations WHERE id = 'ORG-TENANT-B'`).run();
 
   console.log('\n--- Testing Field Work Multi-Location Attendance ---');
   db.prepare("DELETE FROM breaks WHERE attendance_id IN (SELECT id FROM attendance WHERE employee_id = 'EMP-1002')").run();
   db.prepare("DELETE FROM attendance WHERE employee_id = 'EMP-1002'").run();
-  const empPriya = db.prepare('SELECT * FROM employees WHERE id = ?').get('EMP-1002');
+  const empFieldWorker = db.prepare('SELECT * FROM employees WHERE id = ?').get('EMP-1002');
   const fieldPhoto = `data:image/png;base64,${createFieldPngBuffer().toString('base64')}`;
 
   const fieldCheckin = await attendanceService.processCheckIn({
-    employee: empPriya,
+    employee: empFieldWorker,
     photoData: fieldPhoto,
     latitude: 28.4595, // Remote location: Gurgaon Cyber City (~25 km away)
     longitude: 77.0266,
@@ -276,7 +284,7 @@ async function runTests() {
   // Field Work Checkout
   const fieldCheckoutPhoto = `data:image/png;base64,${createFieldCheckoutPngBuffer().toString('base64')}`;
   const fieldCheckout = await attendanceService.processCheckOut({
-    employee: empPriya,
+    employee: empFieldWorker,
     photoData: fieldCheckoutPhoto,
     latitude: 28.4598,
     longitude: 77.0269,
