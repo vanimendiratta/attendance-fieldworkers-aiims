@@ -2,7 +2,7 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../db/database');
 const geoService = require('./geo_service');
 const photoService = require('./photo_service');
-const redcapClient = require('../redcap/redcap_client');
+const redcapClient = require('./sql_sync_client');
 const { matchStateAndDistrict, getDistrictsForState } = require('../data/india_states_districts');
 
 class AttendanceService {
@@ -547,7 +547,8 @@ class AttendanceService {
   }
 
   /**
-   * Sync an attendance session to REDCap adhering to the 22-field data dictionary
+   * Sync an attendance session to the SQL external_sync_records table
+   * (replaces REDCap until the live API is configured)
    */
   async syncToREDCap(attendanceId, newPhotoFilePath = null, photoField = null) {
     try {

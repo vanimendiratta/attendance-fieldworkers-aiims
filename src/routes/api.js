@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require('../db/database');
 const attendanceService = require('../services/attendance_service');
 const geoService = require('../services/geo_service');
-const redcapClient = require('../redcap/redcap_client');
+const sqlSyncClient = require('../services/sql_sync_client');
 const teamService = require('../services/team_service');
 const biometricService = require('../services/biometric_service');
 const { STATE_DISTRICTS_MAP, getAllStates, getDistrictsForState, matchStateAndDistrict } = require('../data/india_states_districts');
@@ -877,7 +877,7 @@ function generateAttendanceCsv(records) {
     'Net Working Hours',
     'Overtime Hours',
     'Field Site Notes',
-    'REDCap Sync Status',
+    'DB Sync Status',
     'Created At'
   ];
 
@@ -1198,29 +1198,27 @@ router.post('/settings/set-current-office', requireAuthenticatedAdmin, (req, res
   }
 });
 
-// 16. Admin: REDCap Data
+// 16. Admin: SQL Sync Records (attendance data stored in local SQLite)
 router.get('/admin/redcap/records', requireAuthenticatedAdmin, (req, res) => {
   const employerId = req.employerId;
-  const mockData = redcapClient.getMockData();
-  const employerRecords = (mockData.records || []).filter(r => r.employer_id === employerId);
-  
+  const records = sqlSyncClient.getRecords(employerId);
+
   res.json({
     success: true,
     employer_id: employerId,
-    isLive: redcapClient.isLive,
-    apiUrl: redcapClient.apiUrl ? redcapClient.apiUrl.replace(/(token=)([^&]+)/i, '$1****') : null,
-    mockData: {
-      ...mockData,
-      records: employerRecords
-    }
+    mode: 'SQL_DB',
+    isLive: false,
+    description: 'Attendance records stored in local SQLite (REDCap integration pending configuration)',
+    records,
+    total: records.length
   });
 });
 
-// 17. Admin: Download Official REDCap CSV Data Dictionary
+// 17. Admin: Download SQL Sync Records as CSV
 router.get('/admin/redcap/data-dictionary.csv', requireAuthenticatedAdmin, (req, res) => {
-  const csv = redcapClient.generateDataDictionaryCsv();
+  const csv = sqlSyncClient.generateCsvExport(req.employerId);
   res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', 'attachment; filename="REDCap_Attendance_Data_Dictionary.csv"');
+  res.setHeader('Content-Disposition', 'attachment; filename="Attendance_Sync_Records.csv"');
   res.send(csv);
 });
 
