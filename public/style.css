@@ -457,16 +457,32 @@
   display: none;
 }
 
-/* Face guide completely disabled */
+/* Face guide - border-only ring, transparent center, perfectly centered */
 .camera-face-svg, #reticleGuide {
   display: none !important;
+}
+
+/* Centered face guide ring overlay */
+.viewfinder-box::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.5), inset 0 0 0 2px rgba(56, 189, 248, 0.3);
+  pointer-events: none;
+  z-index: 10;
+  background: transparent;
 }
 
 .camera-hud-pill {
   position: absolute;
   bottom: 14px;
   left: 14px;
-  background-color: rgba(15, 23, 42, 0.75);
   color: #ffffff;
   font-family: var(--font-mono);
   font-size: 11px;
