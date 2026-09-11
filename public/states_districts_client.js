@@ -238,20 +238,22 @@ window.setupStateDistrictCascade = function(stateSelectEl, districtSelectEl, opt
   const defaultDistrictText = options.defaultDistrictText || 'Select District';
   const allowAll = options.allowAll || false;
 
-  // Populate States
-  stateSelectEl.innerHTML = '';
-  const statePlaceholder = document.createElement('option');
-  statePlaceholder.value = allowAll ? 'ALL' : '';
-  statePlaceholder.textContent = defaultStateText;
-  stateSelectEl.appendChild(statePlaceholder);
+  // Populate States if empty
+  if (stateSelectEl.options.length <= 1) {
+    stateSelectEl.innerHTML = '';
+    const statePlaceholder = document.createElement('option');
+    statePlaceholder.value = allowAll ? 'ALL' : '';
+    statePlaceholder.textContent = defaultStateText;
+    stateSelectEl.appendChild(statePlaceholder);
 
-  const states = window.getAllIndianStates();
-  states.forEach(st => {
-    const opt = document.createElement('option');
-    opt.value = st;
-    opt.textContent = st;
-    stateSelectEl.appendChild(opt);
-  });
+    const states = window.getAllIndianStates();
+    states.forEach(st => {
+      const opt = document.createElement('option');
+      opt.value = st;
+      opt.textContent = st;
+      stateSelectEl.appendChild(opt);
+    });
+  }
 
   function updateDistricts(selectedState, selectedDistrictValue = '') {
     districtSelectEl.innerHTML = '';
@@ -281,17 +283,34 @@ window.setupStateDistrictCascade = function(stateSelectEl, districtSelectEl, opt
   }
 
   // Bind change handler
-  stateSelectEl.addEventListener('change', (e) => {
-    updateDistricts(e.target.value);
-    if (typeof options.onStateChange === 'function') {
-      options.onStateChange(e.target.value);
-    }
-  });
+  if (!stateSelectEl.dataset.cascadeBound) {
+    stateSelectEl.dataset.cascadeBound = 'true';
+    stateSelectEl.addEventListener('change', (e) => {
+      updateDistricts(e.target.value);
+      if (typeof options.onStateChange === 'function') {
+        options.onStateChange(e.target.value);
+      }
+    });
+    stateSelectEl.addEventListener('input', (e) => {
+      updateDistricts(e.target.value);
+    });
+  }
 
-  if (typeof options.onDistrictChange === 'function') {
+  if (!districtSelectEl.dataset.cascadeBound && typeof options.onDistrictChange === 'function') {
+    districtSelectEl.dataset.cascadeBound = 'true';
     districtSelectEl.addEventListener('change', (e) => {
       options.onDistrictChange(e.target.value);
     });
+  }
+
+  // Apply initial values
+  if (options.initialState) {
+    stateSelectEl.value = options.initialState;
+    updateDistricts(options.initialState, options.initialDistrict || '');
+  } else if (stateSelectEl.value) {
+    updateDistricts(stateSelectEl.value, options.initialDistrict || districtSelectEl.value || '');
+  } else {
+    updateDistricts('', '');
   }
 
   return {
@@ -309,7 +328,7 @@ window.setupStateDistrictCascade = function(stateSelectEl, districtSelectEl, opt
 
 window.initCascadingStateDistrictDropdowns = window.setupStateDistrictCascade;
 
-// Standalone global handler for Duty State / UT -> Duty District dropdown cascade
+// Standalone global handler for Sign Up Duty State / UT -> Duty District dropdown cascade
 window.handleStateChange = function(selectedState) {
   const distEl = document.getElementById('signupDistrict');
   if (!distEl) return;
@@ -333,21 +352,62 @@ window.handleStateChange = function(selectedState) {
   distEl.disabled = false;
 };
 
+// Standalone global handler for Field Work Duty State / UT -> Duty District dropdown cascade
+window.handleFieldStateChange = function(selectedState, selectedDistrict = '') {
+  const distEl = document.getElementById('selectFieldDistrict');
+  if (!distEl) return;
+  distEl.innerHTML = '';
+  if (!selectedState || selectedState === 'ALL') {
+    distEl.innerHTML = '<option value="">Select State First</option>';
+    return;
+  }
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Select District';
+  distEl.appendChild(placeholder);
+
+  const districts = window.getDistrictsForIndianState(selectedState);
+  (districts || []).forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d;
+    opt.textContent = d;
+    if (selectedDistrict && selectedDistrict.toLowerCase() === d.toLowerCase()) {
+      opt.selected = true;
+    }
+    distEl.appendChild(opt);
+  });
+  distEl.disabled = false;
+};
+window.populateDistrictsDropdown = window.handleFieldStateChange;
+
 // Auto-attach listeners on DOMContentLoaded
 if (typeof document !== 'undefined') {
-  const initSignupStateCascade = () => {
-    const stateEl = document.getElementById('signupState');
-    if (stateEl) {
-      stateEl.addEventListener('change', () => window.handleStateChange(stateEl.value));
-      stateEl.addEventListener('input', () => window.handleStateChange(stateEl.value));
-      if (stateEl.value) {
-        window.handleStateChange(stateEl.value);
+  const initAllStateCascades = () => {
+    // 1. Sign Up State Cascade
+    const signupStateEl = document.getElementById('signupState');
+    if (signupStateEl) {
+      signupStateEl.addEventListener('change', () => window.handleStateChange(signupStateEl.value));
+      signupStateEl.addEventListener('input', () => window.handleStateChange(signupStateEl.value));
+      if (signupStateEl.value) {
+        window.handleStateChange(signupStateEl.value);
+      }
+    }
+
+    // 2. Field Work State Cascade
+    const fieldStateEl = document.getElementById('selectFieldState');
+    const fieldDistEl = document.getElementById('selectFieldDistrict');
+    if (fieldStateEl) {
+      fieldStateEl.addEventListener('change', () => window.handleFieldStateChange(fieldStateEl.value));
+      fieldStateEl.addEventListener('input', () => window.handleFieldStateChange(fieldStateEl.value));
+      if (fieldStateEl.value) {
+        window.handleFieldStateChange(fieldStateEl.value, fieldDistEl ? fieldDistEl.value : '');
       }
     }
   };
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initSignupStateCascade);
+    document.addEventListener('DOMContentLoaded', initAllStateCascades);
   } else {
-    initSignupStateCascade();
+    initAllStateCascades();
   }
 }

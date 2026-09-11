@@ -376,6 +376,11 @@ if (DOM.btnModeField) {
     DOM.btnModeField.classList.add('active');
     if (DOM.btnModeOffice) DOM.btnModeOffice.classList.remove('active');
     if (DOM.fieldWorkNotesContainer) DOM.fieldWorkNotesContainer.style.display = 'block';
+
+    const empState = state.currentEmployee?.state || '';
+    const empDist = state.currentEmployee?.district || '';
+    initFieldWorkDropdowns(empState, empDist);
+
     updateDistanceDisplay();
   });
 }
@@ -732,6 +737,77 @@ window.handleStateChange = function(selectedState) {
   });
   distEl.disabled = false;
 };
+
+// Global State Change handler for Field Work Duty State / UT -> Duty District cascade
+window.handleFieldStateChange = function(selectedState, selectedDistrict = '') {
+  const distEl = document.getElementById('selectFieldDistrict');
+  if (!distEl) return;
+  distEl.innerHTML = '';
+  if (!selectedState || selectedState === 'ALL') {
+    distEl.innerHTML = '<option value="">Select State First</option>';
+    distEl.disabled = false;
+    return;
+  }
+
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Select District';
+  distEl.appendChild(placeholder);
+
+  const dict = window.INDIA_STATES_DISTRICTS || {};
+  let districts = dict[selectedState] || [];
+  if ((!districts || districts.length === 0) && typeof window.getDistrictsForIndianState === 'function') {
+    districts = window.getDistrictsForIndianState(selectedState);
+  }
+  if (!districts || districts.length === 0) {
+    const norm = selectedState.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const foundKey = Object.keys(dict).find(k => k.toLowerCase().replace(/[^a-z0-9]/g, '') === norm);
+    if (foundKey) districts = dict[foundKey];
+  }
+
+  (districts || []).forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d;
+    opt.textContent = d;
+    if (selectedDistrict && selectedDistrict.toLowerCase() === d.toLowerCase()) {
+      opt.selected = true;
+    }
+    distEl.appendChild(opt);
+  });
+  distEl.disabled = false;
+};
+window.populateDistrictsDropdown = window.handleFieldStateChange;
+
+// Initialize Cascading State & District dropdowns for Field Work
+function initFieldWorkDropdowns(initialState = '', initialDistrict = '') {
+  const stateEl = document.getElementById('selectFieldState');
+  const distEl = document.getElementById('selectFieldDistrict');
+  if (!stateEl || !distEl) return;
+
+  if (stateEl.options.length <= 1) {
+    const states = (window.INDIA_STATES_DISTRICTS ? Object.keys(window.INDIA_STATES_DISTRICTS).sort() : []);
+    states.forEach(st => {
+      const opt = document.createElement('option');
+      opt.value = st;
+      opt.textContent = st;
+      stateEl.appendChild(opt);
+    });
+  }
+
+  if (!stateEl.dataset.cascadeAttached) {
+    stateEl.dataset.cascadeAttached = 'true';
+    stateEl.addEventListener('change', () => window.handleFieldStateChange(stateEl.value));
+    stateEl.addEventListener('input', () => window.handleFieldStateChange(stateEl.value));
+  }
+
+  const targetState = initialState || stateEl.value || '';
+  const targetDist = initialDistrict || (distEl.value && distEl.value !== 'Select District' ? distEl.value : '') || '';
+
+  if (targetState) {
+    stateEl.value = targetState;
+    window.handleFieldStateChange(targetState, targetDist);
+  }
+}
 
 // Initialize Cascading State & District dropdowns for Sign Up
 function initSignupDropdowns() {
@@ -1142,10 +1218,14 @@ function setupLoggedInState(sessionData) {
   }
 
   // Bind State & District cascading dropdowns for Field Work
+  const empState = sessionData.employee.state || '';
+  const empDist = sessionData.employee.district || '';
+  initFieldWorkDropdowns(empState, empDist);
+
   if (DOM.selectFieldState && DOM.selectFieldDistrict && window.setupStateDistrictCascade) {
     window.setupStateDistrictCascade(DOM.selectFieldState, DOM.selectFieldDistrict, {
-      initialState: sessionData.employee.state || '',
-      initialDistrict: sessionData.employee.district || ''
+      initialState: empState,
+      initialDistrict: empDist
     });
   }
 
@@ -1756,3 +1836,4 @@ DOM.btnConfirmSubmission.addEventListener('click', async () => {
 initGeolocation();
 checkSession();
 initSignupDropdowns();
+initFieldWorkDropdowns();
