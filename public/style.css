@@ -454,18 +454,44 @@
   display: none;
 }
 
-/* Subtle, Trustworthy Face Alignment Guide (No glowing cartoon lasers) */
+/* Refined, Crystal-Clear Face Alignment Guide (Zero dark shadow over camera) */
 .camera-face-guide {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 200px;
-  height: 250px;
-  border: 2px solid rgba(255, 255, 255, 0.7);
-  border-radius: 50% 50% 45% 45%;
+  width: 210px;
+  height: 260px;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 50% 50% 46% 46%;
   pointer-events: none;
-  box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.4);
+  background: transparent !important;
+  box-shadow: none !important;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
+}
+
+.camera-face-guide::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 36px;
+  height: 3px;
+  background-color: #38bdf8;
+  border-radius: 2px;
+}
+
+.camera-face-guide::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 36px;
+  height: 3px;
+  background-color: #38bdf8;
+  border-radius: 2px;
 }
 
 .camera-hud-pill {
