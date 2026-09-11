@@ -9,32 +9,37 @@ const biometricService = require('../services/biometric_service');
 const { STATE_DISTRICTS_MAP, getAllStates, getDistrictsForState, matchStateAndDistrict } = require('../data/india_states_districts');
 const authService = require('../services/auth_service');
 
+function isProductionEnvironment() {
+  const env = (process.env.NODE_ENV || process.env.APP_ENV || '').toLowerCase().trim();
+  return env === 'production';
+}
+
+function resolveEmployerId(req) {
+  return req.headers['x-employer-id'] || req.query.employer_id || req.body?.employer_id || 'ORG-001';
+}
+
 // Helper to resolve employee identity
 function resolveEmployee(req) {
-  const empId = req.headers['x-employee-id'] || req.query.employee_id || (req.body && req.body.employee_id);
+  const empId = req.headers['x-employee-id'] || req.query.employee_id || req.body?.employee_id;
   if (!empId) return null;
   return db.prepare('SELECT * FROM employees WHERE id = ?').get(empId);
 }
 
-// Helper to resolve employer/organization
-function resolveEmployerId(req) {
-  return req.headers['x-employer-id'] || req.query.employer_id || (req.body && req.body.employer_id) || 'ORG-001';
-}
-
-// 1. Public Employer Organizations List
-router.get('/employers', (req, res) => {
-  const employers = db.prepare('SELECT id, name, office_name, office_lat, office_lng, geofence_radius_m, max_gps_accuracy_m, geofence_policy, shift_hours, timezone FROM organizations').all();
-  res.json({ success: true, employers });
+// 1. Organization Details & Policy
+router.get('/organization', (req, res) => {
+  const employerId = resolveEmployerId(req);
+  const org = db.prepare('SELECT * FROM organizations WHERE id = ?').get(employerId);
+  if (!org) {
+    return res.status(404).json({ error: 'Organization not found' });
+  }
+  const { admin_password, ...safeOrg } = org;
+  res.json({ success: true, organization: safeOrg });
 });
 
-// 2. Organization Public Config for a specific employer
-router.get('/config', (req, res) => {
-  const employerId = resolveEmployerId(req);
-  let org = db.prepare('SELECT id, name, office_name, office_lat, office_lng, geofence_radius_m, max_gps_accuracy_m, geofence_policy, shift_hours, timezone FROM organizations WHERE id = ?').get(employerId);
-  if (!org) {
-    org = db.prepare('SELECT id, name, office_name, office_lat, office_lng, geofence_radius_m, max_gps_accuracy_m, geofence_policy, shift_hours, timezone FROM organizations LIMIT 1').get();
-  }
-  res.json({ success: true, config: org });
+// 2. All Organizations (for multi-tenant employer switcher)
+router.get('/organizations', (req, res) => {
+  const orgs = db.prepare('SELECT id, name, office_name, office_lat, office_lng, geofence_radius_m, max_gps_accuracy_m, timezone FROM organizations WHERE is_active = 1').all();
+  res.json({ success: true, organizations: orgs });
 });
 
 // 3. Employee List for Employer (filtered by employer_id with Team & Territory info)
@@ -48,6 +53,19 @@ router.get('/employees', (req, res) => {
     WHERE e.employer_id = ?
   `).all(employerId);
   res.json({ success: true, employees });
+});
+
+// 3b. Delete Employee (permanently purges record and associated biometric descriptor)
+router.delete('/employees/:id', (req, res) => {
+  const employerId = resolveEmployerId(req);
+  const empId = req.params.id;
+  const employee = db.prepare('SELECT id, name, employer_id FROM employees WHERE id = ? AND employer_id = ?').get(empId, employerId);
+  if (!employee) {
+    return res.status(404).json({ success: false, error: 'Employee not found for this employer organization.' });
+  }
+
+  db.prepare('DELETE FROM employees WHERE id = ?').run(empId);
+  res.json({ success: true, message: `Employee ${employee.name} (${empId}) and all associated biometric descriptors permanently purged.` });
 });
 
 // 4. EMPLOYEE LOGIN with ID & Password (against backend details of each employer)
@@ -105,8 +123,9 @@ router.post('/auth/employee/login', authService.rateLimitMiddleware(authService.
 
   attendanceService.logAudit('EMPLOYEE_LOGIN_SUCCESS', employee.id, employer_id, 'EMPLOYEE_LOGIN', 'SUCCESS', {}, clientIp, userAgent);
 
-  const { password: _, pin: __, ...safeEmployee } = employee;
-  const { admin_password: ___, ...safeEmployer } = employer;
+  // Strictly strip sensitive credentials and biometric descriptors from returned employee profile
+  const { password: _, pin: __, face_descriptor: ___, face_photo: ____, ...safeEmployee } = employee;
+  const { admin_password: _____, ...safeEmployer } = employer;
 
   res.json({
     success: true,
@@ -252,7 +271,7 @@ router.post('/auth/employee/signup', authService.rateLimitMiddleware(authService
     designation ? designation.trim() : 'PRS-1',
     '1234',
     hashedPassword,
-    face_photo || null,
+    null, // Raw camera frames are never persisted to database
     descriptorToSave,
     hasFaceEnrolled,
     1,
@@ -298,7 +317,7 @@ router.post('/auth/employee/face-login', authService.rateLimitMiddleware(authSer
 
   // If mock_employee_id passed: strictly forbid in production
   if (mock_employee_id) {
-    if (process.env.NODE_ENV === 'production' || req.headers['x-environment'] === 'production') {
+    if (isProductionEnvironment()) {
       return res.status(403).json({ success: false, error: 'Demo quick-unlock is disabled in production environment.' });
     }
     const demoEmp = db.prepare('SELECT * FROM employees WHERE id = ?').get(mock_employee_id);
@@ -366,7 +385,7 @@ router.post('/auth/employee/enroll-face', (req, res) => {
 
 // 4d. DEMO FACE RECOGNITION CREDENTIALS
 router.get('/auth/demo-face-credentials', (req, res) => {
-  if (process.env.NODE_ENV === 'production' || req.headers['x-environment'] === 'production') {
+  if (isProductionEnvironment()) {
     return res.status(403).json({ success: false, error: 'Demo credentials endpoint is disabled in production environment.' });
   }
 
@@ -709,8 +728,9 @@ function escapeCsvCell(val) {
   if (val === null || val === undefined) return '';
   let str = String(val);
   // OWASP CSV / Excel Formula Injection sanitization
-  // If cell begins with =, +, -, @, \t, or \r, prepend a single quote to force text interpretation in spreadsheet software
-  if (/^[=+\-@\t\r]/.test(str)) {
+  // If cell begins with =, +, -, @, \t, or \r (including leading whitespace before formula triggers),
+  // prepend a single quote to force strict text interpretation in spreadsheet applications
+  if (/^[\s\t\r]*[=+\-@\t\r|%]/.test(str)) {
     str = "'" + str;
   }
   if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {

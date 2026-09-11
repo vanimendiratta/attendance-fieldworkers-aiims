@@ -124,6 +124,8 @@ function matchFaceToEmployee(candidateDescriptor, employerId = null, threshold =
 
 /**
  * Enroll or update an employee's face
+ * Note: Raw camera frames are NEVER persisted to the database to ensure compliance with biometric privacy standards.
+ * Re-enrollment safely overwrites the prior mathematical descriptor.
  */
 function enrollEmployeeFace(employeeId, facePhoto, faceDescriptor) {
   let descriptorToSave = faceDescriptor;
@@ -135,11 +137,11 @@ function enrollEmployeeFace(employeeId, facePhoto, faceDescriptor) {
 
   db.prepare(`
     UPDATE employees
-    SET face_photo = COALESCE(?, face_photo),
-        face_descriptor = COALESCE(?, face_descriptor),
+    SET face_photo = NULL,
+        face_descriptor = ?,
         face_enrolled = 1
     WHERE id = ?
-  `).run(facePhoto || null, descriptorToSave || null, employeeId);
+  `).run(descriptorToSave || null, employeeId);
 
   return db.prepare('SELECT id, name, email, face_enrolled, employer_id FROM employees WHERE id = ?').get(employeeId);
 }

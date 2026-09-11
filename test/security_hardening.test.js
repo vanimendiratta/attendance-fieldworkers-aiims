@@ -25,9 +25,9 @@ const attendanceService = require('../src/services/attendance_service');
 const PORT = 3000;
 const BASE_URL = `http://localhost:${PORT}`;
 
-function request(method, path, body = null, headers = {}) {
+function request(method, path, body = null, headers = {}, customBaseUrl = null) {
   return new Promise((resolve, reject) => {
-    const url = new URL(path, BASE_URL);
+    const url = new URL(path, customBaseUrl || BASE_URL);
     const postData = body ? JSON.stringify(body) : null;
     const reqHeaders = {
       'Content-Type': 'application/json',
@@ -276,22 +276,32 @@ async function runSecurityVerification() {
   // -------------------------------------------------------------
   console.log('\n[Section 6] Demo Quick-Unlock & Demo Credentials Production Guard');
 
-  // Simulate production environment via x-environment header
-  // Attempt mock_employee_id bypass in production
-  const mockBypassRes = await request('POST', '/api/auth/employee/face-login', {
-    employer_id: 'ORG-001',
-    mock_employee_id: 'EMP-1001'
-  }, { 'x-environment': 'production' });
-  assert.strictEqual(mockBypassRes.statusCode, 403);
-  assert.ok(mockBypassRes.json.error.includes('Demo quick-unlock is disabled in production'));
+  // Verify server-side NODE_ENV=production protection
+  const origEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'production';
+  const app = require('../server');
+  const prodServer = http.createServer(app);
+  await new Promise(resolve => prodServer.listen(0, resolve));
+  const prodBase = `http://localhost:${prodServer.address().port}`;
 
-  // Attempt demo credentials retrieval in production
-  const demoCredsRes = await request('GET', '/api/auth/demo-face-credentials', null, {
-    'x-environment': 'production'
-  });
-  assert.strictEqual(demoCredsRes.statusCode, 403);
-  assert.ok(demoCredsRes.json.error.includes('Demo credentials endpoint is disabled in production'));
-  console.log('✓ Production mode strictly blocks mock_employee_id bypass and demo credentials (HTTP 403)');
+  try {
+    // Attempt mock_employee_id bypass in production
+    const mockBypassRes = await request('POST', '/api/auth/employee/face-login', {
+      employer_id: 'ORG-001',
+      mock_employee_id: 'EMP-1001'
+    }, {}, prodBase);
+    assert.strictEqual(mockBypassRes.statusCode, 403);
+    assert.ok(mockBypassRes.json.error.includes('Demo quick-unlock is disabled in production'));
+
+    // Attempt demo credentials retrieval in production
+    const demoCredsRes = await request('GET', '/api/auth/demo-face-credentials', null, {}, prodBase);
+    assert.strictEqual(demoCredsRes.statusCode, 403);
+    assert.ok(demoCredsRes.json.error.includes('Demo credentials endpoint is disabled in production'));
+    console.log('✓ Production mode strictly blocks mock_employee_id bypass and demo credentials (HTTP 403)');
+  } finally {
+    await new Promise(resolve => prodServer.close(resolve));
+    process.env.NODE_ENV = origEnv || 'development';
+  }
 
   // -------------------------------------------------------------
   // 7. Concurrency-Safe Employee ID Generation

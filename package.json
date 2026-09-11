@@ -4,7 +4,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test/api.test.js"
+    "test": "node test/api.test.js",
+    "lint": "node scripts/lint.js",
+    "build": "node scripts/build.js"
   },
   "keywords": [],
   "author": "",
@@ -17,5 +19,8 @@
     "express": "^5.2.1",
     "multer": "^2.3.0",
     "uuid": "^14.0.2"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
   }
 }

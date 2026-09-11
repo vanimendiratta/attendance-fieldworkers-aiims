@@ -874,10 +874,6 @@ async function startSignupFaceCamera() {
   }
 }
 
-// Capture face during Sign Up
-function captureSignupFace() {
-  const video = document.getElementById('signupFaceVideo');
-  const thumb = document.getElementById('signupFaceThumb');
 // Capture Enrolled Face during Sign Up
 async function captureSignupFace() {
   const video = document.getElementById('signupFaceVideo');

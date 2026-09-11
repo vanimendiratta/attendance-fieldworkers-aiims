@@ -136,6 +136,12 @@ function initSchema() {
       employer_id TEXT PRIMARY KEY,
       last_seq INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS auth_rate_limits (
+      rate_key TEXT NOT NULL,
+      timestamp INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_rate_limits_key_ts ON auth_rate_limits (rate_key, timestamp);
   `);
 
   // Migrate columns if upgrading existing db

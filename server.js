@@ -44,11 +44,15 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`=======================================================`);
-  console.log(`🚀 Real-Time Photo & Live Geolocation Attendance System`);
-  console.log(`📡 Server listening on http://localhost:${PORT}`);
-  console.log(`📱 Employee Live Portal: http://localhost:${PORT}`);
-  console.log(`🛡️ Admin Operations:    http://localhost:${PORT}/admin.html`);
-  console.log(`=======================================================`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`=======================================================`);
+    console.log(`🚀 Real-Time Photo & Live Geolocation Attendance System`);
+    console.log(`📡 Server listening on http://localhost:${PORT}`);
+    console.log(`📱 Employee Live Portal: http://localhost:${PORT}`);
+    console.log(`🛡️ Admin Operations:    http://localhost:${PORT}/admin.html`);
+    console.log(`=======================================================`);
+  });
+}
+
+module.exports = app;

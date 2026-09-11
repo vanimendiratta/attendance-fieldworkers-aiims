@@ -40,7 +40,7 @@
     <div id="alertBanner" class="notification-strip alert-danger" style="display: none;" role="alert">
       <span id="alertIcon" class="ui-icon ui-icon-md" style="margin-right: 6px;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
       <div id="alertMessage" style="flex: 1;">Notification</div>
-      <button id="alertCloseBtn" style="background: none; border: none; font-size: 16px; cursor: pointer; color: inherit;">&times;</button>
+      <button id="alertCloseBtn" aria-label="Close alert" style="background: none; border: none; font-size: 16px; cursor: pointer; color: inherit;">&times;</button>
     </div>
 
     <!-- 3. Main Scrollable Container -->
@@ -289,7 +289,7 @@
           <h3 style="font-size: 15px; font-weight: 600;" id="modalFlowTitle">Attendance Verification</h3>
           <p style="font-size: 11px; color: var(--color-text-tertiary);" id="modalFlowSubtitle">Position your face inside the guide</p>
         </div>
-        <button id="modalCloseBtn" class="btn-close-icon">&times;</button>
+        <button id="modalCloseBtn" class="btn-close-icon" aria-label="Close modal">&times;</button>
       </div>
 
       <!-- Viewfinder -->
