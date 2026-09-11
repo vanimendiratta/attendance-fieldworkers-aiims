@@ -344,8 +344,20 @@ router.post('/auth/employee/signup', authService.rateLimitMiddleware(authService
   const { password: _, pin: __, face_descriptor: ___, ...safeEmployee } = createdEmployee;
   const { admin_password: ____, ...safeEmployer } = employer;
 
+  // Issue real server-side session for newly registered employee
+  const session = sessionService.createSession({
+    sessionType: 'employee',
+    userId: safeEmployee.id,
+    employerId: safeEmployee.employer_id,
+    clientIp,
+    userAgent
+  });
+
+  res.setHeader('Set-Cookie', `attendance_session=${session.token}; Path=/; HttpOnly; SameSite=Lax${isProductionEnvironment() ? '; Secure' : ''}`);
+
   res.status(201).json({
     success: true,
+    token: session.token,
     message: `Account created successfully! Welcome to ${employer.name}, ${name.trim()}.`,
     employee: safeEmployee,
     employer: safeEmployer
