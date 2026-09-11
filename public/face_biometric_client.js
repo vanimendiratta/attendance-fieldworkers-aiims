@@ -114,6 +114,14 @@
     },
 
     /**
+     * Compute 128-dimensional biometric descriptor from a video element
+     */
+    computeDescriptorFromVideo(video) {
+      const extracted = this.extractDescriptor(video);
+      return extracted ? extracted.vector : null;
+    },
+
+    /**
      * Compute cosine similarity in browser
      */
     cosineSimilarity(vecA, vecB) {

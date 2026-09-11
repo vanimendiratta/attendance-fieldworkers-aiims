@@ -577,7 +577,7 @@ async function startFaceLoginCamera() {
 
   } catch (err) {
     console.warn('Webcam not available for face recognition:', err.message);
-    if (statusText) statusText.textContent = 'Camera unavailable · Click demo unlock or use password';
+    if (statusText) statusText.textContent = 'Camera unavailable · Please allow camera access or sign in with ID and password';
     if (laser) laser.classList.remove('active');
     frame.classList.remove('scanning');
   }
@@ -635,45 +635,21 @@ async function triggerFaceRecognition(mockEmpId = null) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      if (res.ok) {
-        data = await res.json();
-        isOk = true;
-      }
+      data = await res.json().catch(() => null);
+      isOk = res.ok && data && data.success;
     } catch (fetchErr) {}
 
     if (!isOk || !data || !data.success) {
-      const isStaticNetlify = window.location.hostname.includes('netlify.app') || window.location.hostname.includes('github.io') || !data;
-      if (isStaticNetlify) {
-        data = {
-          success: true,
-          employee: {
-            id: 'emp_aiims_user',
-            name: 'AIIMS Field Officer',
-            department: 'Dental',
-            designation: 'PRS-1',
-            state: 'Delhi',
-            district: 'New Delhi'
-          },
-          employer: {
-            id: 'aiims_main',
-            name: 'All India Institute of Medical Sciences (AIIMS)',
-            latitude: 28.5672,
-            longitude: 77.2100,
-            geofence_radius: 500
-          }
-        };
-      } else {
-        padlock.classList.remove('unlocked');
-        padlock.classList.add('denied');
-        frame.classList.remove('scanning');
-        if (laser) laser.classList.remove('active');
-        if (statusText) statusText.textContent = (data && data.error) || 'Face not recognized';
-        if (btnScan) btnScan.disabled = false;
-        setTimeout(() => {
-          padlock.classList.remove('denied');
-        }, 600);
-        return;
-      }
+      padlock.classList.remove('unlocked');
+      padlock.classList.add('denied');
+      frame.classList.remove('scanning');
+      if (laser) laser.classList.remove('active');
+      if (statusText) statusText.textContent = (data && data.error) || 'Face not recognized. Please align your face or sign in with ID and password.';
+      if (btnScan) btnScan.disabled = false;
+      setTimeout(() => {
+        padlock.classList.remove('denied');
+      }, 600);
+      return;
     }
 
     // Success: Mobile Screenlock Unlock Transition!
@@ -1077,12 +1053,20 @@ async function captureSignupFace() {
   const photoBase64 = canvas.toDataURL('image/jpeg', 0.85);
   statusEl.textContent = 'Computing biometric signature...';
 
-  // Compute 128-d descriptor using client-side biometric extractor or deterministic fallback
+  // Compute 128-d descriptor using client-side biometric extractor
   let descriptor = null;
-  if (window.FaceBiometric && video && video.videoWidth > 0) {
-    try {
-      descriptor = await window.FaceBiometric.computeDescriptorFromVideo(video);
-    } catch (_) {}
+  if (window.FaceBiometric) {
+    if (video && video.videoWidth > 0) {
+      try {
+        descriptor = window.FaceBiometric.computeDescriptorFromVideo(video);
+      } catch (_) {}
+    }
+    if (!descriptor && canvas) {
+      try {
+        const ext = window.FaceBiometric.extractDescriptor(canvas);
+        descriptor = ext ? ext.vector : null;
+      } catch (_) {}
+    }
   }
 
   if (!descriptor) {
@@ -1157,38 +1141,8 @@ DOM.employeeLoginForm.addEventListener('submit', async (e) => {
       isOk = res.ok && data && data.success;
     } catch (fetchErr) {}
 
-    // Netlify static preview mode fallback if API is not running
     if (!isOk || !data || !data.success) {
-      const isStaticNetlify = (window.location.hostname.includes('netlify.app') || window.location.hostname.includes('github.io')) && !data;
-      if (isStaticNetlify) {
-        const mockEmp = {
-          id: 'emp_' + (payload.login_id || 'guest').toLowerCase().replace(/[^a-z0-9]/g, ''),
-          employee_id: payload.login_id || 'AIIMS-PRS',
-          name: (payload.login_id || 'AIIMS Employee').toUpperCase(),
-          department: 'Dental',
-          designation: 'PRS-1',
-          state: 'Delhi',
-          district: 'New Delhi'
-        };
-        const mockEmployer = {
-          id: 'aiims_main',
-          name: 'All India Institute of Medical Sciences (AIIMS)',
-          latitude: 28.5672,
-          longitude: 77.2100,
-          geofence_radius: 500
-        };
-        const sessionData = { employee: mockEmp, employer: mockEmployer };
-        localStorage.setItem('apex_employee_session', JSON.stringify(sessionData));
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Sign In';
-        stopFaceLoginCamera();
-        DOM.loginModal.classList.remove('active');
-        setupLoggedInState(sessionData);
-        showAlert(`Signed in as ${mockEmp.name}`, 'success');
-        return;
-      }
-
-      DOM.loginErrorMessage.textContent = (data && data.error) || 'Authentication failed.';
+      DOM.loginErrorMessage.textContent = (data && data.error) || 'Authentication failed. Please check your credentials.';
       DOM.loginErrorBanner.style.display = 'flex';
       submitBtn.disabled = false;
       submitBtn.textContent = 'Sign In';
@@ -1290,45 +1244,7 @@ if (employeeSignUpForm) {
         isOk = res.ok;
       } catch (fetchErr) {}
 
-      // Netlify static preview mode fallback if API is completely unavailable
       if (!isOk || !data || !data.success) {
-        const isStaticNetlify = (window.location.hostname.includes('netlify.app') || window.location.hostname.includes('github.io')) && !data;
-        if (isStaticNetlify) {
-          const mockEmp = {
-            id: 'emp_' + Date.now(),
-            employee_id: payload.employee_id,
-            name: payload.name,
-            phone: payload.phone,
-            department: payload.department,
-            designation: payload.designation,
-            state: payload.state,
-            district: payload.district,
-            face_photo: payload.face_photo
-          };
-          const mockEmployer = {
-            id: 'aiims_main',
-            name: 'All India Institute of Medical Sciences (AIIMS)',
-            latitude: 28.5672,
-            longitude: 77.2100,
-            geofence_radius: 500
-          };
-          const sessionData = {
-            employee: mockEmp,
-            employer: mockEmployer
-          };
-          localStorage.setItem('apex_employee_session', JSON.stringify(sessionData));
-
-          submitBtn.disabled = false;
-          submitBtn.textContent = 'Create Account & Enter Workspace';
-          stopSignupCamera();
-          stopFaceLoginCamera();
-          DOM.loginModal.classList.remove('active');
-
-          setupLoggedInState(sessionData);
-          showAlert(`Welcome to ${mockEmployer.name}, ${mockEmp.name}! Your workspace account is ready.`, 'success');
-          return;
-        }
-
         DOM.loginErrorMessage.textContent = (data && data.error) || 'Registration failed.';
         DOM.loginErrorBanner.style.display = 'flex';
         submitBtn.disabled = false;
@@ -1545,6 +1461,10 @@ function renderReadyToCheckInState() {
 }
 
 function renderWorkingState() {
+  if (!state.activeSession || !state.activeSession.checkin_server_timestamp) {
+    return;
+  }
+  clearInterval(state.workTimerInterval);
   DOM.empStatusBadge.className = 'badge badge-success';
   DOM.empStatusText.textContent = 'Working';
 
@@ -2038,29 +1958,6 @@ DOM.btnConfirmSubmission.addEventListener('click', async () => {
     }
 
     if (!isOk || !data || !data.success) {
-      // If deployed on static demo hosting without any backend
-      const isStaticHosting = (window.location.hostname.includes('netlify.app') || window.location.hostname.includes('github.io')) && !data;
-      if (isStaticHosting) {
-        showModalFeedback('Verification successful! Recording attendance...', 'success');
-        DOM.btnConfirmSubmission.textContent = 'Verified';
-
-        setTimeout(() => {
-          closeCaptureModal();
-          DOM.btnConfirmSubmission.disabled = false;
-          DOM.btnConfirmSubmission.textContent = 'Confirm & Submit';
-
-          const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          if (state.flowMode === 'CHECK_IN') {
-            showAlert(`Check-in verified at ${nowStr} (Demo Preview Mode)`, 'success');
-            renderWorkingState();
-          } else {
-            showAlert(`Check-out verified · Shift Completed (Demo Preview Mode)`, 'success');
-            renderShiftCompletedState({ checkout_server_timestamp: new Date().toISOString() }, true);
-          }
-        }, 500);
-        return;
-      }
-
       // Real server error: display exact error message
       const errorMsg = (data && data.error) || 'Verification failed. Please try again.';
       showModalFeedback(errorMsg, 'error');
@@ -2068,7 +1965,7 @@ DOM.btnConfirmSubmission.addEventListener('click', async () => {
       DOM.btnConfirmSubmission.textContent = 'Confirm & Submit';
 
       // If unauthorized or session invalid, prompt to log in
-      if (data && data.error && (data.error.includes('Authentication') || data.error.includes('session') || data.error.includes('Unauthorized'))) {
+      if (data && data.error && (data.error.includes('Authentication') || data.error.includes('session') || data.error.includes('Unauthorized') || data.error.includes('sign in'))) {
         setTimeout(() => {
           closeCaptureModal();
           showAlert('Your session expired. Please sign in again.', 'danger');
@@ -2089,9 +1986,18 @@ DOM.btnConfirmSubmission.addEventListener('click', async () => {
       DOM.btnConfirmSubmission.textContent = 'Confirm & Submit';
 
       if (state.flowMode === 'CHECK_IN') {
-        showAlert(`Check-in verified at ${new Date(data.attendance?.checkin_server_timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, 'success');
+        const checkinTime = new Date(data.attendance?.checkin_server_timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        showAlert(`Check-in verified at ${checkinTime}`, 'success');
+        if (data.attendance) {
+          state.activeSession = data.attendance;
+          state.currentStatus = 'CHECKED_IN';
+          renderWorkingState();
+        }
       } else {
         showAlert(`Check-out verified · Net Working Time: ${data.summary?.netHours || '0.00'}h`, 'success');
+        if (data.attendance) {
+          renderShiftCompletedState(data.attendance, true);
+        }
       }
 
       await refreshAttendanceStatus();

@@ -876,7 +876,7 @@ async function loadRedcapData() {
     if (!data.success) return;
 
     const tbody = document.getElementById('redcapRecordsBody');
-    const records = data.mockData?.records || [];
+    const records = data.records || data.mockData?.records || [];
 
     if (records.length === 0) {
       tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 24px; color: var(--color-text-muted);">No records synced to REDCap for this employer yet.</td></tr>';

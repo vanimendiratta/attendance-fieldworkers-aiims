@@ -2598,6 +2598,68 @@
       "attendance_status": "1",
       "redcap_event_name": "attendance_arm_1",
       "created_at": "2026-09-11T05:39:08.152Z"
+    },
+    {
+      "attendance_record_id": "8a130a2e-920d-4889-8f95-c341500c4388",
+      "employee_id": "EMP-1001",
+      "employer_id": "ORG-001",
+      "department": "Dental",
+      "designation": "PRS-1",
+      "checkin_latitude": "28.6142",
+      "checkin_longitude": "77.2094",
+      "checkin_accuracy": "14.5",
+      "checkin_location_timestamp": "2026-09-11T09:07:12.886Z",
+      "checkin_server_timestamp": "2026-09-11T09:07:12.973Z",
+      "checkin_address": "Vijay Chowk, Raisina Hill, New Delhi, Delhi, 110004",
+      "checkin_geofence_distance": "5353.1",
+      "checkin_geofence_status": "2",
+      "checkout_latitude": "28.614",
+      "checkout_longitude": "77.2091",
+      "checkout_accuracy": "12",
+      "checkout_location_timestamp": "2026-09-11T09:07:13.591Z",
+      "checkout_server_timestamp": "2026-09-11T09:07:13.592Z",
+      "checkout_address": "Vijay Chowk, Raisina Hill, New Delhi, Delhi, 110004",
+      "checkout_geofence_distance": "5333.2",
+      "checkout_geofence_status": "2",
+      "gross_working_seconds": "1",
+      "break_seconds": "0",
+      "net_working_seconds": "1",
+      "overtime_seconds": "0",
+      "attendance_status": "3",
+      "redcap_event_name": "attendance_arm_1",
+      "created_at": "2026-09-11T09:07:13.472Z",
+      "updated_at": "2026-09-11T09:07:13.831Z"
+    },
+    {
+      "attendance_record_id": "2de220f3-a625-4ead-8a8f-f7f036ffe207",
+      "employee_id": "EMP-1002",
+      "employer_id": "ORG-001",
+      "department": "Dental",
+      "designation": "PRS-2",
+      "checkin_latitude": "28.4595",
+      "checkin_longitude": "77.0266",
+      "checkin_accuracy": "8.5",
+      "checkin_location_timestamp": "2026-09-11T09:07:13.907Z",
+      "checkin_server_timestamp": "2026-09-11T09:07:13.908Z",
+      "checkin_address": "Sadar Bazar Main Road, Shivaji Nagar, Gurugram, Haryana, 122001",
+      "checkin_geofence_distance": "21785.6",
+      "checkin_geofence_status": "1",
+      "checkout_latitude": "28.4598",
+      "checkout_longitude": "77.0269",
+      "checkout_accuracy": "9",
+      "checkout_location_timestamp": "2026-09-11T09:07:14.273Z",
+      "checkout_server_timestamp": "2026-09-11T09:07:14.274Z",
+      "checkout_address": "Sector 12, Gurugram, Haryana, 122001",
+      "checkout_geofence_distance": "21742.8",
+      "checkout_geofence_status": "1",
+      "gross_working_seconds": "0",
+      "break_seconds": "0",
+      "net_working_seconds": "0",
+      "overtime_seconds": "0",
+      "attendance_status": "3",
+      "redcap_event_name": "attendance_arm_1",
+      "created_at": "2026-09-11T09:07:14.272Z",
+      "updated_at": "2026-09-11T09:07:14.513Z"
     }
   ],
   "files": [
@@ -3672,6 +3734,38 @@
       "file_name": "checkins_1789105148076_d4fbb33f0395.png",
       "file_size": 70,
       "uploaded_at": "2026-09-11T05:39:08.154Z"
+    },
+    {
+      "record_id": "8a130a2e-920d-4889-8f95-c341500c4388",
+      "field": "checkin_photo",
+      "file_path": "/Users/vanimendiratta/Desktop/attendance/uploads/checkins/checkins_1789117632972_ce86e8d99bc1.png",
+      "file_name": "checkins_1789117632972_ce86e8d99bc1.png",
+      "file_size": 110,
+      "uploaded_at": "2026-09-11T09:07:13.474Z"
+    },
+    {
+      "record_id": "8a130a2e-920d-4889-8f95-c341500c4388",
+      "field": "checkout_photo",
+      "file_path": "/Users/vanimendiratta/Desktop/attendance/uploads/checkouts/checkouts_1789117633591_c04c26675fa4.png",
+      "file_name": "checkouts_1789117633591_c04c26675fa4.png",
+      "file_size": 111,
+      "uploaded_at": "2026-09-11T09:07:13.832Z"
+    },
+    {
+      "record_id": "2de220f3-a625-4ead-8a8f-f7f036ffe207",
+      "field": "checkin_photo",
+      "file_path": "/Users/vanimendiratta/Desktop/attendance/uploads/checkins/checkins_1789117633908_d6b41d404a7d.png",
+      "file_name": "checkins_1789117633908_d6b41d404a7d.png",
+      "file_size": 111,
+      "uploaded_at": "2026-09-11T09:07:14.273Z"
+    },
+    {
+      "record_id": "2de220f3-a625-4ead-8a8f-f7f036ffe207",
+      "field": "checkout_photo",
+      "file_path": "/Users/vanimendiratta/Desktop/attendance/uploads/checkouts/checkouts_1789117634274_8aa726a912a4.png",
+      "file_name": "checkouts_1789117634274_8aa726a912a4.png",
+      "file_size": 117,
+      "uploaded_at": "2026-09-11T09:07:14.516Z"
     }
   ],
   "audit": [
@@ -4974,6 +5068,48 @@
       "action": "IMPORT_RECORD",
       "record_id": "acebefd7-6d61-4812-a6ed-136462e3d645",
       "timestamp": "2026-09-11T05:39:08.152Z",
+      "status": "STORED_IN_REDCAP_EMULATOR",
+      "error": null
+    },
+    {
+      "action": "IMPORT_RECORD",
+      "record_id": "8a130a2e-920d-4889-8f95-c341500c4388",
+      "timestamp": "2026-09-11T09:07:13.472Z",
+      "status": "STORED_IN_REDCAP_EMULATOR",
+      "error": null
+    },
+    {
+      "action": "IMPORT_RECORD",
+      "record_id": "8a130a2e-920d-4889-8f95-c341500c4388",
+      "timestamp": "2026-09-11T09:07:13.479Z",
+      "status": "STORED_IN_REDCAP_EMULATOR",
+      "error": null
+    },
+    {
+      "action": "IMPORT_RECORD",
+      "record_id": "8a130a2e-920d-4889-8f95-c341500c4388",
+      "timestamp": "2026-09-11T09:07:13.587Z",
+      "status": "STORED_IN_REDCAP_EMULATOR",
+      "error": null
+    },
+    {
+      "action": "IMPORT_RECORD",
+      "record_id": "8a130a2e-920d-4889-8f95-c341500c4388",
+      "timestamp": "2026-09-11T09:07:13.831Z",
+      "status": "STORED_IN_REDCAP_EMULATOR",
+      "error": null
+    },
+    {
+      "action": "IMPORT_RECORD",
+      "record_id": "2de220f3-a625-4ead-8a8f-f7f036ffe207",
+      "timestamp": "2026-09-11T09:07:14.272Z",
+      "status": "STORED_IN_REDCAP_EMULATOR",
+      "error": null
+    },
+    {
+      "action": "IMPORT_RECORD",
+      "record_id": "2de220f3-a625-4ead-8a8f-f7f036ffe207",
+      "timestamp": "2026-09-11T09:07:14.513Z",
       "status": "STORED_IN_REDCAP_EMULATOR",
       "error": null
     }
