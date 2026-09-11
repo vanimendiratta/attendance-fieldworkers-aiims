@@ -3,10 +3,9 @@
   command = ""
 
 # Proxy all /api/* requests to the Render backend
-# UPDATE the `to` URL below after deploying on Render.com
 [[redirects]]
   from = "/api/*"
-  to = "https://aiims-attendance-api.onrender.com/api/:splat"
+  to = "https://attendance-fieldworkers-aiims.onrender.com/api/:splat"
   status = 200
   force = true
 

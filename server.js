@@ -28,6 +28,7 @@ app.use((req, res, next) => {
 // Configure CORS — allow Netlify frontend + localhost dev
 const DEFAULT_ALLOWED_ORIGINS = [
   'https://checkin-checkout-aiims.netlify.app',
+  'https://attendance-fieldworkers-aiims.onrender.com',
   'http://localhost:3000',
   'http://127.0.0.1:3000'
 ];

@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: aiims-attendance-api
+    name: attendance-fieldworkers-aiims
     env: node
     plan: free
     buildCommand: npm install
