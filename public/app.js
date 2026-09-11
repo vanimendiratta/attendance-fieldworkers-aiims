@@ -1153,15 +1153,13 @@ DOM.employeeLoginForm.addEventListener('submit', async (e) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      if (res.ok) {
-        data = await res.json();
-        isOk = true;
-      }
+      data = await res.json().catch(() => null);
+      isOk = res.ok && data && data.success;
     } catch (fetchErr) {}
 
     // Netlify static preview mode fallback if API is not running
     if (!isOk || !data || !data.success) {
-      const isStaticNetlify = window.location.hostname.includes('netlify.app') || window.location.hostname.includes('github.io') || !data;
+      const isStaticNetlify = (window.location.hostname.includes('netlify.app') || window.location.hostname.includes('github.io')) && !data;
       if (isStaticNetlify) {
         const mockEmp = {
           id: 'emp_' + (payload.login_id || 'guest').toLowerCase().replace(/[^a-z0-9]/g, ''),
