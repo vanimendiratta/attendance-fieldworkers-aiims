@@ -223,6 +223,7 @@ function initSchema() {
   }
 
   // Seed / Upsert distinct employers (organizations)
+  const forcePasswordReset = !!process.env.ADMIN_INITIAL_PASSWORD;
   const upsertOrg = db.prepare(`
     INSERT INTO organizations (id, name, office_name, office_lat, office_lng, geofence_radius_m, geofence_policy, max_gps_accuracy_m, shift_hours, timezone, admin_username, admin_password, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -235,21 +236,28 @@ function initSchema() {
       geofence_policy=excluded.geofence_policy,
       max_gps_accuracy_m=excluded.max_gps_accuracy_m,
       admin_username=excluded.admin_username,
-      admin_password=CASE WHEN organizations.admin_password LIKE 'scrypt$%' THEN organizations.admin_password ELSE excluded.admin_password END,
+      admin_password=${forcePasswordReset
+        ? 'excluded.admin_password'
+        : "CASE WHEN organizations.admin_password LIKE 'scrypt$%' THEN organizations.admin_password ELSE excluded.admin_password END"},
       updated_at=excluded.updated_at
   `);
 
-  // Resolve initial admin password securely
+
+  // Resolve initial admin password securely.
+  // If ADMIN_INITIAL_PASSWORD env var is explicitly set, it ALWAYS overrides the stored hash —
+  // this allows a production password reset on Render by simply updating the env var and redeploying.
   const existingOrg = db.prepare('SELECT admin_password FROM organizations WHERE id = ?').get('ORG-001');
   let adminPasswordHash = existingOrg?.admin_password;
 
-  if (!adminPasswordHash || !adminPasswordHash.startsWith('scrypt$')) {
+  if (process.env.ADMIN_INITIAL_PASSWORD) {
+    // Env var takes highest priority — always re-hash and apply (enables production password reset)
+    const salt = crypto.randomBytes(16).toString('hex');
+    const derivedKey = crypto.scryptSync(process.env.ADMIN_INITIAL_PASSWORD, salt, 64);
+    adminPasswordHash = `scrypt$${salt}$${derivedKey.toString('hex')}`;
+    console.log('[AUTH] Admin password set/updated from ADMIN_INITIAL_PASSWORD environment variable.');
+  } else if (!adminPasswordHash || !adminPasswordHash.startsWith('scrypt$')) {
     const isProd = (process.env.NODE_ENV || process.env.APP_ENV || '').toLowerCase().trim() === 'production';
-    if (process.env.ADMIN_INITIAL_PASSWORD) {
-      const salt = crypto.randomBytes(16).toString('hex');
-      const derivedKey = crypto.scryptSync(process.env.ADMIN_INITIAL_PASSWORD, salt, 64);
-      adminPasswordHash = `scrypt$${salt}$${derivedKey.toString('hex')}`;
-    } else if (existingOrg?.admin_password) {
+    if (existingOrg?.admin_password) {
       const salt = crypto.randomBytes(16).toString('hex');
       const derivedKey = crypto.scryptSync(existingOrg.admin_password, salt, 64);
       adminPasswordHash = `scrypt$${salt}$${derivedKey.toString('hex')}`;
