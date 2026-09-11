@@ -9,8 +9,46 @@ const apiRouter = require('./src/routes/api');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Enable CORS and generous JSON limit for live camera image payloads
-app.use(cors());
+// Security Headers Middleware
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  const isProd = (process.env.NODE_ENV || process.env.APP_ENV || '').toLowerCase().trim() === 'production';
+  if (isProd) {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self';"
+  );
+  next();
+});
+
+// Configure CORS
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+  : null;
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (!allowedOrigins) {
+      const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+      const isProd = (process.env.NODE_ENV || process.env.APP_ENV || '').toLowerCase().trim() === 'production';
+      if (isProd && !isLocalhost) {
+        return callback(new Error('CORS blocked: Origin not allowed in production'));
+      }
+      return callback(null, true);
+    }
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('CORS blocked by origin policy'));
+  },
+  credentials: true
+}));
+
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
@@ -35,12 +73,13 @@ app.use((req, res) => {
   res.sendFile(path.join(__dirname, 'public/index.html'));
 });
 
-// Error handling middleware
+// Error handling middleware (masks internal details in production)
 app.use((err, req, res, next) => {
   console.error('Unhandled server error:', err);
+  const isProd = (process.env.NODE_ENV || process.env.APP_ENV || '').toLowerCase().trim() === 'production';
   res.status(500).json({
     success: false,
-    error: err.message || 'Internal Server Error'
+    error: isProd ? 'An internal server error occurred.' : (err.message || 'Internal Server Error')
   });
 });
 

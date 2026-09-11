@@ -130,13 +130,6 @@ function showAdminLoginModal() {
   document.getElementById('adminLoginModal').classList.add('active');
 }
 
-window.fillAdminCreds = function(orgId, username, password) {
-  document.getElementById('loginAdminEmployer').value = orgId;
-  document.getElementById('loginAdminUsername').value = username;
-  document.getElementById('loginAdminPassword').value = password;
-  document.getElementById('adminLoginError').style.display = 'none';
-};
-
 async function handleAdminLogin(e) {
   e.preventDefault();
   const errorEl = document.getElementById('adminLoginError');
@@ -163,6 +156,7 @@ async function handleAdminLogin(e) {
     }
 
     currentEmployerSession = {
+      token: data.token || (data.admin_session && data.admin_session.token),
       employer: data.employer,
       admin_username: data.admin_session.admin_username,
       employer_id: data.employer.id
@@ -183,7 +177,7 @@ async function handleAdminLogout() {
     try {
       await fetch('/api/auth/logout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ employer_id: currentEmployerSession.employer_id })
       });
     } catch (e) {}
@@ -222,6 +216,10 @@ function getAuthHeaders() {
   const headers = { 'Content-Type': 'application/json' };
   if (currentEmployerSession) {
     headers['x-employer-id'] = currentEmployerSession.employer_id;
+    if (currentEmployerSession.token) {
+      headers['Authorization'] = `Bearer ${currentEmployerSession.token}`;
+      headers['x-session-token'] = currentEmployerSession.token;
+    }
   }
   return headers;
 }

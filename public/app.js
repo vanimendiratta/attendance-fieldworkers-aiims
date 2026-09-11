@@ -34,6 +34,9 @@ const state = {
     status: 'ACQUIRING'
   },
 
+  // Cryptographic Server Session
+  sessionToken: null,
+
   // Timers
   workTimerInterval: null,
   breakTimerInterval: null
@@ -125,6 +128,24 @@ const DOM = {
   loginErrorBanner: document.getElementById('loginErrorBanner'),
   loginErrorMessage: document.getElementById('loginErrorMessage')
 };
+
+/**
+ * Centralized Authenticated Request Headers for Employee Portal
+ */
+function getEmployeeAuthHeaders(extraHeaders = {}) {
+  const headers = { 'Content-Type': 'application/json', ...extraHeaders };
+  if (state.currentEmployee) {
+    headers['x-employee-id'] = state.currentEmployee.id;
+  }
+  if (state.currentEmployer) {
+    headers['x-employer-id'] = state.currentEmployer.id;
+  }
+  if (state.sessionToken) {
+    headers['Authorization'] = `Bearer ${state.sessionToken}`;
+    headers['x-session-token'] = state.sessionToken;
+  }
+  return headers;
+}
 
 /**
  * Show / Hide Notification Banner
@@ -671,6 +692,7 @@ async function triggerFaceRecognition(mockEmpId = null) {
     if (window.FaceBiometric) window.FaceBiometric.playUnlockSound();
 
     const sessionData = {
+      token: data.token || null,
       employee: data.employee,
       employer: data.employer
     };
@@ -1009,6 +1031,7 @@ DOM.employeeLoginForm.addEventListener('submit', async (e) => {
     }
 
     const sessionData = {
+      token: data.token || null,
       employee: data.employee,
       employer: data.employer
     };
@@ -1183,13 +1206,14 @@ DOM.btnLogoutEmployee.addEventListener('click', async () => {
     try {
       await fetch('/api/auth/logout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getEmployeeAuthHeaders(),
         body: JSON.stringify({ employee_id: state.currentEmployee.id, employer_id: state.currentEmployer?.id })
       });
     } catch (e) {}
   }
 
   localStorage.removeItem('apex_employee_session');
+  state.sessionToken = null;
   state.currentEmployee = null;
   state.currentEmployer = null;
   state.activeSession = null;
@@ -1203,6 +1227,7 @@ DOM.btnLogoutEmployee.addEventListener('click', async () => {
 });
 
 function setupLoggedInState(sessionData) {
+  state.sessionToken = sessionData.token || null;
   state.currentEmployee = sessionData.employee;
   state.currentEmployer = sessionData.employer;
   if (sessionData.employer) {
@@ -1286,10 +1311,7 @@ async function refreshAttendanceStatus() {
 
   try {
     const res = await fetch(`/api/attendance/current?employee_id=${state.currentEmployee.id}`, {
-      headers: {
-        'x-employee-id': state.currentEmployee.id,
-        'x-employer-id': state.currentEmployer?.id
-      }
+      headers: getEmployeeAuthHeaders()
     });
     const data = await res.json();
     if (!data.success) return;
@@ -1500,11 +1522,7 @@ DOM.btnStartBreak.addEventListener('click', async () => {
   try {
     const res = await fetch('/api/attendance/break/start', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-employee-id': state.currentEmployee.id,
-        'x-employer-id': state.currentEmployer?.id
-      }
+      headers: getEmployeeAuthHeaders()
     });
     const data = await res.json();
     if (!data.success) {
@@ -1522,11 +1540,7 @@ DOM.btnEndBreak.addEventListener('click', async () => {
   try {
     const res = await fetch('/api/attendance/break/end', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-employee-id': state.currentEmployee.id,
-        'x-employer-id': state.currentEmployer?.id
-      }
+      headers: getEmployeeAuthHeaders()
     });
     const data = await res.json();
     if (!data.success) {
@@ -1777,11 +1791,7 @@ DOM.btnConfirmSubmission.addEventListener('click', async () => {
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-employee-id': state.currentEmployee?.id || '',
-          'x-employer-id': state.currentEmployer?.id || ''
-        },
+        headers: getEmployeeAuthHeaders(),
         body: JSON.stringify(payload)
       });
       if (res.ok) {

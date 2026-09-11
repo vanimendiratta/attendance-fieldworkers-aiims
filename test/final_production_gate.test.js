@@ -194,8 +194,21 @@ async function runGateTests() {
   assert.strictEqual(loginRes.body.employee.password, undefined, 'password must NEVER be in login response');
   console.log('  ✓ Employee login response strictly excludes face_descriptor, face_photo, and password');
 
-  // 2. Verify employee list does not leak biometric descriptors
-  const listRes = await request('GET', '/api/employees', null, { 'x-employer-id': 'ORG-001' });
+  // Authenticate as Employer Admin to obtain real server-side session token for protected admin endpoints
+  const adminLoginRes = await request('POST', '/api/auth/employer/login', {
+    employer_id: 'ORG-001',
+    admin_username: 'aiims_admin',
+    admin_password: 'Aiims@123'
+  });
+  assert.strictEqual(adminLoginRes.statusCode, 200, 'Admin login must succeed');
+  const adminToken = adminLoginRes.body.token;
+  const adminHeaders = {
+    'Authorization': `Bearer ${adminToken}`,
+    'x-employer-id': 'ORG-001'
+  };
+
+  // 2. Verify employee list does not leak biometric descriptors (requires authenticated admin)
+  const listRes = await request('GET', '/api/employees', null, adminHeaders);
   assert.strictEqual(listRes.statusCode, 200);
   for (const emp of listRes.body.employees) {
     assert.strictEqual(emp.face_descriptor, undefined, 'Employee list must not include face_descriptor');
@@ -229,7 +242,7 @@ async function runGateTests() {
   console.log('  ✓ Raw camera frames are NEVER persisted (verified in database row)');
 
   // 4. Verify employee deletion purges biometric descriptor
-  const delRes = await request('DELETE', `/api/employees/${uniqueId}`, null, { 'x-employer-id': 'ORG-001' });
+  const delRes = await request('DELETE', `/api/employees/${uniqueId}`, null, adminHeaders);
   assert.strictEqual(delRes.statusCode, 200);
   const deletedCheck = db.prepare('SELECT * FROM employees WHERE id = ?').get(uniqueId);
   assert.strictEqual(deletedCheck, undefined, 'Deleted employee and associated biometric descriptor permanently removed');
@@ -240,9 +253,7 @@ async function runGateTests() {
   // -----------------------------------------------------------------
   console.log('\n[Gate 4] CSV Export 37 Authoritative Columns & Multi-Filter Matrix');
 
-  const csvRes = await request('GET', '/api/admin/attendance/export.csv?employer_id=ORG-001&work_mode=FIELD_WORK', null, {
-    'x-employer-id': 'ORG-001'
-  });
+  const csvRes = await request('GET', '/api/admin/attendance/export.csv?employer_id=ORG-001&work_mode=FIELD_WORK', null, adminHeaders);
   assert.strictEqual(csvRes.statusCode, 200);
 
   const cleanText = csvRes.text.replace(/^\uFEFF/, '');
@@ -253,9 +264,7 @@ async function runGateTests() {
   console.log('  ✓ Authoritative 37 columns confirmed in exact order');
 
   // Multi-filter combination: work_mode + state + district + search
-  const multiFilterRes = await request('GET', '/api/admin/attendance/export.csv?employer_id=ORG-001&work_mode=OFFICE&state=Delhi&district=New+Delhi', null, {
-    'x-employer-id': 'ORG-001'
-  });
+  const multiFilterRes = await request('GET', '/api/admin/attendance/export.csv?employer_id=ORG-001&work_mode=OFFICE&state=Delhi&district=New+Delhi', null, adminHeaders);
   assert.strictEqual(multiFilterRes.statusCode, 200);
   console.log('  ✓ Combined filters (work_mode + state + district) executed without error');
 
@@ -287,9 +296,7 @@ async function runGateTests() {
     'FIELD_WORK', '=SUM(1+1)*cmd|', '\t=SUM(1+1)', new Date().toISOString(), new Date().toISOString()
   );
 
-  const exportFormulaRes = await request('GET', `/api/admin/attendance/export.csv?employer_id=ORG-001&search=${encodeURIComponent('SUM')}`, null, {
-    'x-employer-id': 'ORG-001'
-  });
+  const exportFormulaRes = await request('GET', `/api/admin/attendance/export.csv?employer_id=ORG-001&search=${encodeURIComponent('SUM')}`, null, adminHeaders);
   assert.strictEqual(exportFormulaRes.statusCode, 200);
 
   // Cleanup immediately
@@ -310,6 +317,18 @@ async function runGateTests() {
   // -----------------------------------------------------------------
   console.log('\n[Gate 6] Server-Side Attendance Authority & Anti-Tampering');
 
+  // Authenticate as employee EMP-1002 to obtain real session
+  const emp2Login = await request('POST', '/api/auth/employee/login', {
+    employer_id: 'ORG-001',
+    login_id: 'EMP-1002',
+    password: 'Password@123'
+  });
+  const emp2Headers = {
+    'Authorization': `Bearer ${emp2Login.body?.token}`,
+    'x-employee-id': 'EMP-1002',
+    'x-employer-id': 'ORG-001'
+  };
+
   // Attempt to forge server timestamps and geofence status via API payload
   const forgedTimestamp = '1985-10-26T01:21:00.000Z';
   const tamperAttId = 'ATT-FORGED-ID-999';
@@ -325,10 +344,7 @@ async function runGateTests() {
     checkin_server_timestamp: forgedTimestamp,
     geofence_status: 'INSIDE_GEOFENCE_SPOOFED',
     attendance_status: 'COMPLETED'
-  }, {
-    'x-employee-id': 'EMP-1002',
-    'x-employer-id': 'ORG-001'
-  });
+  }, emp2Headers);
 
   // If already checked in or newly checked in, check record authority
   if (checkinRes.body?.success) {

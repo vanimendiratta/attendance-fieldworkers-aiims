@@ -8,18 +8,46 @@ const teamService = require('../services/team_service');
 const biometricService = require('../services/biometric_service');
 const { STATE_DISTRICTS_MAP, getAllStates, getDistrictsForState, matchStateAndDistrict } = require('../data/india_states_districts');
 const authService = require('../services/auth_service');
+const sessionService = require('../services/session_service');
+const {
+  extractToken,
+  requireAuthenticatedEmployee,
+  requireAuthenticatedAdmin,
+  requireAuthenticatedUser
+} = require('../middleware/auth_middleware');
 
 function isProductionEnvironment() {
   const env = (process.env.NODE_ENV || process.env.APP_ENV || '').toLowerCase().trim();
   return env === 'production';
 }
 
+function isDemoBypassAllowed() {
+  const nodeEnv = (process.env.NODE_ENV || '').toLowerCase().trim();
+  const appEnv = (process.env.APP_ENV || '').toLowerCase().trim();
+  const allowBypass = (process.env.ALLOW_DEMO_BYPASS || '').toLowerCase().trim();
+
+  // Strictly disabled in production regardless of any configuration
+  if (nodeEnv === 'production' || appEnv === 'production') {
+    return false;
+  }
+
+  // Must be an explicit non-production environment
+  const isExplicitNonProd = (nodeEnv === 'development' || nodeEnv === 'test' || appEnv === 'development' || appEnv === 'test');
+  if (!isExplicitNonProd) {
+    return false;
+  }
+
+  // Must have explicit opt-in
+  return allowBypass === 'true';
+}
+
 function resolveEmployerId(req) {
-  return req.headers['x-employer-id'] || req.query.employer_id || req.body?.employer_id || 'ORG-001';
+  return req.employerId || req.headers['x-employer-id'] || req.query.employer_id || req.body?.employer_id || 'ORG-001';
 }
 
 // Helper to resolve employee identity
 function resolveEmployee(req) {
+  if (req.employee) return req.employee;
   const empId = req.headers['x-employee-id'] || req.query.employee_id || req.body?.employee_id;
   if (!empId) return null;
   return db.prepare('SELECT * FROM employees WHERE id = ?').get(empId);
@@ -42,9 +70,9 @@ router.get('/organizations', (req, res) => {
   res.json({ success: true, organizations: orgs });
 });
 
-// 3. Employee List for Employer (filtered by employer_id with Team & Territory info)
-router.get('/employees', (req, res) => {
-  const employerId = resolveEmployerId(req);
+// 3. Employee List for Employer (filtered by authenticated employer_id with Team & Territory info)
+router.get('/employees', requireAuthenticatedAdmin, (req, res) => {
+  const employerId = req.employerId;
   const employees = db.prepare(`
     SELECT e.id, e.employer_id, e.name, e.email, e.department, e.designation, e.is_admin, e.is_active,
            e.team_id, e.state, e.district, COALESCE(t.name, 'Unassigned') as team_name
@@ -56,13 +84,16 @@ router.get('/employees', (req, res) => {
 });
 
 // 3b. Delete Employee (permanently purges record and associated biometric descriptor)
-router.delete('/employees/:id', (req, res) => {
-  const employerId = resolveEmployerId(req);
+router.delete('/employees/:id', requireAuthenticatedAdmin, (req, res) => {
+  const employerId = req.employerId;
   const empId = req.params.id;
   const employee = db.prepare('SELECT id, name, employer_id FROM employees WHERE id = ? AND employer_id = ?').get(empId, employerId);
   if (!employee) {
     return res.status(404).json({ success: false, error: 'Employee not found for this employer organization.' });
   }
+
+  // Revoke active sessions for deleted employee
+  sessionService.revokeUserSessions(empId);
 
   db.prepare('DELETE FROM employees WHERE id = ?').run(empId);
   res.json({ success: true, message: `Employee ${employee.name} (${empId}) and all associated biometric descriptors permanently purged.` });
@@ -70,20 +101,22 @@ router.delete('/employees/:id', (req, res) => {
 
 // 4. EMPLOYEE LOGIN with ID & Password (against backend details of each employer)
 router.post('/auth/employee/login', authService.rateLimitMiddleware(authService.loginRateLimiter, 'Login'), (req, res) => {
-  const { employer_id, login_id, password } = req.body;
+  const { employer_id, login_id, employee_id, password } = req.body;
+  const effectiveLoginId = (login_id || employee_id || '').trim();
   const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
   const userAgent = req.headers['user-agent'] || 'Unknown';
 
   if (!employer_id) {
     return res.status(400).json({ success: false, error: 'Employer ID is required.' });
   }
-  if (!login_id || !password) {
+  if (!effectiveLoginId || !password) {
     return res.status(400).json({ success: false, error: 'Both Employee ID/Email and Password are required.' });
   }
 
   const employer = db.prepare('SELECT * FROM organizations WHERE id = ?').get(employer_id);
   if (!employer) {
-    return res.status(404).json({ success: false, error: 'Employer organization not found.' });
+    attendanceService.logAudit('AUTH_FAILED_ORG_NOT_FOUND', null, employer_id, 'EMPLOYEE_LOGIN', 'BLOCKED', { login_id: effectiveLoginId }, clientIp, userAgent);
+    return res.status(401).json({ success: false, error: 'Invalid Employee ID or password.' });
   }
 
   // Find employee under this employer with Team details
@@ -92,18 +125,18 @@ router.post('/auth/employee/login', authService.rateLimitMiddleware(authService.
     FROM employees e
     LEFT JOIN teams t ON e.team_id = t.id
     WHERE e.employer_id = ? AND (e.id = ? OR e.email = ?)
-  `).get(employer_id, login_id, login_id);
+  `).get(employer_id, effectiveLoginId, effectiveLoginId);
 
   if (!employee) {
-    attendanceService.logAudit('AUTH_FAILED_USER_NOT_FOUND', null, employer_id, 'EMPLOYEE_LOGIN', 'BLOCKED', { login_id }, clientIp, userAgent);
-    return res.status(401).json({ success: false, error: 'Invalid Employee ID or credentials for this employer.' });
+    attendanceService.logAudit('AUTH_FAILED_USER_NOT_FOUND', null, employer_id, 'EMPLOYEE_LOGIN', 'BLOCKED', { login_id: effectiveLoginId }, clientIp, userAgent);
+    return res.status(401).json({ success: false, error: 'Invalid Employee ID or password.' });
   }
 
   // Check password against backend details using constant-time verification & scrypt support
   const isMatch = authService.verifyPassword(password, employee.password) || (employee.pin && authService.verifyPassword(password, employee.pin));
   if (!isMatch) {
-    attendanceService.logAudit('AUTH_FAILED_INVALID_PASSWORD', employee.id, employer_id, 'EMPLOYEE_LOGIN', 'BLOCKED', { login_id }, clientIp, userAgent);
-    return res.status(401).json({ success: false, error: 'Invalid password. Please check backend employee details and try again.' });
+    attendanceService.logAudit('AUTH_FAILED_INVALID_PASSWORD', employee.id, employer_id, 'EMPLOYEE_LOGIN', 'BLOCKED', { login_id: effectiveLoginId }, clientIp, userAgent);
+    return res.status(401).json({ success: false, error: 'Invalid Employee ID or password.' });
   }
 
   // Auto-upgrade legacy unhashed password to salted scrypt hash upon successful login
@@ -123,12 +156,24 @@ router.post('/auth/employee/login', authService.rateLimitMiddleware(authService.
 
   attendanceService.logAudit('EMPLOYEE_LOGIN_SUCCESS', employee.id, employer_id, 'EMPLOYEE_LOGIN', 'SUCCESS', {}, clientIp, userAgent);
 
+  // Issue real server-side session
+  const session = sessionService.createSession({
+    sessionType: 'employee',
+    userId: employee.id,
+    employerId: employer.id,
+    clientIp,
+    userAgent
+  });
+
+  res.setHeader('Set-Cookie', `attendance_session=${session.token}; Path=/; HttpOnly; SameSite=Lax${isProductionEnvironment() ? '; Secure' : ''}`);
+
   // Strictly strip sensitive credentials and biometric descriptors from returned employee profile
   const { password: _, pin: __, face_descriptor: ___, face_photo: ____, ...safeEmployee } = employee;
   const { admin_password: _____, ...safeEmployer } = employer;
 
   res.json({
     success: true,
+    token: session.token,
     message: `Welcome back, ${employee.name}!`,
     employee: safeEmployee,
     employer: safeEmployer
@@ -315,10 +360,10 @@ router.post('/auth/employee/face-login', authService.rateLimitMiddleware(authSer
 
   let candidateDescriptor = face_descriptor;
 
-  // If mock_employee_id passed: strictly forbid in production
+  // If mock_employee_id passed: require explicit opt-in and non-production environment
   if (mock_employee_id) {
-    if (isProductionEnvironment()) {
-      return res.status(403).json({ success: false, error: 'Demo quick-unlock is disabled in production environment.' });
+    if (!isDemoBypassAllowed()) {
+      return res.status(403).json({ success: false, error: 'Demo quick-unlock is disabled in production / unauthorized environments.' });
     }
     const demoEmp = db.prepare('SELECT * FROM employees WHERE id = ?').get(mock_employee_id);
     if (demoEmp && demoEmp.face_descriptor) {
@@ -353,10 +398,22 @@ router.post('/auth/employee/face-login', authService.rateLimitMiddleware(authSer
     confidence: matchResult.confidence
   }, clientIp, userAgent);
 
+  // Issue real server-side session
+  const session = sessionService.createSession({
+    sessionType: 'employee',
+    userId: matchedEmp.id,
+    employerId: matchedEmp.employer_id,
+    clientIp,
+    userAgent
+  });
+
+  res.setHeader('Set-Cookie', `attendance_session=${session.token}; Path=/; HttpOnly; SameSite=Lax${isProductionEnvironment() ? '; Secure' : ''}`);
+
   const { admin_password: _, ...safeEmployer } = employer;
 
   res.json({
     success: true,
+    token: session.token,
     message: `Face recognized! Welcome back, ${matchedEmp.name}.`,
     employee: matchedEmp,
     employer: safeEmployer,
@@ -364,18 +421,39 @@ router.post('/auth/employee/face-login', authService.rateLimitMiddleware(authSer
   });
 });
 
-// 4c. ENROLL FACE FOR EXISTING EMPLOYEE
-router.post('/auth/employee/enroll-face', (req, res) => {
+// 4c. ENROLL FACE FOR EXISTING EMPLOYEE (requires authenticated session)
+router.post('/auth/employee/enroll-face', requireAuthenticatedUser, (req, res) => {
   const { employee_id, face_photo, face_descriptor } = req.body;
-  if (!employee_id) {
-    return res.status(400).json({ success: false, error: 'Employee ID is required.' });
+
+  let targetEmployeeId = null;
+
+  if (req.userType === 'employee') {
+    // Employee can ONLY enroll for themselves
+    if (employee_id && String(employee_id).trim() !== req.employee.id) {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden: You can only enroll Face ID for your own employee account.'
+      });
+    }
+    targetEmployeeId = req.employee.id;
+  } else if (req.userType === 'admin') {
+    // Admin can enroll any employee belonging to their tenant organization
+    if (!employee_id) {
+      return res.status(400).json({ success: false, error: 'Employee ID is required.' });
+    }
+    const targetEmp = db.prepare('SELECT * FROM employees WHERE id = ? AND employer_id = ?').get(employee_id, req.employerId);
+    if (!targetEmp) {
+      return res.status(404).json({ success: false, error: 'Employee not found in your organization.' });
+    }
+    targetEmployeeId = targetEmp.id;
   }
-  const employee = db.prepare('SELECT * FROM employees WHERE id = ?').get(employee_id);
+
+  const employee = db.prepare('SELECT * FROM employees WHERE id = ?').get(targetEmployeeId);
   if (!employee) {
     return res.status(404).json({ success: false, error: 'Employee not found.' });
   }
 
-  biometricService.enrollEmployeeFace(employee_id, face_photo, face_descriptor);
+  biometricService.enrollEmployeeFace(targetEmployeeId, face_photo, face_descriptor);
 
   res.json({
     success: true,
@@ -385,8 +463,8 @@ router.post('/auth/employee/enroll-face', (req, res) => {
 
 // 4d. DEMO FACE RECOGNITION CREDENTIALS
 router.get('/auth/demo-face-credentials', (req, res) => {
-  if (isProductionEnvironment()) {
-    return res.status(403).json({ success: false, error: 'Demo credentials endpoint is disabled in production environment.' });
+  if (!isDemoBypassAllowed()) {
+    return res.status(403).json({ success: false, error: 'Demo credentials endpoint is disabled in production / unauthorized environments.' });
   }
 
   const demoEmployees = db.prepare(`
@@ -412,26 +490,39 @@ router.post('/auth/employer/login', authService.rateLimitMiddleware(authService.
 
   const employer = db.prepare('SELECT * FROM organizations WHERE id = ?').get(employer_id);
   if (!employer) {
-    return res.status(404).json({ success: false, error: 'Employer organization not found.' });
+    return res.status(401).json({ success: false, error: 'Invalid Employer Admin credentials.' });
   }
 
   // Verify credentials against employer backend record
-  const usernameMatch = employer.admin_username.toLowerCase() === admin_username.trim().toLowerCase();
+  const usernameMatch = employer.admin_username && employer.admin_username.toLowerCase() === admin_username.trim().toLowerCase();
   const passwordMatch = authService.verifyPassword(admin_password, employer.admin_password);
 
   if (!usernameMatch || !passwordMatch) {
     attendanceService.logAudit('ADMIN_AUTH_FAILED', null, employer_id, 'EMPLOYER_LOGIN', 'BLOCKED', { admin_username }, clientIp, userAgent);
-    return res.status(401).json({ success: false, error: 'Invalid Employer Admin credentials according to backend records.' });
+    return res.status(401).json({ success: false, error: 'Invalid Employer Admin credentials.' });
   }
 
   attendanceService.logAudit('ADMIN_LOGIN_SUCCESS', null, employer_id, 'EMPLOYER_LOGIN', 'SUCCESS', { admin_username }, clientIp, userAgent);
 
+  // Issue real server-side admin session
+  const session = sessionService.createSession({
+    sessionType: 'admin',
+    userId: employer.admin_username,
+    employerId: employer.id,
+    clientIp,
+    userAgent
+  });
+
+  res.setHeader('Set-Cookie', `attendance_session=${session.token}; Path=/; HttpOnly; SameSite=Lax${isProductionEnvironment() ? '; Secure' : ''}`);
+
   const { admin_password: _, ...safeEmployer } = employer;
   res.json({
     success: true,
+    token: session.token,
     message: `Authenticated as Employer Administrator for ${employer.name}`,
     employer: safeEmployer,
     admin_session: {
+      token: session.token,
       employer_id: employer.id,
       admin_username: employer.admin_username,
       authenticated_at: new Date().toISOString()
@@ -439,23 +530,33 @@ router.post('/auth/employer/login', authService.rateLimitMiddleware(authService.
   });
 });
 
-// 6. LOGOUT
+// 6. LOGOUT (Server-Side Session Revocation)
 router.post('/auth/logout', (req, res) => {
   const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
   const userAgent = req.headers['user-agent'] || 'Unknown';
-  const employeeId = req.body?.employee_id || req.headers['x-employee-id'];
-  const employerId = req.body?.employer_id || req.headers['x-employer-id'];
+  const token = extractToken(req);
+
+  let employeeId = null;
+  let employerId = null;
+
+  if (token) {
+    const session = sessionService.getSession(token);
+    if (session) {
+      employeeId = session.session_type === 'employee' ? session.user_id : null;
+      employerId = session.employer_id;
+    }
+    sessionService.revokeSession(token);
+  }
 
   attendanceService.logAudit('USER_LOGOUT', employeeId || null, employerId || null, 'LOGOUT', 'SUCCESS', {}, clientIp, userAgent);
+
+  res.setHeader('Set-Cookie', 'attendance_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
   res.json({ success: true, message: 'Logged out successfully.' });
 });
 
 // 7. Current Attendance Status
-router.get('/attendance/current', (req, res) => {
-  const employee = resolveEmployee(req);
-  if (!employee) {
-    return res.status(401).json({ success: false, error: 'Unauthorized: Please log in with your Employee credentials.' });
-  }
+router.get('/attendance/current', requireAuthenticatedEmployee, (req, res) => {
+  const employee = req.employee;
 
   const activeSession = attendanceService.getActiveSession(employee.id);
   if (!activeSession) {
@@ -505,12 +606,9 @@ router.get('/attendance/current', (req, res) => {
 });
 
 // 8. Check-In Endpoint
-router.post('/attendance/check-in', async (req, res) => {
+router.post('/attendance/check-in', requireAuthenticatedEmployee, async (req, res) => {
   try {
-    const employee = resolveEmployee(req);
-    if (!employee) {
-      return res.status(401).json({ success: false, error: 'Unauthorized: Please log in with your Employee credentials.' });
-    }
+    const employee = req.employee;
 
     const {
       photo,
@@ -581,12 +679,9 @@ router.get('/location/preview', async (req, res) => {
 });
 
 // 9. Start Break
-router.post('/attendance/break/start', (req, res) => {
+router.post('/attendance/break/start', requireAuthenticatedEmployee, (req, res) => {
   try {
-    const employee = resolveEmployee(req);
-    if (!employee) {
-      return res.status(401).json({ success: false, error: 'Unauthorized.' });
-    }
+    const employee = req.employee;
 
     const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
     const userAgent = req.headers['user-agent'] || 'Unknown';
@@ -599,12 +694,9 @@ router.post('/attendance/break/start', (req, res) => {
 });
 
 // 10. End Break
-router.post('/attendance/break/end', (req, res) => {
+router.post('/attendance/break/end', requireAuthenticatedEmployee, (req, res) => {
   try {
-    const employee = resolveEmployee(req);
-    if (!employee) {
-      return res.status(401).json({ success: false, error: 'Unauthorized.' });
-    }
+    const employee = req.employee;
 
     const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
     const userAgent = req.headers['user-agent'] || 'Unknown';
@@ -617,12 +709,9 @@ router.post('/attendance/break/end', (req, res) => {
 });
 
 // 11. Check-Out Endpoint
-router.post('/attendance/check-out', async (req, res) => {
+router.post('/attendance/check-out', requireAuthenticatedEmployee, async (req, res) => {
   try {
-    const employee = resolveEmployee(req);
-    if (!employee) {
-      return res.status(401).json({ success: false, error: 'Unauthorized: Please log in with your Employee credentials.' });
-    }
+    const employee = req.employee;
 
     const {
       photo,
@@ -836,8 +925,8 @@ function generateAttendanceCsv(records) {
 }
 
 // 12. Admin: Attendance List with TENANT ISOLATION and Mode, State, District, and Team Filters
-router.get('/admin/attendance', (req, res) => {
-  const employerId = resolveEmployerId(req);
+router.get('/admin/attendance', requireAuthenticatedAdmin, (req, res) => {
+  const employerId = req.employerId;
   const { work_mode, status, state, district, team_id, search } = req.query;
 
   const records = getFilteredAttendanceRecords({
@@ -854,9 +943,9 @@ router.get('/admin/attendance', (req, res) => {
 });
 
 // 12a. Admin: Export Attendance Sheet in Excel .CSV Format
-router.get('/admin/attendance/export.csv', (req, res) => {
+router.get('/admin/attendance/export.csv', requireAuthenticatedAdmin, (req, res) => {
   try {
-    const employerId = resolveEmployerId(req);
+    const employerId = req.employerId;
     const { work_mode, status, state, district, team_id, search } = req.query;
 
     const records = getFilteredAttendanceRecords({
@@ -879,14 +968,14 @@ router.get('/admin/attendance/export.csv', (req, res) => {
     res.send(csvData);
   } catch (err) {
     console.error('Error generating attendance CSV export:', err);
-    res.status(500).json({ error: 'Failed to export attendance CSV' });
+    res.status(500).json({ error: isProductionEnvironment() ? 'An internal server error occurred.' : 'Failed to export attendance CSV' });
   }
 });
 
 // 13. Admin: Simultaneous Multi-State and District Attendance Matrix
-router.get('/admin/attendance/matrix', (req, res) => {
+router.get('/admin/attendance/matrix', requireAuthenticatedAdmin, (req, res) => {
   try {
-    const employerId = resolveEmployerId(req);
+    const employerId = req.employerId;
     const { date } = req.query;
     const matrix = teamService.getMultiStateAttendanceMatrix(employerId, date);
     res.json({
@@ -897,13 +986,14 @@ router.get('/admin/attendance/matrix', (req, res) => {
       matrix
     });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    console.error('Error fetching attendance matrix:', err);
+    res.status(500).json({ success: false, error: isProductionEnvironment() ? 'An internal server error occurred.' : err.message });
   }
 });
 
 // 14. Admin: Single Attendance Detailed Timeline
-router.get('/admin/attendance/:id', (req, res) => {
-  const employerId = resolveEmployerId(req);
+router.get('/admin/attendance/:id', requireAuthenticatedAdmin, (req, res) => {
+  const employerId = req.employerId;
   const record = db.prepare(`
     SELECT a.*, e.name as employee_name, e.department, e.designation, e.email,
            COALESCE(t.name, 'Direct Assignment') as team_name,
@@ -960,17 +1050,17 @@ router.get('/geo/states-districts', (req, res) => {
 });
 
 // 13e. List Teams for Employer
-router.get('/teams', (req, res) => {
-  const employerId = resolveEmployerId(req);
+router.get('/teams', requireAuthenticatedAdmin, (req, res) => {
+  const employerId = req.employerId;
   const { state, district } = req.query;
   const teams = teamService.listTeams(employerId, state, district);
   res.json({ success: true, employer_id: employerId, teams });
 });
 
 // 13f. Create Team by State and District
-router.post('/teams', (req, res) => {
+router.post('/teams', requireAuthenticatedAdmin, (req, res) => {
   try {
-    const employerId = resolveEmployerId(req);
+    const employerId = req.employerId;
     const { name, state, district, description } = req.body;
     const newTeam = teamService.createTeam(employerId, { name, state, district, description });
     res.status(201).json({ success: true, team: newTeam });
@@ -980,9 +1070,9 @@ router.post('/teams', (req, res) => {
 });
 
 // 13g. Assign Employee to Team
-router.post('/teams/assign', (req, res) => {
+router.post('/teams/assign', requireAuthenticatedAdmin, (req, res) => {
   try {
-    const employerId = resolveEmployerId(req);
+    const employerId = req.employerId;
     const { employee_id, team_id } = req.body;
     const result = teamService.assignEmployeeTeam(employerId, employee_id, team_id);
     res.json(result);
@@ -991,17 +1081,15 @@ router.post('/teams/assign', (req, res) => {
   }
 });
 
-
-
 // 14. Admin: Security Audit Logs with TENANT ISOLATION
-router.get('/admin/audit-logs', (req, res) => {
-  const employerId = resolveEmployerId(req);
+router.get('/admin/audit-logs', requireAuthenticatedAdmin, (req, res) => {
+  const employerId = req.employerId;
   const limit = Math.min(200, parseInt(req.query.limit || '100', 10));
   const logs = db.prepare(`
     SELECT l.*, e.name as employee_name
     FROM audit_logs l
     LEFT JOIN employees e ON l.employee_id = e.id
-    WHERE l.employer_id = ? OR l.employer_id IS NULL
+    WHERE l.employer_id = ?
     ORDER BY l.timestamp DESC
     LIMIT ?
   `).all(employerId, limit);
@@ -1010,14 +1098,14 @@ router.get('/admin/audit-logs', (req, res) => {
 });
 
 // 15. Admin: Organization Settings Get & Update for Specific Employer
-router.get('/admin/settings', (req, res) => {
-  const employerId = resolveEmployerId(req);
+router.get('/admin/settings', requireAuthenticatedAdmin, (req, res) => {
+  const employerId = req.employerId;
   const settings = db.prepare('SELECT id, name, office_name, office_lat, office_lng, geofence_radius_m, max_gps_accuracy_m, geofence_policy, shift_hours, timezone, admin_username FROM organizations WHERE id = ?').get(employerId);
   res.json({ success: true, settings });
 });
 
-router.post('/admin/settings', (req, res) => {
-  const employerId = resolveEmployerId(req);
+router.post('/admin/settings', requireAuthenticatedAdmin, (req, res) => {
+  const employerId = req.employerId;
   const {
     office_name,
     office_lat,
@@ -1066,10 +1154,10 @@ router.post('/admin/settings', (req, res) => {
 });
 
 // 15b. Set Current Live Coordinates as Registered Office Location
-router.post('/settings/set-current-office', (req, res) => {
+router.post('/settings/set-current-office', requireAuthenticatedAdmin, (req, res) => {
   try {
-    const { employer_id, latitude, longitude, office_name } = req.body;
-    const empId = employer_id || resolveEmployerId(req);
+    const { latitude, longitude, office_name } = req.body;
+    const empId = req.employerId;
 
     if (latitude === undefined || longitude === undefined) {
       return res.status(400).json({ success: false, error: 'Latitude and longitude required.' });
@@ -1093,13 +1181,14 @@ router.post('/settings/set-current-office', (req, res) => {
     const updated = db.prepare('SELECT * FROM organizations WHERE id = ?').get(empId);
     res.json({ success: true, message: 'Office location synchronized to your current GPS coordinates.', settings: updated });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    console.error('Error setting current office:', err);
+    res.status(500).json({ success: false, error: isProductionEnvironment() ? 'An internal server error occurred.' : err.message });
   }
 });
 
 // 16. Admin: REDCap Data
-router.get('/admin/redcap/records', (req, res) => {
-  const employerId = resolveEmployerId(req);
+router.get('/admin/redcap/records', requireAuthenticatedAdmin, (req, res) => {
+  const employerId = req.employerId;
   const mockData = redcapClient.getMockData();
   const employerRecords = (mockData.records || []).filter(r => r.employer_id === employerId);
   
@@ -1116,7 +1205,7 @@ router.get('/admin/redcap/records', (req, res) => {
 });
 
 // 17. Admin: Download Official REDCap CSV Data Dictionary
-router.get('/admin/redcap/data-dictionary.csv', (req, res) => {
+router.get('/admin/redcap/data-dictionary.csv', requireAuthenticatedAdmin, (req, res) => {
   const csv = redcapClient.generateDataDictionaryCsv();
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', 'attachment; filename="REDCap_Attendance_Data_Dictionary.csv"');

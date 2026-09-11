@@ -1,6 +1,7 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 const dbPath = path.join(__dirname, '../../attendance.db');
 const db = new Database(dbPath);
@@ -142,21 +143,36 @@ function initSchema() {
       timestamp INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_rate_limits_key_ts ON auth_rate_limits (rate_key, timestamp);
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      session_type TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      employer_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      last_activity TEXT NOT NULL,
+      is_revoked INTEGER NOT NULL DEFAULT 0,
+      client_ip TEXT,
+      user_agent TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_sessions_token_active ON sessions (id, is_revoked, expires_at);
+    CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions (user_id, is_revoked);
   `);
 
   // Migrate columns if upgrading existing db
   try {
     const orgColumns = db.prepare('PRAGMA table_info(organizations)').all().map(c => c.name);
     if (!orgColumns.includes('admin_username')) {
-      db.exec("ALTER TABLE organizations ADD COLUMN admin_username TEXT NOT NULL DEFAULT 'admin'");
+      db.exec("ALTER TABLE organizations ADD COLUMN admin_username TEXT");
     }
     if (!orgColumns.includes('admin_password')) {
-      db.exec("ALTER TABLE organizations ADD COLUMN admin_password TEXT NOT NULL DEFAULT 'admin123'");
+      db.exec("ALTER TABLE organizations ADD COLUMN admin_password TEXT");
     }
 
     const empColumns = db.prepare('PRAGMA table_info(employees)').all().map(c => c.name);
     if (!empColumns.includes('password')) {
-      db.exec("ALTER TABLE employees ADD COLUMN password TEXT NOT NULL DEFAULT 'Password@123'");
+      db.exec("ALTER TABLE employees ADD COLUMN password TEXT");
     }
     if (!empColumns.includes('team_id')) {
       db.exec("ALTER TABLE employees ADD COLUMN team_id TEXT");
@@ -213,9 +229,37 @@ function initSchema() {
       geofence_policy=excluded.geofence_policy,
       max_gps_accuracy_m=excluded.max_gps_accuracy_m,
       admin_username=excluded.admin_username,
-      admin_password=excluded.admin_password,
+      admin_password=CASE WHEN organizations.admin_password LIKE 'scrypt$%' THEN organizations.admin_password ELSE excluded.admin_password END,
       updated_at=excluded.updated_at
   `);
+
+  // Resolve initial admin password securely
+  const existingOrg = db.prepare('SELECT admin_password FROM organizations WHERE id = ?').get('ORG-001');
+  let adminPasswordHash = existingOrg?.admin_password;
+
+  if (!adminPasswordHash || !adminPasswordHash.startsWith('scrypt$')) {
+    const isProd = (process.env.NODE_ENV || process.env.APP_ENV || '').toLowerCase().trim() === 'production';
+    if (process.env.ADMIN_INITIAL_PASSWORD) {
+      const salt = crypto.randomBytes(16).toString('hex');
+      const derivedKey = crypto.scryptSync(process.env.ADMIN_INITIAL_PASSWORD, salt, 64);
+      adminPasswordHash = `scrypt$${salt}$${derivedKey.toString('hex')}`;
+    } else if (existingOrg?.admin_password) {
+      const salt = crypto.randomBytes(16).toString('hex');
+      const derivedKey = crypto.scryptSync(existingOrg.admin_password, salt, 64);
+      adminPasswordHash = `scrypt$${salt}$${derivedKey.toString('hex')}`;
+    } else if (isProd) {
+      const generatedSecret = crypto.randomBytes(24).toString('hex');
+      const salt = crypto.randomBytes(16).toString('hex');
+      const derivedKey = crypto.scryptSync(generatedSecret, salt, 64);
+      adminPasswordHash = `scrypt$${salt}$${derivedKey.toString('hex')}`;
+      console.warn('[SECURITY NOTICE] Initial production admin password was generated. Set ADMIN_INITIAL_PASSWORD in environment.');
+    } else {
+      // Development mode default password (scrypt hashed)
+      const salt = crypto.randomBytes(16).toString('hex');
+      const derivedKey = crypto.scryptSync('Aiims@123', salt, 64);
+      adminPasswordHash = `scrypt$${salt}$${derivedKey.toString('hex')}`;
+    }
+  }
 
   // Employer: AIIMS (AIIMS Campus, New Delhi)
   upsertOrg.run(
@@ -230,7 +274,7 @@ function initSchema() {
     8.0,
     'Asia/Kolkata',
     'aiims_admin',
-    'Aiims@123',
+    adminPasswordHash,
     new Date().toISOString()
   );
 
