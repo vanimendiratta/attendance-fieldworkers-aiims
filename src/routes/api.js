@@ -192,6 +192,24 @@ function generateEmployeeId(employerId = 'ORG-001') {
   return `EMP-${row.last_seq}`;
 }
 
+// 4a-pre. CHECK EMPLOYEE ID AVAILABILITY (real-time inline validation before signup)
+router.get('/auth/employee/check-id', (req, res) => {
+  const { employee_id, employer_id } = req.query;
+  if (!employee_id || !employee_id.trim()) {
+    return res.status(400).json({ success: false, error: 'employee_id is required.' });
+  }
+  const trimmedId = employee_id.trim().toUpperCase();
+  const existing = db.prepare('SELECT id, name FROM employees WHERE UPPER(id) = ?').get(trimmedId);
+  if (existing) {
+    return res.json({
+      success: true,
+      available: false,
+      error: `Employee ID '${existing.id}' is already registered. Please use a different ID.`
+    });
+  }
+  return res.json({ success: true, available: true });
+});
+
 // 4a. EMPLOYEE SIGN UP (Registration with basic enquiries + face biometric enrollment)
 router.post('/auth/employee/signup', authService.rateLimitMiddleware(authService.signupRateLimiter, 'Signup'), (req, res) => {
   const {
@@ -256,10 +274,10 @@ router.post('/auth/employee/signup', authService.rateLimitMiddleware(authService
 
   const newEmpId = manualEmpId || generateEmployeeId(effectiveOrgId);
 
-  // Check if manual employee ID already exists
-  const existingById = db.prepare('SELECT id, name FROM employees WHERE id = ?').get(newEmpId);
+  // Check if manual employee ID already exists (case-insensitive to prevent EMP-1001 / emp-1001 duplicates)
+  const existingById = db.prepare('SELECT id, name FROM employees WHERE UPPER(id) = ?').get(newEmpId.toUpperCase());
   if (existingById) {
-    return res.status(409).json({ success: false, error: `Employee ID '${newEmpId}' is already registered. Please sign in or enter a different ID.` });
+    return res.status(409).json({ success: false, error: `Employee ID '${existingById.id}' is already registered. Please sign in or use a different ID.` });
   }
 
   // Derive unique corporate email if not entered manually

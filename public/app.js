@@ -1275,6 +1275,96 @@ if (employeeSignUpForm) {
   });
 }
 
+// Real-time Employee ID availability check (debounced, triggers on input)
+(function wireSignupIdCheck() {
+  const idInput = document.getElementById('signupEmployeeId');
+  const iconEl = document.getElementById('signupIdStatusIcon');
+  const msgEl = document.getElementById('signupIdStatusMsg');
+  const submitBtn = document.getElementById('btnSubmitSignup');
+  if (!idInput || !iconEl || !msgEl) return;
+
+  let debounceTimer = null;
+  let lastCheckedId = '';
+  let idAvailable = null; // null = unknown, true = ok, false = taken
+
+  function setIdStatus(status, message) {
+    // status: 'checking' | 'available' | 'taken' | 'reset'
+    iconEl.style.display = 'none';
+    msgEl.style.display = 'none';
+    if (status === 'reset') {
+      idAvailable = null;
+      return;
+    }
+    if (status === 'checking') {
+      iconEl.textContent = '⏳';
+      iconEl.style.color = '#94a3b8';
+      iconEl.style.display = 'inline';
+      msgEl.textContent = 'Checking availability…';
+      msgEl.style.color = '#94a3b8';
+      msgEl.style.display = 'block';
+      idAvailable = null;
+      return;
+    }
+    if (status === 'available') {
+      iconEl.textContent = '✅';
+      iconEl.style.display = 'inline';
+      msgEl.textContent = message || 'ID is available ✓';
+      msgEl.style.color = '#22c55e';
+      msgEl.style.display = 'block';
+      idAvailable = true;
+      return;
+    }
+    if (status === 'taken') {
+      iconEl.textContent = '❌';
+      iconEl.style.display = 'inline';
+      msgEl.textContent = message || 'ID already registered';
+      msgEl.style.color = '#ef4444';
+      msgEl.style.display = 'block';
+      idAvailable = false;
+      return;
+    }
+  }
+
+  idInput.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    const val = idInput.value.trim();
+    if (!val || val.length < 2) {
+      setIdStatus('reset');
+      return;
+    }
+    if (val === lastCheckedId) return;
+    setIdStatus('checking');
+    debounceTimer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/auth/employee/check-id?employee_id=${encodeURIComponent(val)}`);
+        const data = await res.json().catch(() => null);
+        lastCheckedId = val;
+        if (data && data.available === true) {
+          setIdStatus('available', `ID '${val}' is available`);
+        } else if (data && data.available === false) {
+          setIdStatus('taken', data.error || `ID '${val}' is already registered`);
+        } else {
+          setIdStatus('reset');
+        }
+      } catch (e) {
+        setIdStatus('reset');
+      }
+    }, 500);
+  });
+
+  // Block form submission if ID is confirmed taken
+  if (employeeSignUpForm) {
+    employeeSignUpForm.addEventListener('submit', (e) => {
+      if (idAvailable === false) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        DOM.loginErrorMessage.textContent = `Employee ID '${idInput.value.trim()}' is already registered. Please use a different ID.`;
+        DOM.loginErrorBanner.style.display = 'flex';
+      }
+    }, true); // capture phase so it runs before the main handler
+  }
+})();
+
 // Bind Screenlock Face & Signup buttons
 document.getElementById('btnTriggerFaceScan')?.addEventListener('click', () => triggerFaceRecognition());
 document.getElementById('btnStartSignupCamera')?.addEventListener('click', startSignupFaceCamera);
