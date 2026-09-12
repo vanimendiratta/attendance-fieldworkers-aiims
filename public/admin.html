@@ -353,26 +353,28 @@
               </div>
             </div>
 
-            <table class="data-table" id="attendanceMainTable">
-              <thead>
-                <tr>
-                  <th>Employee</th>
-                  <th>Team & Territory</th>
-                  <th>Department</th>
-                  <th>Check-In Time</th>
-                  <th>Check-In Photo</th>
-                  <th>Check-In Location</th>
-                  <th>Checkout Time</th>
-                  <th>Checkout Photo</th>
-                  <th>Net Hours</th>
-                  <th>Status</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody id="attendanceMainTableBody">
-                <tr><td colspan="11" style="text-align: center; color: var(--color-text-muted); padding: 32px;">Loading attendance records...</td></tr>
-              </tbody>
-            </table>
+            <div class="table-responsive-wrap">
+              <table class="data-table" id="attendanceMainTable">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Team &amp; Territory</th>
+                    <th>Department</th>
+                    <th>Check-In Time</th>
+                    <th>Check-In Photo</th>
+                    <th>Check-In Location</th>
+                    <th>Checkout Time</th>
+                    <th>Checkout Photo</th>
+                    <th>Net Hours</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="attendanceMainTableBody">
+                  <tr><td colspan="11" style="text-align: center; color: var(--color-text-muted); padding: 32px;">Loading attendance records...</td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
 
@@ -819,6 +821,14 @@
     </div>
   </div>
 
-  <script src="/admin.js?v=6"></script>
+  <script src="/admin.js?v=7"></script>
+
+  <!-- Photo Lightbox Overlay -->
+  <div id="photoLightboxOverlay" role="dialog" aria-modal="true" aria-label="Photo preview">
+    <button id="photoLightboxClose" onclick="closePhotoLightbox()" title="Close (Esc)">&times;</button>
+    <img id="photoLightboxImg" src="" alt="Attendance Photo" />
+    <div id="photoLightboxLabel"></div>
+  </div>
+
 </body>
 </html>

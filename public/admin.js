@@ -1221,3 +1221,34 @@ async function handleCreateTeam(e) {
   }
 }
 
+/**
+ * Photo Lightbox — opens full-resolution photo in a dark overlay.
+ * Called from attendance table thumbnails (checkin & checkout photos).
+ * @param {string} src  - Photo URL
+ * @param {string} [label] - Optional label shown at bottom
+ */
+function openPhotoLightbox(src, label) {
+  const overlay = document.getElementById('photoLightboxOverlay');
+  const img     = document.getElementById('photoLightboxImg');
+  const lbl     = document.getElementById('photoLightboxLabel');
+  if (!overlay || !img) return;
+  img.src = src;
+  if (lbl) lbl.textContent = label || '';
+  overlay.classList.add('active');
+  document.body.style.overflow = 'hidden';
+  overlay.onclick = (e) => { if (e.target === overlay) closePhotoLightbox(); };
+}
+
+function closePhotoLightbox() {
+  const overlay = document.getElementById('photoLightboxOverlay');
+  const img     = document.getElementById('photoLightboxImg');
+  if (!overlay) return;
+  overlay.classList.remove('active');
+  document.body.style.overflow = '';
+  if (img) img.src = '';
+}
+
+// Close lightbox on Escape key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closePhotoLightbox();
+});
