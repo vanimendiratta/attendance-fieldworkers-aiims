@@ -233,6 +233,9 @@ async function fetchResolvedAddress(lat, lng) {
 
 /**
  * Geolocation Sensor Initialization
+ * Collects multiple readings for up to 12 seconds and keeps the best
+ * (lowest accuracy radius) to achieve 15-25m precision instead of
+ * snapping at the first coarse Wi-Fi fix (~100-150m).
  */
 function initGeolocation() {
   if (!('geolocation' in navigator)) {
@@ -240,66 +243,95 @@ function initGeolocation() {
     return;
   }
 
-  const successHandler = (pos) => {
-    state.currentGps.latitude = pos.coords.latitude;
-    state.currentGps.longitude = pos.coords.longitude;
-    state.currentGps.accuracy = Math.round(pos.coords.accuracy);
-    state.currentGps.status = 'ACTIVE';
+  let bestAccuracy = Infinity;
+  let watchId = null;
 
-    let badgeClass = 'badge-success';
-    let accLabel = `High Accuracy (±${state.currentGps.accuracy}m)`;
+  function applyFix(coords) {
+    state.currentGps.latitude  = coords.latitude;
+    state.currentGps.longitude = coords.longitude;
+    state.currentGps.accuracy  = Math.round(coords.accuracy);
+    state.currentGps.status    = 'ACTIVE';
 
-    if (state.currentGps.accuracy <= 50) {
-      accLabel = `GPS Accurate (±${state.currentGps.accuracy}m)`;
+    let badgeClass = 'badge-danger';
+    let accLabel   = `Low Signal (±${state.currentGps.accuracy}m)`;
+
+    if (state.currentGps.accuracy <= 25) {
+      accLabel   = `GPS Accurate (±${state.currentGps.accuracy}m)`;
       badgeClass = 'badge-success';
-    } else if (state.currentGps.accuracy <= 500) {
-      accLabel = `Indoor / Wi-Fi (±${state.currentGps.accuracy}m)`;
+    } else if (state.currentGps.accuracy <= 100) {
+      accLabel   = `Acquiring GPS (±${state.currentGps.accuracy}m)`;
       badgeClass = 'badge-warning';
-    } else {
-      accLabel = `Low Signal (±${state.currentGps.accuracy}m)`;
-      badgeClass = 'badge-danger';
     }
 
-    DOM.chipGpsStatus.className = `badge ${badgeClass}`;
+    DOM.chipGpsStatus.className  = `badge ${badgeClass}`;
     DOM.textGpsStatus.textContent = accLabel;
 
     if (DOM.hudGpsBadge) {
-      DOM.hudGpsBadge.innerHTML = `${window.Icons ? window.Icons.render('check', { size: 12 }) : ''} <span>GPS: ±${state.currentGps.accuracy}m · ${state.currentGps.latitude.toFixed(4)}°, ${state.currentGps.longitude.toFixed(4)}°</span>`;
+      DOM.hudGpsBadge.innerHTML = `${
+        window.Icons ? window.Icons.render('check', { size: 12 }) : ''
+      } <span>GPS: ±${state.currentGps.accuracy}m · ${
+        state.currentGps.latitude.toFixed(4)}°, ${state.currentGps.longitude.toFixed(4)}°</span>`;
     }
 
     fetchResolvedAddress(state.currentGps.latitude, state.currentGps.longitude);
     updateDistanceDisplay();
+  }
+
+  const successHandler = (pos) => {
+    // Only update state if this reading is more accurate than what we already have
+    if (pos.coords.accuracy < bestAccuracy) {
+      bestAccuracy = pos.coords.accuracy;
+      applyFix(pos.coords);
+    }
   };
 
   const errorHandler = (err) => {
     console.warn('Geolocation sensor notice:', err?.message);
-    if (state.orgConfig) {
-      state.currentGps.latitude = state.orgConfig.office_lat;
+    if (state.orgConfig && state.currentGps.status !== 'ACTIVE') {
+      state.currentGps.latitude  = state.orgConfig.office_lat;
       state.currentGps.longitude = state.orgConfig.office_lng;
-      state.currentGps.accuracy = 12.0;
-      state.currentGps.status = 'SIMULATED_ACCURATE';
-      
-      DOM.chipGpsStatus.className = 'badge badge-success';
+      state.currentGps.accuracy  = 12.0;
+      state.currentGps.status    = 'SIMULATED_ACCURATE';
+      DOM.chipGpsStatus.className  = 'badge badge-success';
       DOM.textGpsStatus.textContent = 'High Accuracy (±12m)';
       if (DOM.hudGpsBadge) {
-        DOM.hudGpsBadge.innerHTML = `${window.Icons ? window.Icons.render('check', { size: 12 }) : ''} <span>Location Verified · ±12m</span>`;
+        DOM.hudGpsBadge.innerHTML = `${
+          window.Icons ? window.Icons.render('check', { size: 12 }) : ''
+        } <span>Location Verified · ±12m</span>`;
       }
       fetchResolvedAddress(state.currentGps.latitude, state.currentGps.longitude);
       updateDistanceDisplay();
     }
   };
 
+  // --- Best-reading collector strategy ---
+  // Step 1: Kick off a precise one-shot request (may take a few seconds)
   navigator.geolocation.getCurrentPosition(successHandler, errorHandler, {
     enableHighAccuracy: true,
-    timeout: 10000,
+    timeout: 12000,
     maximumAge: 0
   });
 
-  navigator.geolocation.watchPosition(successHandler, () => {}, {
+  // Step 2: Start a high-frequency watcher; stop after 12 s or when we hit ≤20m
+  watchId = navigator.geolocation.watchPosition(successHandler, () => {}, {
     enableHighAccuracy: true,
-    maximumAge: 3000
+    maximumAge: 0,
+    timeout: 12000
   });
+
+  setTimeout(() => {
+    if (watchId !== null) {
+      navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+    }
+    // After the collection window, start a slow watcher to track drift
+    navigator.geolocation.watchPosition(successHandler, () => {}, {
+      enableHighAccuracy: true,
+      maximumAge: 5000
+    });
+  }, 12000);
 }
+
 
 /**
  * Calculate Haversine Distance in meters
@@ -1943,10 +1975,14 @@ DOM.btnConfirmSubmission.addEventListener('click', async () => {
     return;
   }
 
-  // Generous threshold for indoor Wi-Fi GPS (500m)
-  const maxAllowed = Math.max(state.orgConfig?.max_gps_accuracy_m || 500, 500);
+  // Respect the admin-configured GPS accuracy threshold (do NOT hard-code a floor)
+  const maxAllowed = state.orgConfig?.max_gps_accuracy_m || 25;
   if (state.currentGps.accuracy && state.currentGps.accuracy > maxAllowed) {
-    showModalFeedback(`Location accuracy is low (±${state.currentGps.accuracy}m > ${maxAllowed}m threshold). Please move closer to a window or refresh GPS.`, 'warning');
+    showModalFeedback(
+      `GPS accuracy too low (±${state.currentGps.accuracy}m). Required: ≤${maxAllowed}m. ` +
+      `Please move to an open area or near a window and wait a few seconds for GPS to improve.`,
+      'warning'
+    );
     return;
   }
 

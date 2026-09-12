@@ -284,7 +284,7 @@ function initSchema() {
     77.2136,
     1000,
     'ALLOW_WITH_FLAG',
-    500,
+    25,           // max GPS accuracy: require ≤25m for valid check-in/out
     8.0,
     'Asia/Kolkata',
     'aiims_admin',
