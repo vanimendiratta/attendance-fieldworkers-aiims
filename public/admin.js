@@ -132,8 +132,18 @@ function initAuth() {
   showAdminLoginModal();
 }
 
-function showAdminLoginModal() {
-  document.getElementById('adminLoginModal').classList.add('active');
+function showAdminLoginModal(msg) {
+  const modal = document.getElementById('adminLoginModal');
+  if (modal) modal.classList.add('active');
+  const err = document.getElementById('adminLoginError');
+  if (err) {
+    if (msg) {
+      err.textContent = msg;
+      err.style.display = 'block';
+    } else {
+      err.style.display = 'none';
+    }
+  }
 }
 
 async function handleAdminLogin(e) {
@@ -233,15 +243,30 @@ function getAuthHeaders() {
 }
 
 /**
+ * Authenticated API Fetch Wrapper
+ * Intercepts 401 Unauthorized responses, clears stale sessions and displays the sign-in modal
+ */
+async function adminFetch(url, options = {}) {
+  const headers = Object.assign({}, getAuthHeaders(), options.headers || {});
+  const res = await fetch(url, { ...options, headers });
+  if (res.status === 401) {
+    console.warn('[AUTH] Admin session invalid or expired on backend. Requiring sign-in.');
+    localStorage.removeItem('apex_employer_admin_session');
+    currentEmployerSession = null;
+    showAdminLoginModal('Session expired. Please sign in with your administrator credentials.');
+    throw new Error('401 Unauthorized');
+  }
+  return res;
+}
+
+/**
  * Load Dashboard Editorial Data
  */
 async function loadDashboardData() {
   if (!currentEmployerSession) return;
 
   try {
-    const res = await fetch(`/api/admin/attendance?employer_id=${currentEmployerSession.employer_id}`, {
-      headers: getAuthHeaders()
-    });
+    const res = await adminFetch(`/api/admin/attendance?employer_id=${currentEmployerSession.employer_id}`);
     const data = await res.json();
     if (!data.success) return;
 
@@ -357,9 +382,7 @@ async function loadAttendanceRecords() {
   if (!currentEmployerSession) return;
 
   try {
-    const res = await fetch(`/api/admin/attendance?employer_id=${currentEmployerSession.employer_id}`, {
-      headers: getAuthHeaders()
-    });
+    const res = await adminFetch(`/api/admin/attendance?employer_id=${currentEmployerSession.employer_id}`);
     const data = await res.json();
     if (!data.success) return;
 
@@ -428,9 +451,7 @@ async function handleExportAttendanceCsv() {
     if (district !== 'ALL') params.set('district', district);
     if (team !== 'ALL') params.set('team_id', team);
 
-    const res = await fetch(`/api/admin/attendance/export.csv?${params.toString()}`, {
-      headers: getAuthHeaders()
-    });
+    const res = await adminFetch(`/api/admin/attendance/export.csv?${params.toString()}`);
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -593,9 +614,7 @@ async function openAttendanceDrawer(recordId) {
   if (!currentEmployerSession) return;
 
   try {
-    const res = await fetch(`/api/admin/attendance/${recordId}?employer_id=${currentEmployerSession.employer_id}`, {
-      headers: getAuthHeaders()
-    });
+    const res = await adminFetch(`/api/admin/attendance/${recordId}?employer_id=${currentEmployerSession.employer_id}`);
     const data = await res.json();
     if (!data.success) return;
 
@@ -729,9 +748,7 @@ async function loadEmployees() {
   if (!currentEmployerSession) return;
 
   try {
-    const res = await fetch(`/api/employees?employer_id=${currentEmployerSession.employer_id}`, {
-      headers: getAuthHeaders()
-    });
+    const res = await adminFetch(`/api/employees?employer_id=${currentEmployerSession.employer_id}`);
     const data = await res.json();
     if (!data.success) return;
 
@@ -769,9 +786,7 @@ async function loadSettings() {
   if (!currentEmployerSession) return;
 
   try {
-    const res = await fetch(`/api/admin/settings?employer_id=${currentEmployerSession.employer_id}`, {
-      headers: getAuthHeaders()
-    });
+    const res = await adminFetch(`/api/admin/settings?employer_id=${currentEmployerSession.employer_id}`);
     const data = await res.json();
     if (!data.success || !data.settings) return;
 
@@ -808,9 +823,8 @@ async function handleSettingsSubmit(e) {
   };
 
   try {
-    const res = await fetch('/api/admin/settings', {
+    const res = await adminFetch('/api/admin/settings', {
       method: 'POST',
-      headers: getAuthHeaders(),
       body: JSON.stringify(payload)
     });
     const data = await res.json();
@@ -831,9 +845,7 @@ async function loadAuditLogs() {
   if (!currentEmployerSession) return;
 
   try {
-    const res = await fetch(`/api/admin/audit-logs?employer_id=${currentEmployerSession.employer_id}&limit=50`, {
-      headers: getAuthHeaders()
-    });
+    const res = await adminFetch(`/api/admin/audit-logs?employer_id=${currentEmployerSession.employer_id}&limit=50`);
     const data = await res.json();
     if (!data.success) return;
 
@@ -877,9 +889,7 @@ async function loadRedcapData() {
   if (!currentEmployerSession) return;
 
   try {
-    const res = await fetch(`/api/admin/redcap/records?employer_id=${currentEmployerSession.employer_id}`, {
-      headers: getAuthHeaders()
-    });
+    const res = await adminFetch(`/api/admin/redcap/records?employer_id=${currentEmployerSession.employer_id}`);
     const data = await res.json();
     if (!data.success) return;
 
@@ -887,7 +897,7 @@ async function loadRedcapData() {
     const records = data.records || [];
 
     if (records.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 24px; color: var(--color-text-muted);">No records synced to REDCap for this employer yet.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 24px; color: var(--color-text-muted); padding: 24px;">No records synced to REDCap for this employer yet.</td></tr>';
       return;
     }
 
@@ -965,9 +975,7 @@ async function loadMultiStateMatrix() {
   if (!container) return;
 
   try {
-    const res = await fetch(`/api/admin/attendance/matrix?employer_id=${currentEmployerSession.employer_id}`, {
-      headers: getAuthHeaders()
-    });
+    const res = await adminFetch(`/api/admin/attendance/matrix?employer_id=${currentEmployerSession.employer_id}`);
     const data = await res.json();
     if (!data.success || !data.matrix) return;
 
@@ -1074,9 +1082,7 @@ window.filterByTeam = filterByTeam;
 async function loadTeamsView() {
   if (!currentEmployerSession) return;
   try {
-    const res = await fetch(`/api/teams?employer_id=${currentEmployerSession.employer_id}`, {
-      headers: getAuthHeaders()
-    });
+    const res = await adminFetch(`/api/teams?employer_id=${currentEmployerSession.employer_id}`);
     const data = await res.json();
     if (!data.success) return;
 
@@ -1174,9 +1180,8 @@ async function handleCreateTeam(e) {
   btn.textContent = 'Creating Team...';
 
   try {
-    const res = await fetch('/api/teams', {
+    const res = await adminFetch('/api/teams', {
       method: 'POST',
-      headers: getAuthHeaders(),
       body: JSON.stringify({
         employer_id: currentEmployerSession.employer_id,
         state,
