@@ -208,6 +208,8 @@ function setupLoggedInAdmin(session) {
   loadSettings();
   if (window.location.hash) {
     handleHashRoute();
+  } else {
+    switchView('viewDashboard');
   }
 }
 
