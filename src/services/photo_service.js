@@ -89,8 +89,9 @@ function processCapturedPhoto(inputData, destinationSubdir = 'checkins') {
   // Compute cryptographic SHA-256 hash for anti-replay & integrity verification
   const hash = crypto.createHash('sha256').update(buffer).digest('hex');
 
-  // Save to disk
-  const uploadDir = path.join(__dirname, `../../uploads/${destinationSubdir}`);
+  // Save to disk — use UPLOADS_PATH env var on Render (persistent /data volume) or fall back to project root
+  const uploadsRoot = process.env.UPLOADS_PATH || path.join(__dirname, '../../uploads');
+  const uploadDir = path.join(uploadsRoot, destinationSubdir);
   if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
   }

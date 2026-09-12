@@ -10,6 +10,13 @@
   status = 200
   force = true
 
+# Proxy all /uploads/* (photos) to the Render backend
+[[redirects]]
+  from = "/uploads/*"
+  to = "https://attendance-fieldworkers-aiims.onrender.com/uploads/:splat"
+  status = 200
+  force = true
+
 # SPA fallback for all other routes
 [[redirects]]
   from = "/*"

@@ -17,3 +17,5 @@ services:
         value: /data/attendance.db
       - key: PORT
         value: 10000
+      - key: UPLOADS_PATH
+        value: /data/uploads

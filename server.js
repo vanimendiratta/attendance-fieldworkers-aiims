@@ -55,14 +55,14 @@ app.use(cors({
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
-// Ensure upload folders exist
-const uploadsDir = path.join(__dirname, 'uploads');
+// Ensure upload folders exist — use UPLOADS_PATH env var (Render persistent /data volume) or project root
+const uploadsDir = process.env.UPLOADS_PATH || path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 if (!fs.existsSync(path.join(uploadsDir, 'checkins'))) fs.mkdirSync(path.join(uploadsDir, 'checkins'), { recursive: true });
 if (!fs.existsSync(path.join(uploadsDir, 'checkouts'))) fs.mkdirSync(path.join(uploadsDir, 'checkouts'), { recursive: true });
 
 // Static assets
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(uploadsDir));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // API routes
