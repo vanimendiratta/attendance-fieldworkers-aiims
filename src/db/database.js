@@ -292,38 +292,10 @@ function initSchema() {
     new Date().toISOString()
   );
 
-  // Comprehensive cleanup: Purge all dummy employees, legacy test teams, and associated dummy attendance
+  // One-time cleanup: Remove the legacy ORG-002 dummy organization and its associated teams.
+  // NOTE: We do NOT touch employees or attendance records — those belong to real users.
   try {
-    const dummyEmpRows = db.prepare(`
-      SELECT id FROM employees 
-      WHERE name LIKE '%Rajesh Kumar%'
-         OR name LIKE '%Ananya Sharma%'
-         OR name LIKE '%Vikram Malhotra%'
-         OR name LIKE '%Sunita Verma%'
-         OR email LIKE '%@aiims.edu%'
-         OR name LIKE '%Alex%'
-         OR name LIKE '%Marcus%'
-         OR name LIKE '%Priya%'
-         OR name LIKE '%Rohan%'
-         OR name LIKE '%Sarah%'
-         OR name LIKE '%Elena%'
-         OR email LIKE '%apexcorp.internal%'
-         OR email LIKE '%cyberdyne.io%'
-         OR id LIKE '%MANUAL%'
-         OR name LIKE '%Tester%'
-    `).all();
-
-    const dummyEmpIds = dummyEmpRows.map(r => r.id);
-    if (dummyEmpIds.length > 0) {
-      const placeholders = dummyEmpIds.map(() => '?').join(',');
-      db.prepare(`DELETE FROM breaks WHERE attendance_id IN (SELECT id FROM attendance WHERE employee_id IN (${placeholders}))`).run(...dummyEmpIds);
-      db.prepare(`DELETE FROM external_sync_records WHERE employee_id IN (${placeholders})`).run(...dummyEmpIds);
-      db.prepare(`DELETE FROM attendance WHERE employee_id IN (${placeholders})`).run(...dummyEmpIds);
-      db.prepare(`DELETE FROM sessions WHERE user_id IN (${placeholders})`).run(...dummyEmpIds);
-      db.prepare(`DELETE FROM audit_logs WHERE employee_id IN (${placeholders})`).run(...dummyEmpIds);
-      db.prepare(`DELETE FROM employees WHERE id IN (${placeholders})`).run(...dummyEmpIds);
-    }
-    db.prepare(`DELETE FROM teams WHERE employer_id = 'ORG-002' OR name LIKE '%Chennai Coastal Squad%' OR id IN ('TEAM-101', 'TEAM-102', 'TEAM-103', 'TEAM-104')`).run();
+    db.prepare(`DELETE FROM teams WHERE employer_id = 'ORG-002' OR id IN ('TEAM-101', 'TEAM-102', 'TEAM-103', 'TEAM-104')`).run();
     db.prepare(`DELETE FROM organizations WHERE id = 'ORG-002'`).run();
   } catch (cleanErr) {
     console.warn('Cleanup note:', cleanErr.message);
