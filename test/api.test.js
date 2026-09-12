@@ -45,12 +45,18 @@ async function runTests() {
   const photoService = require('../src/services/photo_service');
   const redcapClient = require('../src/redcap/redcap_client');
 
+  // Ensure ephemeral test employee exists for test execution
+  db.prepare(`
+    INSERT OR REPLACE INTO employees (id, employer_id, name, email, department, designation, pin, is_active, created_at, password)
+    VALUES ('EMP-1001', 'ORG-001', 'Test Employee', 'test.runner@aiims.test', 'Dental Research & Healthcare', 'Senior Field Officer (PRS-1)', '1234', 1, datetime('now'), 'Aiims@123')
+  `).run();
+
   const employee = db.prepare('SELECT * FROM employees WHERE id = ?').get('EMP-1001');
   const org = db.prepare('SELECT * FROM organizations WHERE id = ?').get('ORG-001');
 
   assert(employee, 'Employee EMP-1001 must exist');
   assert(org, 'Organization ORG-001 must exist');
-  console.log('✓ Seed data verified');
+  console.log('✓ Test environment verified');
 
   // 1. Test GPS Accuracy Validation
   const goodAccuracy = geoService.validateGpsAccuracy(15, 100);
@@ -255,9 +261,9 @@ async function runTests() {
   db.prepare(`DELETE FROM organizations WHERE id = 'ORG-TENANT-B'`).run();
 
   console.log('\n--- Testing Field Work Multi-Location Attendance ---');
-  db.prepare("DELETE FROM breaks WHERE attendance_id IN (SELECT id FROM attendance WHERE employee_id = 'EMP-1002')").run();
-  db.prepare("DELETE FROM attendance WHERE employee_id = 'EMP-1002'").run();
-  const empFieldWorker = db.prepare('SELECT * FROM employees WHERE id = ?').get('EMP-1002');
+  db.prepare("DELETE FROM breaks WHERE attendance_id IN (SELECT id FROM attendance WHERE employee_id = 'EMP-1001')").run();
+  db.prepare("DELETE FROM attendance WHERE employee_id = 'EMP-1001'").run();
+  const empFieldWorker = db.prepare('SELECT * FROM employees WHERE id = ?').get('EMP-1001');
   const fieldPhoto = `data:image/png;base64,${createFieldPngBuffer().toString('base64')}`;
 
   const fieldCheckin = await attendanceService.processCheckIn({
@@ -297,7 +303,13 @@ async function runTests() {
   assert.strictEqual(fieldCheckout.status, 'CHECK_OUT_SUCCESSFUL');
   const completedFieldRecord = db.prepare('SELECT * FROM attendance WHERE id = ?').get(fieldRecord.id);
   assert.strictEqual(completedFieldRecord.attendance_status, 'COMPLETED');
-  console.log('✓ Field Work Checkout completed successfully without geofence blockage');
+  // Teardown test employee and records
+  db.prepare("DELETE FROM breaks WHERE attendance_id IN (SELECT id FROM attendance WHERE employee_id = 'EMP-1001')").run();
+  db.prepare("DELETE FROM external_sync_records WHERE employee_id = 'EMP-1001'").run();
+  db.prepare("DELETE FROM attendance WHERE employee_id = 'EMP-1001'").run();
+  db.prepare("DELETE FROM sessions WHERE user_id = 'EMP-1001'").run();
+  db.prepare("DELETE FROM audit_logs WHERE employee_id = 'EMP-1001'").run();
+  db.prepare("DELETE FROM employees WHERE id = 'EMP-1001'").run();
 
   console.log('\n🎉 ALL AUTOMATED TESTS PASSED SUCCESSFULLY!\n');
 }

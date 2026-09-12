@@ -753,6 +753,10 @@ async function loadEmployees() {
     if (!data.success) return;
 
     const tbody = document.getElementById('employeesTableBody');
+    if (!data.employees || data.employees.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--color-text-muted); padding: 32px;">No employees registered yet. Use "+ Add Employee" or have employees register via the portal.</td></tr>';
+      return;
+    }
     tbody.innerHTML = data.employees.map(e => `
       <tr>
         <td>

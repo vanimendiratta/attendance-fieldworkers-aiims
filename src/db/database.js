@@ -292,65 +292,42 @@ function initSchema() {
     new Date().toISOString()
   );
 
-  // Clean up any legacy dummy organizations, teams, and employees (Alex, Priya, Marcus, etc.)
+  // Comprehensive cleanup: Purge all dummy employees, legacy test teams, and associated dummy attendance
   try {
-    const dummyEmpIds = db.prepare(`SELECT id FROM employees WHERE name LIKE '%Alex%' OR name LIKE '%Marcus%' OR name LIKE '%Priya%' OR name LIKE '%Rohan%' OR name LIKE '%Sarah%' OR name LIKE '%Elena%' OR email LIKE '%apexcorp.internal%' OR email LIKE '%cyberdyne.io%'`).all().map(r => r.id);
+    const dummyEmpRows = db.prepare(`
+      SELECT id FROM employees 
+      WHERE name LIKE '%Rajesh Kumar%'
+         OR name LIKE '%Ananya Sharma%'
+         OR name LIKE '%Vikram Malhotra%'
+         OR name LIKE '%Sunita Verma%'
+         OR email LIKE '%@aiims.edu%'
+         OR name LIKE '%Alex%'
+         OR name LIKE '%Marcus%'
+         OR name LIKE '%Priya%'
+         OR name LIKE '%Rohan%'
+         OR name LIKE '%Sarah%'
+         OR name LIKE '%Elena%'
+         OR email LIKE '%apexcorp.internal%'
+         OR email LIKE '%cyberdyne.io%'
+         OR id LIKE '%MANUAL%'
+         OR name LIKE '%Tester%'
+    `).all();
+
+    const dummyEmpIds = dummyEmpRows.map(r => r.id);
     if (dummyEmpIds.length > 0) {
       const placeholders = dummyEmpIds.map(() => '?').join(',');
       db.prepare(`DELETE FROM breaks WHERE attendance_id IN (SELECT id FROM attendance WHERE employee_id IN (${placeholders}))`).run(...dummyEmpIds);
+      db.prepare(`DELETE FROM external_sync_records WHERE employee_id IN (${placeholders})`).run(...dummyEmpIds);
       db.prepare(`DELETE FROM attendance WHERE employee_id IN (${placeholders})`).run(...dummyEmpIds);
+      db.prepare(`DELETE FROM sessions WHERE user_id IN (${placeholders})`).run(...dummyEmpIds);
       db.prepare(`DELETE FROM audit_logs WHERE employee_id IN (${placeholders})`).run(...dummyEmpIds);
       db.prepare(`DELETE FROM employees WHERE id IN (${placeholders})`).run(...dummyEmpIds);
     }
-    db.prepare(`DELETE FROM teams WHERE employer_id = 'ORG-002'`).run();
+    db.prepare(`DELETE FROM teams WHERE employer_id = 'ORG-002' OR name LIKE '%Chennai Coastal Squad%' OR id IN ('TEAM-101', 'TEAM-102', 'TEAM-103', 'TEAM-104')`).run();
     db.prepare(`DELETE FROM organizations WHERE id = 'ORG-002'`).run();
   } catch (cleanErr) {
-    // ignore
+    console.warn('Cleanup note:', cleanErr.message);
   }
-
-  // Seed / Upsert Regional Teams by State and District for AIIMS
-  const upsertTeam = db.prepare(`
-    INSERT INTO teams (id, employer_id, name, state, district, description, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      name=excluded.name,
-      state=excluded.state,
-      district=excluded.district,
-      description=excluded.description
-  `);
-
-  // AIIMS Regional Teams
-  upsertTeam.run('TEAM-101', 'ORG-001', 'Delhi Regional Headquarters', 'Delhi', 'New Delhi', 'Primary dental healthcare and research operations at AIIMS campus', new Date().toISOString());
-  upsertTeam.run('TEAM-102', 'ORG-001', 'Central Delhi Field Unit', 'Delhi', 'Central Delhi', 'Active field deployment & dental healthcare audit', new Date().toISOString());
-  upsertTeam.run('TEAM-103', 'ORG-001', 'Maharashtra West Operations', 'Maharashtra', 'Mumbai Suburban', 'Western territory inspection & dental clinical audit', new Date().toISOString());
-
-  // Seed / Upsert Core AIIMS Healthcare & Research Personnel
-  const upsertEmp = db.prepare(`
-    INSERT INTO employees (id, employer_id, name, email, department, designation, team_id, state, district, phone, password, is_active, is_admin, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      name=excluded.name,
-      email=excluded.email,
-      department=excluded.department,
-      designation=excluded.designation,
-      team_id=excluded.team_id,
-      state=excluded.state,
-      district=excluded.district,
-      phone=excluded.phone
-  `);
-
-  const defaultEmpPwd = 'Aiims@123';
-  const nowIso = new Date().toISOString();
-
-  upsertEmp.run('EMP-1001', 'ORG-001', 'Dr. Rajesh Kumar', 'rajesh.kumar@aiims.edu', 'Dental Research & Healthcare', 'Senior Field Officer (PRS-1)', 'TEAM-101', 'Delhi', 'New Delhi', '+91 98765 43210', defaultEmpPwd, nowIso);
-  upsertEmp.run('EMP-1002', 'ORG-001', 'Dr. Ananya Sharma', 'ananya.sharma@aiims.edu', 'Oral Health Sciences', 'Research Specialist (PRS-2)', 'TEAM-102', 'Delhi', 'Central Delhi', '+91 98765 43211', defaultEmpPwd, nowIso);
-  upsertEmp.run('EMP-1003', 'ORG-001', 'Dr. Vikram Malhotra', 'vikram.malhotra@aiims.edu', 'Community Dentistry', 'Field Epidemiologist (PRS-2)', 'TEAM-103', 'Maharashtra', 'Mumbai Suburban', '+91 98765 43212', defaultEmpPwd, nowIso);
-  upsertEmp.run('EMP-1004', 'ORG-001', 'Sunita Verma', 'sunita.verma@aiims.edu', 'Dental Health Audit', 'Field Operations Lead (PRS-3)', 'TEAM-101', 'Delhi', 'New Delhi', '+91 98765 43213', defaultEmpPwd, nowIso);
-
-  // Clean legacy test accounts
-  try {
-    db.prepare("DELETE FROM employees WHERE id LIKE '%MANUAL%' OR name LIKE '%Tester%'").run();
-  } catch (_) {}
   // Initialize sequence counters for atomic, race-condition-safe ID generation
   try {
     const existingEmployees = db.prepare(`SELECT id FROM employees WHERE id LIKE 'EMP-%'`).all();
