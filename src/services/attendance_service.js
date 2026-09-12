@@ -135,11 +135,11 @@ class AttendanceService {
       throw new Error('Daily attendance limit reached: In one day, an employee can only check in and check out for one single time. You have already completed your attendance for today.');
     }
 
-    // 4. Validate GPS accuracy
+    // 4. Log GPS accuracy (informational only — never block check-in)
     const accuracyCheck = geoService.validateGpsAccuracy(accuracy, org.max_gps_accuracy_m);
     if (!accuracyCheck.valid) {
-      this.logAudit('CHECK_IN_LOW_ACCURACY', employee.id, org.id, 'CHECK_IN', 'BLOCKED', { accuracy, maxAllowed: org.max_gps_accuracy_m }, clientIp, userAgent);
-      throw new Error(accuracyCheck.error);
+      // Log for admin visibility but DO NOT block — employee is in the field and needs to record attendance
+      this.logAudit('CHECK_IN_LOW_ACCURACY', employee.id, org.id, 'CHECK_IN', 'WARNING', { accuracy, maxAllowed: org.max_gps_accuracy_m }, clientIp, userAgent);
     }
 
     // 5. Geofence evaluation with Work Mode support (Office vs Field Work)
@@ -408,11 +408,11 @@ class AttendanceService {
       this.endBreak(employee.id, clientIp, userAgent);
     }
 
-    // Validate GPS accuracy
+    // Log GPS accuracy (informational only — never block check-out)
     const accuracyCheck = geoService.validateGpsAccuracy(accuracy, org.max_gps_accuracy_m);
     if (!accuracyCheck.valid) {
-      this.logAudit('CHECK_OUT_LOW_ACCURACY', employee.id, org.id, 'CHECK_OUT', 'BLOCKED', { accuracy, maxAllowed: org.max_gps_accuracy_m }, clientIp, userAgent);
-      throw new Error(accuracyCheck.error);
+      // Log for admin visibility but DO NOT block — employee needs to record attendance
+      this.logAudit('CHECK_OUT_LOW_ACCURACY', employee.id, org.id, 'CHECK_OUT', 'WARNING', { accuracy, maxAllowed: org.max_gps_accuracy_m }, clientIp, userAgent);
     }
 
     // Validate coordinates

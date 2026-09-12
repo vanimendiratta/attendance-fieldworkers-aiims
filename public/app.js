@@ -1975,15 +1975,11 @@ DOM.btnConfirmSubmission.addEventListener('click', async () => {
     return;
   }
 
-  // Respect the admin-configured GPS accuracy threshold (do NOT hard-code a floor)
+  // Show GPS accuracy info — never block submission, just inform
   const maxAllowed = state.orgConfig?.max_gps_accuracy_m || 25;
   if (state.currentGps.accuracy && state.currentGps.accuracy > maxAllowed) {
-    showModalFeedback(
-      `GPS accuracy too low (±${state.currentGps.accuracy}m). Required: ≤${maxAllowed}m. ` +
-      `Please move to an open area or near a window and wait a few seconds for GPS to improve.`,
-      'warning'
-    );
-    return;
+    // Low accuracy noted but we still proceed — accuracy is recorded in the log
+    console.info(`[GPS] Accuracy ±${state.currentGps.accuracy}m exceeds target ${maxAllowed}m — submitting anyway`);
   }
 
   DOM.btnConfirmSubmission.disabled = true;
