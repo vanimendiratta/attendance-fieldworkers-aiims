@@ -1,6 +1,6 @@
 'use strict';
 
-const { v4: uuidv4 }                           = require('uuid');
+const { randomUUID }                         = require('crypto');
 const { query }                                = require('../db/database');
 const geoService                               = require('./geo_service');
 const photoService                             = require('./photo_service');
@@ -28,7 +28,7 @@ class AttendanceService {
            (id, event_type, employee_id, employer_id, action, status, details_json, client_ip, user_agent, timestamp)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [
-          uuidv4(),
+          randomUUID(),
           eventType,
           employeeId || null,
           employerId || null,
@@ -203,7 +203,7 @@ class AttendanceService {
     }
 
     // 10. Upload to storage (or local disk in dev) & create attendance record
-    const attendanceId = uuidv4();
+    const attendanceId = randomUUID();
     let photoPath = photoResult.relativePath;
     let isRemoteStorage = false;
 
@@ -294,7 +294,7 @@ class AttendanceService {
     if (!session) throw new Error('No active attendance session found.');
     if (session.attendance_status === 'ON_BREAK') throw new Error('Already on break.');
 
-    const breakId        = uuidv4();
+    const breakId        = randomUUID();
     const serverTimestamp = new Date().toISOString();
 
     await query(

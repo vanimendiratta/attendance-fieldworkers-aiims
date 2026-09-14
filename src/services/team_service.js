@@ -2,7 +2,6 @@
 
 const { query }                              = require('../db/database');
 const { STATE_DISTRICTS_MAP, getDistrictsForState } = require('../data/india_states_districts');
-const { v4: uuidv4 }                         = require('uuid');
 
 /**
  * Team Service (PostgreSQL async version)
