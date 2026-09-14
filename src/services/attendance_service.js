@@ -458,7 +458,9 @@ class AttendanceService {
     const totalBreaks = parseInt(sumRes.rows[0].total_break_seconds, 10) || 0;
 
     const netWorkingSeconds    = Math.max(0, grossWorkingSeconds - totalBreaks);
-    const requiredShiftSeconds = Math.round(org.shift_hours * 3600);
+    const shiftHours           = parseFloat(org.shift_hours) || 8.0;
+    const requiredShiftSeconds = Math.round(shiftHours * 3600);
+    const overtimeSeconds      = Math.max(0, netWorkingSeconds - requiredShiftSeconds);
     const finalStatus          = anomalyCheck.isAnomalous ? 'ANOMALY_FLAGGED' : 'COMPLETED';
 
     let checkoutPhotoPath = photoResult.relativePath;
