@@ -17,6 +17,7 @@
 const path   = require('path');
 const fs     = require('fs');
 const crypto = require('crypto');
+const os     = require('os');
 
 const DEFAULT_BUCKET = 'attendance-photos';
 const SIGNED_URL_TTL_SECONDS = 3600; // 1 hour
@@ -80,21 +81,31 @@ async function uploadAttendancePhoto({ buffer, employerId, employeeId, attendanc
 
   if (!isConfigured) {
     // Local fallback: write to local uploads directory (for offline dev/tests)
-    const subDir      = photoType === 'checkout' ? 'checkouts' : 'checkins';
-    const uploadsRoot = process.env.UPLOADS_PATH || path.join(__dirname, '../../uploads');
-    const targetDir   = path.join(uploadsRoot, subDir);
-    if (!fs.existsSync(targetDir)) {
-      fs.mkdirSync(targetDir, { recursive: true });
-    }
-    const filename  = `${subDir}_${attendanceId}_${Date.now()}.${ext || 'jpg'}`;
-    const localPath = path.join(targetDir, filename);
-    fs.writeFileSync(localPath, buffer);
+    const subDir       = photoType === 'checkout' ? 'checkouts' : 'checkins';
+    const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+    const uploadsRoot  = process.env.UPLOADS_PATH || (isServerless ? path.join(os.tmpdir(), 'uploads') : path.join(__dirname, '../../uploads'));
+    const targetDir    = path.join(uploadsRoot, subDir);
+    const filename     = `${subDir}_${attendanceId}_${Date.now()}.${ext || 'jpg'}`;
+    const localPath    = path.join(targetDir, filename);
 
-    return {
-      storagePath: `/uploads/${subDir}/${filename}`,
-      fullLocalPath: localPath,
-      isRemote: false
-    };
+    try {
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+      }
+      fs.writeFileSync(localPath, buffer);
+      return {
+        storagePath: `/uploads/${subDir}/${filename}`,
+        fullLocalPath: localPath,
+        isRemote: false
+      };
+    } catch (fsErr) {
+      console.warn(`[StorageService] Local disk write skipped or failed (${targetDir}):`, fsErr.message);
+      return {
+        storagePath: `/uploads/${subDir}/${filename}`,
+        fullLocalPath: null,
+        isRemote: false
+      };
+    }
   }
 
   // Upload to private Supabase Storage bucket via REST API
@@ -195,8 +206,9 @@ async function deleteAttendancePhoto(storagePath) {
   // If local path, attempt unlink
   if (storagePath.startsWith('/uploads/')) {
     try {
-      const uploadsRoot = process.env.UPLOADS_PATH || path.join(__dirname, '../../uploads');
-      const localFile   = path.join(uploadsRoot, storagePath.replace(/^\/uploads\//, ''));
+      const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+      const uploadsRoot  = process.env.UPLOADS_PATH || (isServerless ? path.join(os.tmpdir(), 'uploads') : path.join(__dirname, '../../uploads'));
+      const localFile    = path.join(uploadsRoot, storagePath.replace(/^\/uploads\//, ''));
       if (fs.existsSync(localFile)) {
         fs.unlinkSync(localFile);
       }

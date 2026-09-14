@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const os = require('os');
 
 // Supported mime types & signature checks
 const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024; // 8 MB
@@ -105,18 +106,22 @@ function processCapturedPhoto(inputData, destinationSubdir = 'checkins') {
   const validated = parseAndValidatePhoto(inputData);
   const { buffer, ext, mimeType, hash } = validated;
 
-  // Save to disk — use UPLOADS_PATH env var on Render (persistent /data volume) or fall back to project root
-  const uploadsRoot = process.env.UPLOADS_PATH || path.join(__dirname, '../../uploads');
-  const uploadDir = path.join(uploadsRoot, destinationSubdir);
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-  }
-
-  const filename = `${destinationSubdir}_${Date.now()}_${crypto.randomBytes(6).toString('hex')}.${ext}`;
-  const fullPath = path.join(uploadDir, filename);
+  const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+  const uploadsRoot  = process.env.UPLOADS_PATH || (isServerless ? path.join(os.tmpdir(), 'uploads') : path.join(__dirname, '../../uploads'));
+  const uploadDir    = path.join(uploadsRoot, destinationSubdir);
+  const filename     = `${destinationSubdir}_${Date.now()}_${crypto.randomBytes(6).toString('hex')}.${ext}`;
+  const fullPath     = path.join(uploadDir, filename);
   const relativePath = `/uploads/${destinationSubdir}/${filename}`;
 
-  fs.writeFileSync(fullPath, buffer);
+  // Attempt local disk write, but never fail or block the request if the filesystem is read-only (e.g. Vercel)
+  try {
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    fs.writeFileSync(fullPath, buffer);
+  } catch (fsErr) {
+    console.warn(`[PhotoService] Local disk write skipped or failed (${uploadDir}):`, fsErr.message);
+  }
 
   return {
     filename,

@@ -208,17 +208,21 @@ class AttendanceService {
     let isRemoteStorage = false;
 
     if (storageService.isStorageConfigured()) {
-      const storageUpload = await storageService.uploadAttendancePhoto({
-        buffer:       photoResult.buffer,
-        employerId:   org.id,
-        employeeId:   employee.id,
-        attendanceId,
-        photoType:    'checkin',
-        mimeType:     photoResult.mimeType,
-        ext:          photoResult.ext
-      });
-      photoPath       = storageUpload.storagePath;
-      isRemoteStorage = storageUpload.isRemote;
+      try {
+        const storageUpload = await storageService.uploadAttendancePhoto({
+          buffer:       photoResult.buffer,
+          employerId:   org.id,
+          employeeId:   employee.id,
+          attendanceId,
+          photoType:    'checkin',
+          mimeType:     photoResult.mimeType,
+          ext:          photoResult.ext
+        });
+        photoPath       = storageUpload.storagePath;
+        isRemoteStorage = storageUpload.isRemote;
+      } catch (storageErr) {
+        console.warn('[AttendanceService] Remote photo upload failed (check-in retained):', storageErr.message);
+      }
     }
 
     try {
@@ -461,17 +465,21 @@ class AttendanceService {
     let isRemoteStorage = false;
 
     if (storageService.isStorageConfigured()) {
-      const storageUpload = await storageService.uploadAttendancePhoto({
-        buffer:       photoResult.buffer,
-        employerId:   org.id,
-        employeeId:   employee.id,
-        attendanceId: session.id,
-        photoType:    'checkout',
-        mimeType:     photoResult.mimeType,
-        ext:          photoResult.ext
-      });
-      checkoutPhotoPath = storageUpload.storagePath;
-      isRemoteStorage   = storageUpload.isRemote;
+      try {
+        const storageUpload = await storageService.uploadAttendancePhoto({
+          buffer:       photoResult.buffer,
+          employerId:   org.id,
+          employeeId:   employee.id,
+          attendanceId: session.id,
+          photoType:    'checkout',
+          mimeType:     photoResult.mimeType,
+          ext:          photoResult.ext
+        });
+        checkoutPhotoPath = storageUpload.storagePath;
+        isRemoteStorage   = storageUpload.isRemote;
+      } catch (storageErr) {
+        console.warn('[AttendanceService] Remote photo upload failed (check-out retained):', storageErr.message);
+      }
     }
 
     try {
