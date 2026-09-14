@@ -135,7 +135,7 @@ router.get('/employees', requireAuthenticatedAdmin, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// 3b. Delete Employee
+// 3b. Delete Employee (Cascades child records cleanly)
 // ---------------------------------------------------------------------------
 router.delete('/employees/:id', requireAuthenticatedAdmin, async (req, res) => {
   try {
@@ -149,9 +149,56 @@ router.delete('/employees/:id', requireAuthenticatedAdmin, async (req, res) => {
     if (!employee) {
       return res.status(404).json({ success: false, error: 'Employee not found for this employer organization.' });
     }
+
+    // Revoke any active sessions
     await sessionService.revokeUserSessions(empId);
-    await query('DELETE FROM employees WHERE id = $1', [empId]);
-    res.json({ success: true, message: `Employee ${employee.name} (${empId}) and all associated biometric descriptors permanently purged.` });
+
+    // Clean up dependent child records to prevent foreign key constraint violations
+    await query('DELETE FROM breaks WHERE attendance_id IN (SELECT id FROM attendance WHERE employee_id = $1)', [empId]);
+    await query('DELETE FROM external_sync_records WHERE employee_id = $1', [empId]);
+    await query('DELETE FROM attendance WHERE employee_id = $1', [empId]);
+    await query('DELETE FROM employees WHERE id = $1 AND employer_id = $2', [empId, employerId]);
+
+    const clientIp  = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+    attendanceService.logAudit('EMPLOYEE_DELETED', empId, employerId, 'DELETE_EMPLOYEE', 'SUCCESS', { employee_name: employee.name }, clientIp, userAgent);
+
+    res.json({ success: true, message: `Employee ${employee.name} (${empId}) and all associated records permanently deleted.` });
+  } catch (err) { return handleApiError(res, req, err); }
+});
+
+// ---------------------------------------------------------------------------
+// 3c. Update Employee Profile
+// ---------------------------------------------------------------------------
+router.put('/employees/:id', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const employerId = req.employerId;
+    const empId      = req.params.id;
+    const { name, department, designation, team_id, is_active } = req.body || {};
+
+    const empRes = await query(
+      'SELECT * FROM employees WHERE id = $1 AND employer_id = $2',
+      [empId, employerId]
+    );
+    if (empRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Employee not found.' });
+    }
+
+    const current = empRes.rows[0];
+    const newName = name !== undefined ? String(name).trim() : current.name;
+    const newDept = department !== undefined ? String(department).trim() : current.department;
+    const newDesig = designation !== undefined ? String(designation).trim() : current.designation;
+    const newTeam = team_id !== undefined ? team_id : current.team_id;
+    const newActive = is_active !== undefined ? (is_active ? 1 : 0) : current.is_active;
+
+    await query(
+      `UPDATE employees
+       SET name = $1, department = $2, designation = $3, team_id = $4, is_active = $5, updated_at = $6
+       WHERE id = $7 AND employer_id = $8`,
+      [newName, newDept, newDesig, newTeam, newActive, new Date().toISOString(), empId, employerId]
+    );
+
+    res.json({ success: true, message: 'Employee profile updated successfully.' });
   } catch (err) { return handleApiError(res, req, err); }
 });
 

@@ -748,6 +748,16 @@ function renderDrawerMap(record) {
     .bindPopup(popupHtml).openPopup();
 }
 
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 /**
  * Load Employees Directory
  */
@@ -765,23 +775,26 @@ async function loadEmployees() {
       return;
     }
     tbody.innerHTML = data.employees.map(e => `
-      <tr>
+      <tr id="emp-row-${escapeHtml(e.id)}">
         <td>
           <div class="table-user-cell">
-            <div class="user-avatar">${e.name.charAt(0)}</div>
+            <div class="user-avatar">${escapeHtml(e.name ? e.name.charAt(0).toUpperCase() : '?')}</div>
             <div>
-              <div style="font-weight: 600;">${e.name}</div>
-              <div style="font-size: 11px; color: var(--color-text-muted);">${e.email}</div>
+              <div style="font-weight: 600;">${escapeHtml(e.name)}</div>
+              <div style="font-size: 11px; color: var(--color-text-muted);">${escapeHtml(e.email)}</div>
             </div>
           </div>
         </td>
-        <td style="font-family: var(--font-mono); font-size: 12px;">${e.id}</td>
-        <td>${e.department}</td>
-        <td>${e.designation}</td>
+        <td style="font-family: var(--font-mono); font-size: 12px;">${escapeHtml(e.id)}</td>
+        <td>${escapeHtml(e.department || 'CDER')}</td>
+        <td>${escapeHtml(e.designation || 'Staff')}</td>
         <td><span class="badge badge-neutral">Standard Shift (8h)</span></td>
         <td><span class="badge badge-success"><span class="badge-dot"></span>Active</span></td>
         <td>
-          <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 11px;">Edit Profile</button>
+          <div style="display: inline-flex; gap: 6px; align-items: center;">
+            <button class="btn btn-secondary" onclick="handleEditEmployee('${escapeHtml(e.id)}', '${escapeHtml(e.name)}', '${escapeHtml(e.department || '')}', '${escapeHtml(e.designation || '')}')" style="padding: 4px 10px; font-size: 11px;">Edit Profile</button>
+            <button class="btn btn-danger" onclick="handleDeleteEmployee('${escapeHtml(e.id)}', '${escapeHtml(e.name)}')" style="padding: 4px 10px; font-size: 11px;">Delete</button>
+          </div>
         </td>
       </tr>
     `).join('');
@@ -789,6 +802,70 @@ async function loadEmployees() {
     console.error('Error loading employees:', err);
   }
 }
+
+/**
+ * Delete Employee Handler
+ */
+window.handleDeleteEmployee = async function(empId, empName) {
+  if (!empId) return;
+
+  const confirmed = window.confirm(
+    `Are you sure you want to delete employee "${empName}" (${empId})?\n\nThis will permanently delete their profile, attendance logs, and active sessions.\n\nThis action cannot be undone.`
+  );
+  if (!confirmed) return;
+
+  try {
+    const res = await adminFetch(`/api/employees/${encodeURIComponent(empId)}`, {
+      method: 'DELETE'
+    });
+    const data = await res.json();
+    if (!data.success) {
+      alert(`Could not delete employee: ${data.error || 'Server error'}`);
+      return;
+    }
+
+    // Optimistically remove table row immediately
+    const row = document.getElementById(`emp-row-${empId}`);
+    if (row) row.remove();
+
+    // Reload list and refresh dashboard counts
+    await loadEmployees();
+    loadDashboardData();
+  } catch (err) {
+    alert(`Error deleting employee: ${err.message}`);
+  }
+};
+
+/**
+ * Edit Employee Handler
+ */
+window.handleEditEmployee = async function(empId, currentName, currentDept, currentDesig) {
+  const newName = window.prompt(`Update employee full name for ${empId}:`, currentName || '');
+  if (newName === null) return;
+  const newDept = window.prompt(`Update department for ${newName || currentName} (${empId}):`, currentDept || 'CDER');
+  if (newDept === null) return;
+  const newDesig = window.prompt(`Update designation for ${newName || currentName} (${empId}):`, currentDesig || 'Senior Research Officer');
+  if (newDesig === null) return;
+
+  try {
+    const res = await adminFetch(`/api/employees/${encodeURIComponent(empId)}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        name: newName.trim() || currentName,
+        department: newDept.trim(),
+        designation: newDesig.trim()
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      await loadEmployees();
+    } else {
+      alert(`Update failed: ${data.error || 'Server error'}`);
+    }
+  } catch (err) {
+    alert(`Error updating employee: ${err.message}`);
+  }
+};
 
 /**
  * Settings & Organization
