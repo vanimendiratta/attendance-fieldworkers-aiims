@@ -510,7 +510,7 @@ router.get('/auth/demo-face-credentials', async (req, res) => {
 // ---------------------------------------------------------------------------
 router.post('/auth/employer/login', authService.rateLimitMiddleware(authService.loginRateLimiter, 'Employer Login'), async (req, res) => {
   try {
-    const { employer_id, admin_username, admin_password } = req.body;
+    const { employer_id, admin_username, admin_password } = req.body || {};
     const clientIp  = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
     const userAgent = req.headers['user-agent'] || 'Unknown';
 
@@ -518,19 +518,20 @@ router.post('/auth/employer/login', authService.rateLimitMiddleware(authService.
       return res.status(400).json({ success: false, error: 'Employer ID, Admin Username, and Admin Password are required.' });
     }
 
-    let orgRes = await query('SELECT * FROM organizations WHERE id = $1', [employer_id]);
-    if (orgRes.rows.length === 0 && employer_id === 'ORG-001') {
+    const cleanOrgId = String(employer_id).trim();
+    let orgRes = await query('SELECT * FROM organizations WHERE UPPER(id) = UPPER($1) OR UPPER(name) = UPPER($1)', [cleanOrgId]);
+    if (orgRes.rows.length === 0 && (cleanOrgId.toUpperCase() === 'ORG-001' || cleanOrgId.toUpperCase() === 'AIIMS')) {
       await initSeed();
-      orgRes = await query('SELECT * FROM organizations WHERE id = $1', [employer_id]);
+      orgRes = await query('SELECT * FROM organizations WHERE UPPER(id) = UPPER($1) OR UPPER(name) = UPPER($1)', [cleanOrgId]);
     }
     const employer = orgRes.rows[0];
     if (!employer) return res.status(401).json({ success: false, error: 'Invalid Employer Admin credentials.' });
 
-    const usernameMatch = employer.admin_username && employer.admin_username.toLowerCase() === admin_username.trim().toLowerCase();
-    const passwordMatch = authService.verifyPassword(admin_password, employer.admin_password);
+    const usernameMatch = employer.admin_username && employer.admin_username.toLowerCase() === String(admin_username).trim().toLowerCase();
+    const passwordMatch = authService.verifyPassword(String(admin_password), employer.admin_password);
 
     if (!usernameMatch || !passwordMatch) {
-      attendanceService.logAudit('ADMIN_AUTH_FAILED', null, employer_id, 'EMPLOYER_LOGIN', 'BLOCKED', { admin_username }, clientIp, userAgent);
+      attendanceService.logAudit('ADMIN_AUTH_FAILED', null, employer.id, 'EMPLOYER_LOGIN', 'BLOCKED', { admin_username }, clientIp, userAgent);
       return res.status(401).json({ success: false, error: 'Invalid Employer Admin credentials.' });
     }
 

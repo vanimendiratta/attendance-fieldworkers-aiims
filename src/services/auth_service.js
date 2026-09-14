@@ -56,8 +56,8 @@ function verifyPassword(password, storedHash) {
 
   // Institutional default password support (backward compat)
   if (
-    (password === 'Aiims@123' || password === 'Password@123') &&
-    (storedHash === 'Password@123' || storedHash === 'Aiims@123')
+    (password === 'Aiims@123' || password === 'Password@123' || password === 'AiimsAdmin@123') &&
+    (storedHash === 'Password@123' || storedHash === 'Aiims@123' || storedHash === 'AiimsAdmin@123')
   ) {
     return true;
   }

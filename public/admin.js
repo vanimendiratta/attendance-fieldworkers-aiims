@@ -151,8 +151,9 @@ async function handleAdminLogin(e) {
   const errorEl = document.getElementById('adminLoginError');
   errorEl.style.display = 'none';
 
+  const orgSelect = document.getElementById('loginAdminEmployer');
   const payload = {
-    employer_id: document.getElementById('loginAdminEmployer').value,
+    employer_id: (orgSelect ? orgSelect.value : '').trim() || 'ORG-001',
     admin_username: document.getElementById('loginAdminUsername').value.trim(),
     admin_password: document.getElementById('loginAdminPassword').value
   };
@@ -164,7 +165,13 @@ async function handleAdminLogin(e) {
       body: JSON.stringify(payload)
     });
 
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch (_parseErr) {
+      data = { success: false, error: `Server error (${res.status}): Please check backend service.` };
+    }
+
     if (!data.success) {
       errorEl.textContent = data.error || 'Authentication failed.';
       errorEl.style.display = 'block';
@@ -183,7 +190,7 @@ async function handleAdminLogin(e) {
     setupLoggedInAdmin(currentEmployerSession);
 
   } catch (err) {
-    errorEl.textContent = 'Connection error during authentication.';
+    errorEl.textContent = `Connection error: ${err.message || 'Unable to reach backend server.'}`;
     errorEl.style.display = 'block';
   }
 }
