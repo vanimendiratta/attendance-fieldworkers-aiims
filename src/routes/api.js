@@ -27,6 +27,22 @@ function isProductionEnvironment() {
   return env === 'production';
 }
 
+function handleApiError(res, req, err, defaultMsg = 'Internal server error') {
+  console.error(`[API ERROR ${req.method} ${req.originalUrl || req.url}]:`, err.message || err);
+  const isProd = isProductionEnvironment();
+  let errorMsg = defaultMsg;
+  if (!isProd) {
+    errorMsg = err.message || defaultMsg;
+  } else if (err.message && err.message.includes('DATABASE_URL')) {
+    errorMsg = 'Database connection not configured. Please set DATABASE_URL in Vercel project environment variables.';
+  } else if (err.message && err.message.includes('does not exist')) {
+    errorMsg = 'Database tables not found. Please run the schema migration in Supabase SQL editor.';
+  } else {
+    errorMsg = defaultMsg;
+  }
+  return res.status(500).json({ success: false, error: errorMsg });
+}
+
 function isDemoBypassAllowed() {
   const nodeEnv    = (process.env.NODE_ENV || '').toLowerCase().trim();
   const appEnv     = (process.env.APP_ENV  || '').toLowerCase().trim();
@@ -60,7 +76,7 @@ router.get('/organization', async (req, res) => {
     if (!org) return res.status(404).json({ error: 'Organization not found' });
     const { admin_password, ...safeOrg } = org;
     res.json({ success: true, organization: safeOrg });
-  } catch (err) { res.status(500).json({ success: false, error: isProductionEnvironment() ? 'Internal server error' : err.message }); }
+  } catch (err) { return handleApiError(res, req, err); }
 });
 
 // ---------------------------------------------------------------------------
@@ -73,7 +89,7 @@ router.get('/organizations', async (req, res) => {
       []
     );
     res.json({ success: true, organizations: result.rows });
-  } catch (err) { res.status(500).json({ success: false, error: isProductionEnvironment() ? 'Internal server error' : err.message }); }
+  } catch (err) { return handleApiError(res, req, err); }
 });
 
 // ---------------------------------------------------------------------------
@@ -91,7 +107,7 @@ router.get('/employees', requireAuthenticatedAdmin, async (req, res) => {
       [employerId]
     );
     res.json({ success: true, employees: result.rows });
-  } catch (err) { res.status(500).json({ success: false, error: isProductionEnvironment() ? 'Internal server error' : err.message }); }
+  } catch (err) { return handleApiError(res, req, err); }
 });
 
 // ---------------------------------------------------------------------------
@@ -112,7 +128,7 @@ router.delete('/employees/:id', requireAuthenticatedAdmin, async (req, res) => {
     await sessionService.revokeUserSessions(empId);
     await query('DELETE FROM employees WHERE id = $1', [empId]);
     res.json({ success: true, message: `Employee ${employee.name} (${empId}) and all associated biometric descriptors permanently purged.` });
-  } catch (err) { res.status(500).json({ success: false, error: isProductionEnvironment() ? 'Internal server error' : err.message }); }
+  } catch (err) { return handleApiError(res, req, err); }
 });
 
 // ---------------------------------------------------------------------------
@@ -181,7 +197,7 @@ router.post('/auth/employee/login', authService.rateLimitMiddleware(authService.
     const { admin_password: _____, ...safeEmployer } = employer;
 
     res.json({ success: true, token: session.token, message: `Welcome back, ${employee.name}!`, employee: safeEmployee, employer: safeEmployer });
-  } catch (err) { res.status(500).json({ success: false, error: isProductionEnvironment() ? 'Internal server error' : err.message }); }
+  } catch (err) { return handleApiError(res, req, err); }
 });
 
 // ---------------------------------------------------------------------------
@@ -214,7 +230,7 @@ router.get('/auth/employee/check-id', async (req, res) => {
       return res.json({ success: true, available: false, error: `Employee ID '${existing.id}' is already registered. Please use a different ID.` });
     }
     return res.json({ success: true, available: true });
-  } catch (err) { res.status(500).json({ success: false, error: isProductionEnvironment() ? 'Internal server error' : err.message }); }
+  } catch (err) { return handleApiError(res, req, err); }
 });
 
 // ---------------------------------------------------------------------------
@@ -352,7 +368,7 @@ router.post('/auth/employee/signup', authService.rateLimitMiddleware(authService
 
     res.setHeader('Set-Cookie', `attendance_session=${session.token}; Path=/; HttpOnly; SameSite=Lax${isProductionEnvironment() ? '; Secure' : ''}`);
     res.status(201).json({ success: true, token: session.token, message: `Account created successfully! Welcome to ${employer.name}, ${name.trim()}.`, employee: safeEmployee, employer: safeEmployer });
-  } catch (err) { res.status(500).json({ success: false, error: isProductionEnvironment() ? 'Internal server error' : err.message }); }
+  } catch (err) { return handleApiError(res, req, err); }
 });
 
 // ---------------------------------------------------------------------------
@@ -405,7 +421,7 @@ router.post('/auth/employee/face-login', authService.rateLimitMiddleware(authSer
     res.setHeader('Set-Cookie', `attendance_session=${session.token}; Path=/; HttpOnly; SameSite=Lax${isProductionEnvironment() ? '; Secure' : ''}`);
     const { admin_password: _, ...safeEmployer } = employer;
     res.json({ success: true, token: session.token, message: `Face recognized! Welcome back, ${matchedEmp.name}.`, employee: matchedEmp, employer: safeEmployer, confidence: matchResult.confidence });
-  } catch (err) { res.status(500).json({ success: false, error: isProductionEnvironment() ? 'Internal server error' : err.message }); }
+  } catch (err) { return handleApiError(res, req, err); }
 });
 
 // ---------------------------------------------------------------------------
@@ -496,7 +512,7 @@ router.post('/auth/employer/login', authService.rateLimitMiddleware(authService.
       employer: safeEmployer,
       admin_session: { token: session.token, employer_id: employer.id, admin_username: employer.admin_username, authenticated_at: new Date().toISOString() }
     });
-  } catch (err) { res.status(500).json({ success: false, error: isProductionEnvironment() ? 'Internal server error' : err.message }); }
+  } catch (err) { return handleApiError(res, req, err); }
 });
 
 // ---------------------------------------------------------------------------

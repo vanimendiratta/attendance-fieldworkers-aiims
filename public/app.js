@@ -216,8 +216,8 @@ async function fetchResolvedAddress(lat, lng) {
       // Auto-prefill Field Work State and District from reverse geocoding if not set by user
       if (data.state && DOM.selectFieldState && (!DOM.selectFieldState.value || DOM.selectFieldState.value === '')) {
         DOM.selectFieldState.value = data.state;
-        if (window.populateDistrictsDropdown && DOM.selectFieldDistrict) {
-          window.populateDistrictsDropdown(DOM.selectFieldDistrict, data.state);
+        if (typeof window.handleFieldStateChange === 'function' && DOM.selectFieldDistrict) {
+          window.handleFieldStateChange(data.state, data.district || '');
           if (data.district) {
             DOM.selectFieldDistrict.value = data.district;
           }
@@ -588,7 +588,13 @@ async function startFaceLoginCamera() {
     });
     faceLoginStream = stream;
     video.srcObject = stream;
-    await video.play();
+    try {
+      await video.play();
+    } catch (playErr) {
+      if (playErr.name !== 'AbortError') {
+        throw playErr;
+      }
+    }
 
     if (statusText) statusText.textContent = 'Align face within circle';
 
@@ -799,7 +805,13 @@ window.handleFieldStateChange = function(selectedState, selectedDistrict = '') {
   });
   distEl.disabled = false;
 };
-window.populateDistrictsDropdown = window.handleFieldStateChange;
+
+window.populateDistrictsDropdown = function(first, second) {
+  if (first && typeof first === 'object' && first.nodeType) {
+    return window.handleFieldStateChange(second);
+  }
+  return window.handleFieldStateChange(first, second);
+};
 
 // Initialize Cascading State & District dropdowns for Field Work
 function initFieldWorkDropdowns(initialState = '', initialDistrict = '') {
@@ -1301,27 +1313,28 @@ if (employeeSignUpForm) {
       return;
     }
     if (status === 'checking') {
-      iconEl.textContent = '⏳';
-      iconEl.style.color = '#94a3b8';
-      iconEl.style.display = 'inline';
-      msgEl.textContent = 'Checking availability…';
+      iconEl.innerHTML = '';
+      iconEl.style.display = 'none';
+      msgEl.textContent = 'Checking availability...';
       msgEl.style.color = '#94a3b8';
       msgEl.style.display = 'block';
       idAvailable = null;
       return;
     }
     if (status === 'available') {
-      iconEl.textContent = '✅';
-      iconEl.style.display = 'inline';
-      msgEl.textContent = message || 'ID is available ✓';
+      iconEl.innerHTML = window.Icons ? window.Icons.render('check', { size: 14 }) : '';
+      iconEl.style.color = '#22c55e';
+      iconEl.style.display = 'inline-flex';
+      msgEl.textContent = message || 'ID is available';
       msgEl.style.color = '#22c55e';
       msgEl.style.display = 'block';
       idAvailable = true;
       return;
     }
     if (status === 'taken') {
-      iconEl.textContent = '❌';
-      iconEl.style.display = 'inline';
+      iconEl.innerHTML = window.Icons ? window.Icons.render('x', { size: 14 }) : '';
+      iconEl.style.color = '#ef4444';
+      iconEl.style.display = 'inline-flex';
       msgEl.textContent = message || 'ID already registered';
       msgEl.style.color = '#ef4444';
       msgEl.style.display = 'block';

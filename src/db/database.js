@@ -70,6 +70,11 @@ pool.on('error', (err) => {
  * @returns {Promise<import('pg').QueryResult>}
  */
 async function query(text, params) {
+  if (!DATABASE_URL) {
+    const missingErr = new Error('[DB] DATABASE_URL environment variable is not configured. Please set DATABASE_URL in Vercel project environment variables.');
+    console.error(missingErr.message);
+    throw missingErr;
+  }
   try {
     return await pool.query(text, params);
   } catch (err) {
@@ -77,6 +82,7 @@ async function query(text, params) {
     const safeMessage = err.message
       ? err.message.replace(/postgresql:\/\/[^\s]*/gi, 'postgresql://***')
       : 'Unknown database error';
+    console.error(`[DB] Query error: ${safeMessage} (SQL: ${String(text).slice(0, 100).replace(/\s+/g, ' ')})`);
     const wrappedErr = new Error(`[DB] Query error: ${safeMessage}`);
     wrappedErr.code    = err.code;
     wrappedErr.detail  = err.detail;

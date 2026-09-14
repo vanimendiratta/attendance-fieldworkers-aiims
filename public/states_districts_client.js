@@ -217,7 +217,7 @@ window.getAllIndianStates = function() {
 };
 
 window.getDistrictsForIndianState = function(stateName) {
-  if (!stateName) return [];
+  if (!stateName || typeof stateName !== 'string') return [];
   if (window.INDIA_STATES_DISTRICTS[stateName]) {
     return window.INDIA_STATES_DISTRICTS[stateName];
   }
@@ -378,7 +378,13 @@ window.handleFieldStateChange = function(selectedState, selectedDistrict = '') {
   });
   distEl.disabled = false;
 };
-window.populateDistrictsDropdown = window.handleFieldStateChange;
+
+window.populateDistrictsDropdown = function(first, second) {
+  if (first && typeof first === 'object' && first.nodeType) {
+    return window.handleFieldStateChange(second);
+  }
+  return window.handleFieldStateChange(first, second);
+};
 
 // Auto-attach listeners on DOMContentLoaded
 if (typeof document !== 'undefined') {
