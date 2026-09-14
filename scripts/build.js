@@ -55,22 +55,37 @@ for (const asset of requiredAssets) {
 }
 console.log(`✓ All ${requiredAssets.length} production frontend assets present and non-empty.`);
 
-// 3. Validate database schema integrity
-try {
-  const db = require('../src/db/database');
-  const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(t => t.name);
-  const expectedTables = ['organizations', 'employees', 'teams', 'attendance', 'breaks', 'audit_logs', 'auth_rate_limits'];
-  
-  for (const exp of expectedTables) {
-    if (!tables.includes(exp)) {
-      console.error(`❌ Expected database table missing: ${exp}`);
-      process.exit(1);
+// 3. Validate database schema integrity (PostgreSQL information_schema)
+(async () => {
+  try {
+    if (!process.env.DATABASE_URL) {
+      console.warn('⚠ DATABASE_URL not set — skipping live schema validation.');
+      console.log('🎉 BUILD SUCCESSFUL: Production bundle and environment verified (DB check skipped).');
+      return;
     }
+    const { query, pool } = require('../src/db/database');
+    const result = await query(
+      `SELECT table_name FROM information_schema.tables
+       WHERE table_schema = 'public' AND table_type = 'BASE TABLE'`
+    );
+    const tables        = result.rows.map(r => r.table_name);
+    const expectedTables = [
+      'organizations', 'employees', 'teams', 'attendance',
+      'breaks', 'audit_logs', 'auth_rate_limits', 'sessions',
+      'employee_sequences', 'external_sync_records'
+    ];
+    for (const exp of expectedTables) {
+      if (!tables.includes(exp)) {
+        console.error(`❌ Expected database table missing: ${exp}`);
+        await pool.end();
+        process.exit(1);
+      }
+    }
+    console.log(`✓ Database schema validated with all ${expectedTables.length} enterprise tables active.`);
+    await pool.end();
+    console.log('🎉 BUILD SUCCESSFUL: Production bundle and environment verified.');
+  } catch (dbErr) {
+    console.error('❌ Database initialization error:', dbErr.message);
+    process.exit(1);
   }
-  console.log(`✓ Database schema validated with all ${expectedTables.length} enterprise tables active.`);
-} catch (dbErr) {
-  console.error('❌ Database initialization error:', dbErr.message);
-  process.exit(1);
-}
-
-console.log('🎉 BUILD SUCCESSFUL: Production bundle and environment verified.');
+})();

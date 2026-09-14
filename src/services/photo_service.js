@@ -51,20 +51,20 @@ function inspectImageBuffer(buffer) {
 }
 
 /**
- * Validate and process captured photo from base64 or file upload
+ * Parse and validate image payload in memory without writing to disk.
+ * @param {Buffer|string} inputData Base64 string, Data URL, or raw Buffer
+ * @returns {{ buffer: Buffer, mimeType: string, ext: string, fileSize: number, hash: string }}
  */
-function processCapturedPhoto(inputData, destinationSubdir = 'checkins') {
+function parseAndValidatePhoto(inputData) {
   let buffer;
 
   if (Buffer.isBuffer(inputData)) {
     buffer = inputData;
   } else if (typeof inputData === 'string') {
-    // Handle data URL: e.g. "data:image/jpeg;base64,..."
     const match = inputData.match(/^data:image\/(jpeg|png|webp);base64,(.+)$/);
     if (match) {
       buffer = Buffer.from(match[2], 'base64');
     } else {
-      // Plain base64 string
       buffer = Buffer.from(inputData, 'base64');
     }
   } else {
@@ -89,6 +89,22 @@ function processCapturedPhoto(inputData, destinationSubdir = 'checkins') {
   // Compute cryptographic SHA-256 hash for anti-replay & integrity verification
   const hash = crypto.createHash('sha256').update(buffer).digest('hex');
 
+  return {
+    buffer,
+    fileSize: buffer.length,
+    mimeType: headerCheck.mime,
+    ext:      headerCheck.ext,
+    hash
+  };
+}
+
+/**
+ * Validate and process captured photo from base64 or file upload (local disk)
+ */
+function processCapturedPhoto(inputData, destinationSubdir = 'checkins') {
+  const validated = parseAndValidatePhoto(inputData);
+  const { buffer, ext, mimeType, hash } = validated;
+
   // Save to disk — use UPLOADS_PATH env var on Render (persistent /data volume) or fall back to project root
   const uploadsRoot = process.env.UPLOADS_PATH || path.join(__dirname, '../../uploads');
   const uploadDir = path.join(uploadsRoot, destinationSubdir);
@@ -96,7 +112,7 @@ function processCapturedPhoto(inputData, destinationSubdir = 'checkins') {
     fs.mkdirSync(uploadDir, { recursive: true });
   }
 
-  const filename = `${destinationSubdir}_${Date.now()}_${crypto.randomBytes(6).toString('hex')}.${headerCheck.ext}`;
+  const filename = `${destinationSubdir}_${Date.now()}_${crypto.randomBytes(6).toString('hex')}.${ext}`;
   const fullPath = path.join(uploadDir, filename);
   const relativePath = `/uploads/${destinationSubdir}/${filename}`;
 
@@ -107,12 +123,15 @@ function processCapturedPhoto(inputData, destinationSubdir = 'checkins') {
     relativePath,
     fullPath,
     fileSize: buffer.length,
-    mimeType: headerCheck.mime,
-    hash
+    mimeType,
+    hash,
+    buffer,
+    ext
   };
 }
 
 module.exports = {
+  parseAndValidatePhoto,
   processCapturedPhoto,
   inspectImageBuffer
 };

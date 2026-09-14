@@ -11,18 +11,19 @@
     "dev": "node server.js",
     "test": "node test/api.test.js",
     "lint": "node scripts/lint.js",
-    "build": "node scripts/build.js"
+    "build": "node scripts/build.js",
+    "seed": "node scripts/seed.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "AIIMS Real-Time Attendance System",
   "dependencies": {
-    "better-sqlite3": "^12.11.1",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "multer": "^2.3.0",
+    "pg": "^8.13.3",
     "uuid": "^14.0.2"
   },
   "devDependencies": {

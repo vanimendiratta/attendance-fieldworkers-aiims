@@ -1,12 +1,12 @@
 require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
-const path = require('path');
-const fs = require('fs');
+const cors    = require('cors');
+const path    = require('path');
+const fs      = require('fs');
 
 const apiRouter = require('./src/routes/api');
 
-const app = express();
+const app  = express();
 const PORT = process.env.PORT || 3000;
 
 // Security Headers Middleware
@@ -38,11 +38,8 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow same-origin and server-to-server (no Origin header)
     if (!origin) return callback(null, true);
-    // Allow Netlify proxy requests (they appear as same-origin, but just in case)
     if (allowedOrigins.includes(origin)) return callback(null, true);
-    // Allow any localhost in development
     const isProd = (process.env.NODE_ENV || '').toLowerCase() === 'production';
     if (!isProd && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
       return callback(null, true);
@@ -55,11 +52,18 @@ app.use(cors({
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
-// Ensure upload folders exist — use UPLOADS_PATH env var (Render persistent /data volume) or project root
-const uploadsDir = process.env.UPLOADS_PATH || path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-if (!fs.existsSync(path.join(uploadsDir, 'checkins'))) fs.mkdirSync(path.join(uploadsDir, 'checkins'), { recursive: true });
-if (!fs.existsSync(path.join(uploadsDir, 'checkouts'))) fs.mkdirSync(path.join(uploadsDir, 'checkouts'), { recursive: true });
+// Ensure upload folders exist — use UPLOADS_PATH env var or project root (skip on read-only serverless runtimes)
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const uploadsDir   = process.env.UPLOADS_PATH || path.join(__dirname, 'uploads');
+if (!isServerless) {
+  try {
+    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+    if (!fs.existsSync(path.join(uploadsDir, 'checkins')))  fs.mkdirSync(path.join(uploadsDir, 'checkins'),  { recursive: true });
+    if (!fs.existsSync(path.join(uploadsDir, 'checkouts'))) fs.mkdirSync(path.join(uploadsDir, 'checkouts'), { recursive: true });
+  } catch (err) {
+    console.warn('[SERVER] Warning: Local upload directory creation skipped or failed:', err.message);
+  }
+}
 
 // Static assets
 app.use('/uploads', express.static(uploadsDir));
@@ -78,7 +82,7 @@ app.use((req, res) => {
 
 // Error handling middleware (masks internal details in production)
 app.use((err, req, res, next) => {
-  console.error('Unhandled server error:', err);
+  console.error('Unhandled server error:', err.message);
   const isProd = (process.env.NODE_ENV || process.env.APP_ENV || '').toLowerCase().trim() === 'production';
   res.status(500).json({
     success: false,
@@ -86,6 +90,9 @@ app.use((err, req, res, next) => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Local development startup (npm run dev / node server.js)
+// ---------------------------------------------------------------------------
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`=======================================================`);
