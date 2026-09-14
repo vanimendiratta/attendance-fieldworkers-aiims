@@ -400,11 +400,8 @@ router.post('/auth/employee/signup', authService.rateLimitMiddleware(authService
     let descriptorToSave = null;
     let hasFaceEnrolled  = 0;
 
-    if (face_descriptor) {
-      descriptorToSave = Array.isArray(face_descriptor) ? JSON.stringify(face_descriptor) : String(face_descriptor);
-      hasFaceEnrolled  = 1;
-    } else if (face_photo) {
-      descriptorToSave = JSON.stringify(biometricService.createDeterministicDescriptor(face_photo.slice(-500)));
+    if (face_descriptor && Array.isArray(face_descriptor) && face_descriptor.length >= 32) {
+      descriptorToSave = JSON.stringify(face_descriptor);
       hasFaceEnrolled  = 1;
     }
 
@@ -455,7 +452,7 @@ router.post('/auth/employee/signup', authService.rateLimitMiddleware(authService
 // ---------------------------------------------------------------------------
 router.post('/auth/employee/face-login', authService.rateLimitMiddleware(authService.faceRateLimiter, 'Face Unlock'), async (req, res) => {
   try {
-    const { employer_id, face_descriptor, face_photo, mock_employee_id } = req.body;
+    const { employer_id, face_descriptor, mock_employee_id, employee_id, login_id } = req.body || {};
     const clientIp  = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
     const userAgent = req.headers['user-agent'] || 'Unknown';
 
@@ -469,22 +466,22 @@ router.post('/auth/employee/face-login', authService.rateLimitMiddleware(authSer
       const demoEmp = demoRes.rows[0];
       if (demoEmp && demoEmp.face_descriptor) {
         candidateDescriptor = demoEmp.face_descriptor;
-      } else if (demoEmp) {
-        candidateDescriptor = biometricService.createDeterministicDescriptor(demoEmp.name);
       }
-    } else if (!candidateDescriptor && face_photo) {
-      candidateDescriptor = biometricService.createDeterministicDescriptor(face_photo.slice(-500));
     }
 
-    if (!candidateDescriptor) {
-      return res.status(400).json({ success: false, error: 'No face biometric data captured from camera.' });
+    if (!candidateDescriptor || !Array.isArray(candidateDescriptor) || candidateDescriptor.length < 32) {
+      return res.status(400).json({ success: false, error: 'No face biometric signature detected. Please look directly into the camera viewfinder.' });
     }
 
-    const matchResult = await biometricService.matchFaceToEmployee(candidateDescriptor, employer_id);
+    const specificId = (employee_id || login_id || '').trim() || null;
+    const matchResult = await biometricService.matchFaceToEmployee(candidateDescriptor, employer_id, undefined, specificId);
 
     if (!matchResult.match) {
       attendanceService.logAudit('AUTH_FAILED_FACE_MISMATCH', null, employer_id || 'UNKNOWN', 'FACE_UNLOCK', 'BLOCKED', { bestScore: matchResult.bestScore }, clientIp, userAgent);
-      return res.status(401).json({ success: false, error: 'Face not recognized. Please align your face in the reticle or sign in with ID and password.' });
+      return res.status(401).json({
+        success: false,
+        error: matchResult.error || 'Face biometrics not recognized. If you have not enrolled your face, please sign in with ID and password.'
+      });
     }
 
     const matchedEmp = matchResult.employee;

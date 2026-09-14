@@ -13,7 +13,7 @@
 const { query } = require('../db/database');
 const crypto    = require('crypto');
 
-const MATCH_THRESHOLD = 0.75; // Confident facial match threshold
+const MATCH_THRESHOLD = 0.80; // High-precision facial match threshold (zero-centered)
 
 // ---------------------------------------------------------------------------
 // Pure utility functions (no DB access — kept synchronous)
@@ -56,6 +56,7 @@ function computeCosineSimilarity(vecA, vecB) {
   const denominator = Math.sqrt(normA) * Math.sqrt(normB);
   if (denominator === 0) return 0;
 
+  // Zero-centered vectors yield true cosine in [-1, 1]; clamp negative correlations to 0
   return Math.max(0, Math.min(1, dotProduct / denominator));
 }
 
@@ -65,14 +66,15 @@ function computeCosineSimilarity(vecA, vecB) {
 
 /**
  * Find matching employee by face descriptor.
+ * Supports both 1:N discovery and 1:1 identity verification when specificEmployeeId is provided.
  * @returns {Promise<Object>}
  */
-async function matchFaceToEmployee(candidateDescriptor, employerId = null, threshold = MATCH_THRESHOLD) {
+async function matchFaceToEmployee(candidateDescriptor, employerId = null, threshold = MATCH_THRESHOLD, specificEmployeeId = null) {
   if (!candidateDescriptor) {
     return { match: false, error: 'No face biometric descriptor provided.' };
   }
 
-  let sql    = `
+  let sql = `
     SELECT e.*, o.name AS employer_name, o.office_name,
            COALESCE(t.name, 'Direct Assignment') AS team_name
     FROM employees e
@@ -87,15 +89,39 @@ async function matchFaceToEmployee(candidateDescriptor, employerId = null, thres
     sql += ` AND e.employer_id = $${params.length}`;
   }
 
-  const result          = await query(sql, params);
+  if (specificEmployeeId) {
+    params.push(String(specificEmployeeId).trim().toLowerCase());
+    sql += ` AND (LOWER(e.id) = $${params.length} OR LOWER(e.email) = $${params.length})`;
+  }
+
+  const result            = await query(sql, params);
   const enrolledEmployees = result.rows;
+
+  if (enrolledEmployees.length === 0) {
+    return {
+      match: false,
+      bestScore: 0,
+      error: specificEmployeeId
+        ? `No enrolled face biometrics found for "${specificEmployeeId}". Please enroll your face first or sign in with password.`
+        : 'No employees have enrolled face biometrics in this organization yet. Please sign in with ID and password.'
+    };
+  }
 
   let bestMatch    = null;
   let highestScore = -1;
 
   for (const emp of enrolledEmployees) {
     try {
-      const score = computeCosineSimilarity(candidateDescriptor, emp.face_descriptor);
+      const empDesc = typeof emp.face_descriptor === 'string' ? JSON.parse(emp.face_descriptor) : emp.face_descriptor;
+      if (!Array.isArray(empDesc) || empDesc.length < 32) continue;
+
+      // Ensure stored descriptor is calibrated (zero-centered; ignore legacy non-zero-centered vectors)
+      const meanVal = empDesc.reduce((a, b) => a + b, 0) / empDesc.length;
+      if (Math.abs(meanVal) > 0.05) {
+        continue;
+      }
+
+      const score = computeCosineSimilarity(candidateDescriptor, empDesc);
       if (score > highestScore) {
         highestScore = score;
         if (score >= threshold) bestMatch = emp;
@@ -118,7 +144,7 @@ async function matchFaceToEmployee(candidateDescriptor, employerId = null, thres
   return {
     match:     false,
     bestScore: highestScore > 0 ? Number((highestScore * 100).toFixed(1)) : 0,
-    error:     'Face not recognized. Please align your face or try ID & Password.'
+    error:     'Face not recognized. Biometrics do not match any enrolled employee. Please sign in with ID and password.'
   };
 }
 

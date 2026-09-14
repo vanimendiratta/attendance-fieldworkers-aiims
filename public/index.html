@@ -410,11 +410,17 @@
           </div>
 
           <!-- Employer Selection for Scoped Matching -->
-          <div style="width: 100%; margin-bottom: 12px; text-align: left;">
+          <div style="width: 100%; margin-bottom: 10px; text-align: left;">
             <label class="form-label" style="font-size: 11px; margin-bottom: 4px;">Organization</label>
             <select id="faceLoginOrgSelect" class="form-select" style="font-size: 12px; padding: 6px 10px;">
               <option value="ORG-001">AIIMS</option>
             </select>
+          </div>
+
+          <!-- Optional Employee ID for 1:1 Direct Verification -->
+          <div style="width: 100%; margin-bottom: 12px; text-align: left;">
+            <label class="form-label" for="faceLoginEmployeeId" style="font-size: 11px; margin-bottom: 4px;">Employee ID or Corporate Email (Optional)</label>
+            <input type="text" id="faceLoginEmployeeId" class="form-input" placeholder="e.g. EMP-1001 (leave blank for automatic scan)" style="font-size: 12px; padding: 7px 10px;">
           </div>
 
           <!-- Action Button -->
@@ -700,7 +706,7 @@
       "Dadra & Nagar Haveli and Daman & Diu": ["Dadra and Nagar Haveli"]
     };
   </script>
-  <script src="./face_biometric_client.js?v=2"></script>
-  <script src="./app.js?v=12"></script>
+  <script src="./face_biometric_client.js?v=3"></script>
+  <script src="./app.js?v=13"></script>
 </body>
 </html>

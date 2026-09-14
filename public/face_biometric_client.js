@@ -65,14 +65,16 @@
       const avgCenterLum = centerLuminance / (centerCount || 1);
       const centerContrast = Math.abs(avgCenterLum - avgLum);
 
-      // 2. 8x8 Spatial Grid luminance (64 features)
-      const vector = [];
+      // 2. 8x8 Spatial Grid luminance & gradients
+      const rawBlocks = [];
+      const rawGrads = [];
+      let sumBlockLum = 0;
+      let sumGradEnergy = 0;
       const blockSize = 16; // 128 / 8
 
       for (let by = 0; by < 8; by++) {
         for (let bx = 0; bx < 8; bx++) {
           let blockSum = 0;
-          let blockVar = 0;
           const count = blockSize * blockSize;
 
           for (let y = by * blockSize; y < (by + 1) * blockSize; y++) {
@@ -81,7 +83,8 @@
             }
           }
           const bAvg = blockSum / count;
-          vector.push(bAvg);
+          rawBlocks.push(bAvg);
+          sumBlockLum += bAvg;
 
           // Horizontal & Vertical gradient energy (64 features)
           let gradEnergy = 0;
@@ -92,23 +95,38 @@
               gradEnergy += Math.abs(dx) + Math.abs(dy);
             }
           }
-          vector.push(gradEnergy / count);
+          const gAvg = gradEnergy / count;
+          rawGrads.push(gAvg);
+          sumGradEnergy += gAvg;
         }
       }
 
-      // L2 Normalize
+      const meanBlockLum = sumBlockLum / 64;
+      const meanGradEnergy = sumGradEnergy / 64;
+
+      // 3. Zero-center features to remove ambient DC lighting bias so different faces do not falsely correlate
+      const vector = [];
+      for (let i = 0; i < 64; i++) {
+        vector.push(rawBlocks[i] - meanBlockLum);
+      }
+      for (let i = 0; i < 64; i++) {
+        vector.push((rawGrads[i] - meanGradEnergy) * 3);
+      }
+
+      // 4. L2 Normalization onto unit hypersphere
       let norm = 0;
       for (let i = 0; i < vector.length; i++) {
         norm += vector[i] * vector[i];
       }
-      norm = Math.sqrt(norm) || 1;
+      norm = Math.sqrt(norm);
+      if (!norm || norm < 0.0001) return null;
 
       const normalized = vector.map(v => Number((v / norm).toFixed(5)));
       const previewDataUrl = normCanvas.toDataURL('image/jpeg', 0.85);
 
       return {
         vector: normalized,
-        hasFaceContrast: centerContrast > 0.015 || avgLum > 0.05,
+        hasFaceContrast: centerContrast > 0.012 && avgLum > 0.06 && avgLum < 0.96,
         previewDataUrl
       };
     },

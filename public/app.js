@@ -653,14 +653,26 @@ async function triggerFaceRecognition() {
   if (btnScan) btnScan.disabled = true;
 
   try {
+    const specificEmpId = (document.getElementById('faceLoginEmployeeId')?.value || '').trim();
     let payload = {
-      employer_id: orgSelect?.value || 'ALL'
+      employer_id: orgSelect?.value || 'ALL',
+      login_id: specificEmpId || undefined
     };
 
     if (window.FaceBiometric && video && video.readyState >= 2) {
       const extracted = window.FaceBiometric.extractDescriptor(video);
-      payload.face_descriptor = extracted?.vector || null;
-      payload.face_photo = extracted?.previewDataUrl || null;
+      if (!extracted || !extracted.vector) {
+        padlock.classList.remove('unlocked');
+        padlock.classList.add('denied');
+        frame.classList.remove('scanning');
+        if (laser) laser.classList.remove('active');
+        if (statusText) statusText.textContent = 'Face not clearly visible. Please position your face inside the circle.';
+        if (btnScan) btnScan.disabled = false;
+        setTimeout(() => { padlock.classList.remove('denied'); }, 600);
+        return;
+      }
+      payload.face_descriptor = extracted.vector;
+      payload.face_photo = extracted.previewDataUrl || null;
     }
 
     let data = null;
@@ -1084,14 +1096,9 @@ async function captureSignupFace() {
     }
   }
 
-  if (!descriptor) {
-    const empName = document.getElementById('signupName')?.value || 'Employee';
-    descriptor = new Array(128).fill(0).map((_, i) => Math.sin((i + empName.length) * 0.45) * 0.1);
-  }
-
   enrolledSignupFace = {
     photo: photoBase64,
-    descriptor: descriptor
+    descriptor: descriptor || null
   };
 
   thumb.src = photoBase64;
@@ -1100,7 +1107,11 @@ async function captureSignupFace() {
   if (signupSimCanvas) signupSimCanvas.style.display = 'none';
   btnCapture.style.display = 'none';
   btnRetake.style.display = 'inline-flex';
-  statusEl.innerHTML = '<span style="color: #10b981; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">' + (window.Icons ? window.Icons.render('check', { size: 12 }) : '') + '<span>Biometric Face ID Enrolled</span></span>';
+  if (descriptor) {
+    statusEl.innerHTML = '<span style="color: #10b981; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">' + (window.Icons ? window.Icons.render('check', { size: 12 }) : '') + '<span>Biometric Face ID Enrolled</span></span>';
+  } else {
+    statusEl.innerHTML = '<span style="color: #f59e0b; font-weight: 600;">Photo captured. For instant Face ID login, ensure your face is clearly visible and well-lit.</span>';
+  }
 
   stopSignupCamera();
 }
