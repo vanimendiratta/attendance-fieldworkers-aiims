@@ -28,20 +28,33 @@ function isProductionEnvironment() {
 }
 
 function handleApiError(res, req, err, defaultMsg = 'Internal server error') {
-  console.error(`[API ERROR ${req.method} ${req.originalUrl || req.url}]:`, err.message || err);
-  const isProd = isProductionEnvironment();
-  let errorMsg = defaultMsg;
-  if (!isProd) {
-    errorMsg = err.message || defaultMsg;
-  } else if (err.message && err.message.includes('DATABASE_URL')) {
-    errorMsg = 'Database connection not configured. Please set DATABASE_URL in Vercel project environment variables.';
-  } else if (err.message && err.message.includes('does not exist')) {
-    errorMsg = 'Database tables not found. Please run the schema migration in Supabase SQL editor.';
-  } else {
-    errorMsg = defaultMsg;
-  }
-  return res.status(500).json({ success: false, error: errorMsg });
+  const safeMsg = (err && err.message) ? String(err.message) : (typeof err === 'string' ? err : defaultMsg);
+  console.error(`[API ERROR ${req.method} ${req.originalUrl || req.url}]:`, safeMsg);
+  return res.status(500).json({ success: false, error: safeMsg });
 }
+
+// ---------------------------------------------------------------------------
+// Health check endpoint
+// ---------------------------------------------------------------------------
+router.get('/health', async (req, res) => {
+  try {
+    const orgs = await query('SELECT count(*) as count FROM organizations');
+    const emps = await query('SELECT count(*) as count FROM employees');
+    res.json({
+      status: 'healthy',
+      database: 'connected',
+      organizations: parseInt(orgs.rows[0].count, 10),
+      employees: parseInt(emps.rows[0].count, 10),
+      serverTime: new Date().toISOString()
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: 'unhealthy',
+      database: 'error',
+      error: err.message
+    });
+  }
+});
 
 function isDemoBypassAllowed() {
   const nodeEnv    = (process.env.NODE_ENV || '').toLowerCase().trim();
