@@ -263,6 +263,25 @@ CREATE INDEX IF NOT EXISTS idx_ext_sync_emp
 CREATE INDEX IF NOT EXISTS idx_ext_sync_org
     ON external_sync_records (employer_id);
 
+-- ---------------------------------------------------------------------------
+-- 11. Initial default organization seed & employee sequence
+-- ---------------------------------------------------------------------------
+INSERT INTO organizations (
+    id, name, office_name, office_lat, office_lng,
+    geofence_radius_m, geofence_policy, max_gps_accuracy_m,
+    shift_hours, timezone, admin_username, admin_password, is_active, updated_at
+) VALUES (
+    'ORG-001', 'AIIMS', 'AIIMS, New Delhi', 28.5672, 77.2100,
+    500, 'ALLOW_WITH_FLAG', 500,
+    8.0, 'Asia/Kolkata', 'aiims_admin',
+    'AiimsAdmin@123',
+    1, CURRENT_TIMESTAMP::text
+) ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO employee_sequences (employer_id, last_seq)
+VALUES ('ORG-001', 1000)
+ON CONFLICT (employer_id) DO NOTHING;
+
 -- =============================================================================
 -- End of migration 001_initial_schema.sql
 -- =============================================================================

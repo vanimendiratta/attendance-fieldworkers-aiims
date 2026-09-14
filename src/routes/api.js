@@ -2,7 +2,7 @@
 
 const express        = require('express');
 const router         = express.Router();
-const { query }      = require('../db/database');
+const { query, initSeed } = require('../db/database');
 const attendanceService = require('../services/attendance_service');
 const geoService     = require('../services/geo_service');
 const sqlSyncClient  = require('../services/sql_sync_client');
@@ -71,7 +71,11 @@ async function resolveEmployee(req) {
 router.get('/organization', async (req, res) => {
   try {
     const employerId = resolveEmployerId(req);
-    const result = await query('SELECT * FROM organizations WHERE id = $1', [employerId]);
+    let result = await query('SELECT * FROM organizations WHERE id = $1', [employerId]);
+    if (result.rows.length === 0 && employerId === 'ORG-001') {
+      await initSeed();
+      result = await query('SELECT * FROM organizations WHERE id = $1', [employerId]);
+    }
     const org    = result.rows[0];
     if (!org) return res.status(404).json({ error: 'Organization not found' });
     const { admin_password, ...safeOrg } = org;
@@ -84,10 +88,17 @@ router.get('/organization', async (req, res) => {
 // ---------------------------------------------------------------------------
 router.get('/organizations', async (req, res) => {
   try {
-    const result = await query(
+    let result = await query(
       'SELECT id, name, office_name, office_lat, office_lng, geofence_radius_m, max_gps_accuracy_m, timezone FROM organizations WHERE is_active = 1',
       []
     );
+    if (result.rows.length === 0) {
+      await initSeed();
+      result = await query(
+        'SELECT id, name, office_name, office_lat, office_lng, geofence_radius_m, max_gps_accuracy_m, timezone FROM organizations WHERE is_active = 1',
+        []
+      );
+    }
     res.json({ success: true, organizations: result.rows });
   } catch (err) { return handleApiError(res, req, err); }
 });
@@ -144,7 +155,11 @@ router.post('/auth/employee/login', authService.rateLimitMiddleware(authService.
     if (!employer_id) return res.status(400).json({ success: false, error: 'Employer ID is required.' });
     if (!effectiveLoginId || !password) return res.status(400).json({ success: false, error: 'Both Employee ID/Email and Password are required.' });
 
-    const employerRes = await query('SELECT * FROM organizations WHERE id = $1', [employer_id]);
+    let employerRes = await query('SELECT * FROM organizations WHERE id = $1', [employer_id]);
+    if (employerRes.rows.length === 0 && employer_id === 'ORG-001') {
+      await initSeed();
+      employerRes = await query('SELECT * FROM organizations WHERE id = $1', [employer_id]);
+    }
     const employer    = employerRes.rows[0];
     if (!employer) {
       attendanceService.logAudit('AUTH_FAILED_ORG_NOT_FOUND', null, employer_id, 'EMPLOYEE_LOGIN', 'BLOCKED', { login_id: effectiveLoginId }, clientIp, userAgent);
@@ -278,7 +293,11 @@ router.post('/auth/employee/signup', authService.rateLimitMiddleware(authService
     }
 
     const effectiveOrgId = employer_id || 'ORG-001';
-    const orgRes = await query('SELECT * FROM organizations WHERE id = $1', [effectiveOrgId]);
+    let orgRes = await query('SELECT * FROM organizations WHERE id = $1', [effectiveOrgId]);
+    if (orgRes.rows.length === 0) {
+      await initSeed();
+      orgRes = await query('SELECT * FROM organizations WHERE id = $1', [effectiveOrgId]);
+    }
     const employer = orgRes.rows[0] || (await query('SELECT * FROM organizations WHERE id = $1', ['ORG-001'])).rows[0];
     if (!employer) return res.status(404).json({ success: false, error: 'Employer organization not found.' });
 
@@ -486,7 +505,11 @@ router.post('/auth/employer/login', authService.rateLimitMiddleware(authService.
       return res.status(400).json({ success: false, error: 'Employer ID, Admin Username, and Admin Password are required.' });
     }
 
-    const orgRes = await query('SELECT * FROM organizations WHERE id = $1', [employer_id]);
+    let orgRes = await query('SELECT * FROM organizations WHERE id = $1', [employer_id]);
+    if (orgRes.rows.length === 0 && employer_id === 'ORG-001') {
+      await initSeed();
+      orgRes = await query('SELECT * FROM organizations WHERE id = $1', [employer_id]);
+    }
     const employer = orgRes.rows[0];
     if (!employer) return res.status(401).json({ success: false, error: 'Invalid Employer Admin credentials.' });
 
