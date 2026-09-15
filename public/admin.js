@@ -502,8 +502,8 @@ async function handleEmailAttendanceBackup() {
   if (!btnEmail) return;
 
   const targetEmail = window.prompt(
-    'Enter recipient email address for attendance backup CSV:\n(Leave blank to use default configured backup recipient)',
-    ''
+    'Enter recipient email address for attendance backup CSV:\n(Default recipient: vanicder01@gmail.com)',
+    'vanicder01@gmail.com'
   );
   if (targetEmail === null) return; // Cancelled
 
