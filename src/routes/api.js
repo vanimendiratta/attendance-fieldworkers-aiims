@@ -967,6 +967,72 @@ router.get('/admin/attendance/:id', requireAuthenticatedAdmin, async (req, res) 
 });
 
 // ---------------------------------------------------------------------------
+// 14c. Admin: Delete Single Attendance Record
+// ---------------------------------------------------------------------------
+router.delete('/admin/attendance/:id', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const recordId   = req.params.id;
+    const employerId = req.employerId;
+
+    const recordRes = await query(
+      `SELECT a.id, a.employee_id, a.employer_id, a.checkin_photo, a.checkout_photo, e.name AS employee_name
+       FROM attendance a
+       JOIN employees e ON a.employee_id = e.id
+       WHERE a.id = $1 AND a.employer_id = $2`,
+      [recordId, employerId]
+    );
+
+    const record = recordRes.rows[0];
+    if (!record) {
+      return res.status(404).json({ success: false, error: 'Attendance record not found for this employer organization.' });
+    }
+
+    // 1. Delete dependent break records to avoid foreign key constraint violations
+    await query('DELETE FROM breaks WHERE attendance_id = $1', [recordId]);
+
+    // 2. Delete corresponding external sync records
+    await query('DELETE FROM external_sync_records WHERE id = $1', [recordId]);
+
+    // 3. Asynchronously remove uploaded photos if stored
+    if (record.checkin_photo) {
+      await storageService.deleteAttendancePhoto(record.checkin_photo).catch(err => {
+        console.warn('[Storage] Could not delete checkin photo:', err.message);
+      });
+    }
+    if (record.checkout_photo) {
+      await storageService.deleteAttendancePhoto(record.checkout_photo).catch(err => {
+        console.warn('[Storage] Could not delete checkout photo:', err.message);
+      });
+    }
+
+    // 4. Delete the attendance record row
+    await query('DELETE FROM attendance WHERE id = $1 AND employer_id = $2', [recordId, employerId]);
+
+    // 5. Audit log entry
+    const clientIp  = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+    attendanceService.logAudit(
+      'ATTENDANCE_RECORD_DELETED',
+      record.employee_id,
+      employerId,
+      'DELETE_ATTENDANCE',
+      'SUCCESS',
+      { attendance_id: recordId, employee_name: record.employee_name },
+      clientIp,
+      userAgent
+    );
+
+    res.json({
+      success: true,
+      message: `Attendance record ${recordId} for ${record.employee_name} permanently deleted.`
+    });
+  } catch (err) {
+    return handleApiError(res, req, err);
+  }
+});
+
+
+// ---------------------------------------------------------------------------
 // 14b. Photo Signed URL Generator (authenticated)
 // ---------------------------------------------------------------------------
 router.get('/attendance/photo-signed-url', requireAuthenticatedUser, async (req, res) => {

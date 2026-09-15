@@ -535,7 +535,7 @@ function renderAttendanceTable(records) {
     const isField = r.work_mode === 'FIELD_WORK';
 
     return `
-      <tr onclick="openAttendanceDrawer('${r.id}')" style="cursor: pointer;">
+      <tr id="att-row-${r.id}" onclick="openAttendanceDrawer('${r.id}')" style="cursor: pointer;">
         <td>
           <div style="display: flex; align-items: center; gap: 8px;">
             <div class="table-emp-avatar">${r.employee_name.charAt(0)}</div>
@@ -581,11 +581,17 @@ function renderAttendanceTable(records) {
         <td>${checkoutPhoto}</td>
         <td style="font-family: var(--font-mono); font-weight: 600; color: var(--color-primary);">${netHours}</td>
         <td>${statusBadge}</td>
-        <td>
-          <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;" onclick="event.stopPropagation(); openAttendanceDrawer('${r.id}')">
-            <span>View Details</span>
-            <span class="ui-icon ui-icon-xs">${window.Icons ? window.Icons.raw('arrowRight') : ''}</span>
-          </button>
+        <td style="white-space: nowrap;">
+          <div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px;">
+            <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;" onclick="event.stopPropagation(); openAttendanceDrawer('${r.id}')">
+              <span>View</span>
+              <span class="ui-icon ui-icon-xs">${window.Icons ? window.Icons.raw('arrowRight') : ''}</span>
+            </button>
+            <button class="btn btn-danger" style="padding: 4px 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;" onclick="event.stopPropagation(); handleDeleteAttendance('${r.id}', '${escapeHtml(r.employee_name)}')" title="Delete attendance record">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+              <span>Delete</span>
+            </button>
+          </div>
         </td>
       </tr>
     `;
@@ -696,6 +702,12 @@ async function openAttendanceDrawer(recordId) {
       breaksContainer.innerHTML = 'No breaks recorded during this shift.';
     }
 
+    // Wire up drawer delete button
+    const drawerDeleteBtn = document.getElementById('btnDrawerDeleteAttendance');
+    if (drawerDeleteBtn) {
+      drawerDeleteBtn.onclick = () => handleDeleteAttendance(record.id, record.employee_name);
+    }
+
     // Open drawer
     document.getElementById('attendanceDrawerBackdrop').classList.add('active');
 
@@ -802,6 +814,48 @@ async function loadEmployees() {
     console.error('Error loading employees:', err);
   }
 }
+
+/**
+ * Delete Attendance Record Handler
+ */
+window.handleDeleteAttendance = async function(recordId, employeeName) {
+  if (!recordId) return;
+
+  const confirmed = window.confirm(
+    `Are you sure you want to delete this attendance record for "${employeeName || 'this employee'}" (${recordId})?\n\nThis will permanently delete the check-in and checkout timestamps, geofence logs, break records, and uploaded photos.\n\nThis action cannot be undone.`
+  );
+  if (!confirmed) return;
+
+  try {
+    const res = await adminFetch(`/api/admin/attendance/${encodeURIComponent(recordId)}`, {
+      method: 'DELETE'
+    });
+    const data = await res.json();
+    if (!data.success) {
+      alert(`Could not delete attendance record: ${data.error || 'Server error'}`);
+      return;
+    }
+
+    // Close drawer if open
+    closeAttendanceDrawer();
+
+    // Optimistically remove table row immediately
+    const row = document.getElementById(`att-row-${recordId}`);
+    if (row) row.remove();
+
+    // Update in-memory cache if available
+    if (typeof cachedAttendanceRecords !== 'undefined' && Array.isArray(cachedAttendanceRecords)) {
+      cachedAttendanceRecords = cachedAttendanceRecords.filter(r => r.id !== recordId);
+      applyAttendanceFilters();
+    }
+
+    // Reload list and refresh dashboard metrics
+    await loadAttendanceRecords();
+    loadDashboardData();
+  } catch (err) {
+    alert(`Error deleting attendance record: ${err.message}`);
+  }
+};
 
 /**
  * Delete Employee Handler
