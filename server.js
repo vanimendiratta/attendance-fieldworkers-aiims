@@ -102,6 +102,28 @@ if (require.main === module) {
     console.log(`🛡️ Admin Operations:    http://localhost:${PORT}/admin.html`);
     console.log(`=======================================================`);
   });
+
+  // Background check for daily attendance backup email in standalone mode
+  let lastBackupDate = '';
+  setInterval(async () => {
+    try {
+      const now = new Date();
+      const todayStr = now.toISOString().split('T')[0];
+      // Run once per day at 23:55 (11:55 PM local time)
+      if (now.getHours() === 23 && now.getMinutes() >= 55 && lastBackupDate !== todayStr) {
+        lastBackupDate = todayStr;
+        const emailService = require('./src/services/email_service');
+        if (emailService.isEmailConfigured()) {
+          console.log(`[BackupScheduler] Dispatching daily attendance backup email for ${todayStr}...`);
+          await emailService.sendDailyAttendanceBackup({ employerId: 'ORG-001', dateStr: todayStr });
+          console.log(`[BackupScheduler] Daily attendance backup email sent successfully.`);
+        }
+      }
+    } catch (err) {
+      console.error('[BackupScheduler] Error running scheduled daily backup:', err.message);
+    }
+  }, 60 * 1000); // Check once per minute
+
 }
 
 module.exports = app;

@@ -33,6 +33,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (teamFilterElem) teamFilterElem.addEventListener('change', applyAttendanceFilters);
   const btnExportCsv = document.getElementById('btnExportAttendanceCsv');
   if (btnExportCsv) btnExportCsv.addEventListener('click', handleExportAttendanceCsv);
+  const btnEmailBackup = document.getElementById('btnEmailAttendanceBackup');
+  if (btnEmailBackup) btnEmailBackup.addEventListener('click', handleEmailAttendanceBackup);
 });
 
 /**
@@ -489,6 +491,50 @@ async function handleExportAttendanceCsv() {
   } finally {
     btnExport.disabled = false;
     btnExport.innerHTML = originalContent;
+  }
+}
+
+/**
+ * Email Complete Attendance Backup CSV
+ */
+async function handleEmailAttendanceBackup() {
+  const btnEmail = document.getElementById('btnEmailAttendanceBackup');
+  if (!btnEmail) return;
+
+  const targetEmail = window.prompt(
+    'Enter recipient email address for attendance backup CSV:\n(Leave blank to use default configured backup recipient)',
+    ''
+  );
+  if (targetEmail === null) return; // Cancelled
+
+  const originalContent = btnEmail.innerHTML;
+  btnEmail.disabled = true;
+  btnEmail.innerHTML = `${window.Icons ? window.Icons.render('loader', { size: 14 }) : ''} <span>Sending Email...</span>`;
+
+  try {
+    const payload = {};
+    if (targetEmail && targetEmail.trim()) {
+      payload.recipient_email = targetEmail.trim();
+    }
+
+    const res = await adminFetch('/api/admin/attendance/send-backup-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to dispatch backup email');
+    }
+
+    alert(`Attendance backup CSV (${data.recordCount} records) has been emailed to ${data.recipient}.`);
+  } catch (err) {
+    console.error('Email backup error:', err);
+    alert(`Could not send backup email: ${err.message}\n\nPlease check that SMTP_USER and SMTP_PASS (Gmail App Password) are set in your environment variables.`);
+  } finally {
+    btnEmail.disabled = false;
+    btnEmail.innerHTML = originalContent;
   }
 }
 

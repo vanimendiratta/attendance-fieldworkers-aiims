@@ -12,6 +12,7 @@ const { STATE_DISTRICTS_MAP, getAllStates, getDistrictsForState, matchStateAndDi
 const authService    = require('../services/auth_service');
 const sessionService = require('../services/session_service');
 const storageService = require('../services/storage_service');
+const emailService   = require('../services/email_service');
 const {
   extractToken,
   requireAuthenticatedEmployee,
@@ -915,6 +916,107 @@ router.get('/admin/attendance/export.csv', requireAuthenticatedAdmin, async (req
     res.send(csvData);
   } catch (err) { res.status(500).json({ error: isProductionEnvironment() ? 'An internal server error occurred.' : 'Failed to export attendance CSV' }); }
 });
+
+// ---------------------------------------------------------------------------
+// 12b. Admin: Manual Trigger - Send Attendance Backup Email
+// ---------------------------------------------------------------------------
+router.post('/admin/attendance/send-backup-email', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const { recipient_email } = req.body || {};
+    const effectiveRecipient = recipient_email || emailService.getBackupRecipient();
+
+    if (!effectiveRecipient) {
+      return res.status(400).json({
+        success: false,
+        error: 'No recipient email specified. Please provide an email or configure BACKUP_EMAIL_RECIPIENT.'
+      });
+    }
+
+    if (!emailService.isEmailConfigured()) {
+      return res.status(503).json({
+        success: false,
+        error: 'SMTP email credentials are not configured on the server. Please set SMTP_USER and SMTP_PASS (e.g. Gmail App Password) in environment variables.'
+      });
+    }
+
+    const result = await emailService.sendDailyAttendanceBackup({
+      employerId: req.employerId,
+      recipientEmail: effectiveRecipient
+    });
+
+    const clientIp  = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+    attendanceService.logAudit(
+      'ATTENDANCE_BACKUP_EMAILED',
+      null,
+      req.employerId,
+      'EMAIL_BACKUP',
+      'SUCCESS',
+      { recipient: effectiveRecipient, recordCount: result.recordCount },
+      clientIp,
+      userAgent
+    );
+
+    res.json({
+      success: true,
+      message: result.message,
+      recipient: result.recipient,
+      recordCount: result.recordCount,
+      filename: result.filename
+    });
+  } catch (err) {
+    return handleApiError(res, req, err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 12c. Automated Cron: Daily Attendance Backup Email
+// ---------------------------------------------------------------------------
+router.get('/cron/daily-attendance-backup', async (req, res) => {
+  try {
+    const cronSecret = process.env.CRON_SECRET;
+    if (cronSecret) {
+      const authHeader = req.headers['authorization'];
+      const querySecret = req.query.secret;
+      const isAuthorized = (authHeader === `Bearer ${cronSecret}`) || (querySecret === cronSecret);
+      if (!isAuthorized) {
+        return res.status(401).json({ success: false, error: 'Unauthorized cron request.' });
+      }
+    }
+
+    if (!emailService.isEmailConfigured()) {
+      console.warn('[Cron] Daily backup skipped: SMTP_USER / SMTP_PASS not configured.');
+      return res.status(200).json({
+        success: false,
+        skipped: true,
+        message: 'SMTP credentials not configured on the server. Please set SMTP_USER and SMTP_PASS.'
+      });
+    }
+
+    const orgsRes = await query('SELECT id, name FROM organizations WHERE is_active = 1');
+    const orgs = orgsRes.rows.length > 0 ? orgsRes.rows : [{ id: 'ORG-001', name: 'AIIMS' }];
+
+    const results = [];
+    for (const org of orgs) {
+      try {
+        const backupRes = await emailService.sendDailyAttendanceBackup({ employerId: org.id });
+        results.push({ orgId: org.id, orgName: org.name, ...backupRes });
+      } catch (backupErr) {
+        console.error(`[Cron] Error backing up attendance for org ${org.id}:`, backupErr.message);
+        results.push({ orgId: org.id, orgName: org.name, success: false, error: backupErr.message });
+      }
+    }
+
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      results
+    });
+  } catch (err) {
+    return handleApiError(res, req, err);
+  }
+});
+
 
 // ---------------------------------------------------------------------------
 // 13. Admin: Attendance Matrix

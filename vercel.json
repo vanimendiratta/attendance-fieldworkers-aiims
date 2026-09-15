@@ -1,5 +1,11 @@
 {
   "version": 2,
+  "crons": [
+    {
+      "path": "/api/cron/daily-attendance-backup",
+      "schedule": "30 18 * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/(.*)",
@@ -7,3 +13,4 @@
     }
   ]
 }
+
