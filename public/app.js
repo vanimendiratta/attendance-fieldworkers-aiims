@@ -596,6 +596,7 @@ async function startFaceLoginCamera() {
       }
     }
 
+    updateCameraMirrorState();
     if (statusText) statusText.textContent = 'Align face within circle';
 
     // Start auto-scan polling
@@ -1835,6 +1836,7 @@ async function startLiveCamera() {
         DOM.videoPreview.style.display = 'block';
         DOM.snapshotCanvas.style.display = 'none';
         state.isCameraActive = true;
+        updateCameraMirrorState();
         try {
           await DOM.videoPreview.play();
         } catch (playErr) {
@@ -1933,7 +1935,15 @@ DOM.btnShutterCapture.addEventListener('click', () => {
 
   if (video && video.videoWidth > 0 && video.readyState >= 2) {
     try {
-      ctx.drawImage(video, 0, 0, w, h);
+      if (isCameraMirrored) {
+        ctx.save();
+        ctx.translate(w, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(video, 0, 0, w, h);
+        ctx.restore();
+      } else {
+        ctx.drawImage(video, 0, 0, w, h);
+      }
       frameDrawn = true;
     } catch (_) {}
   }
@@ -2101,6 +2111,56 @@ DOM.btnConfirmSubmission.addEventListener('click', async () => {
   }
 });
 
+// ===========================================================================
+// CAMERA INVERSION / MIRROR CONTROLLER
+// ===========================================================================
+let isCameraMirrored = localStorage.getItem('attendance_camera_mirrored') === 'true';
+
+function updateCameraMirrorState() {
+  const elements = [
+    document.getElementById('videoPreview'),
+    document.getElementById('faceLoginVideo'),
+    document.getElementById('signupFaceVideo')
+  ];
+
+  elements.forEach(el => {
+    if (el) {
+      if (isCameraMirrored) {
+        el.classList.add('camera-mirrored');
+      } else {
+        el.classList.remove('camera-mirrored');
+      }
+    }
+  });
+
+  const flipLabel = document.getElementById('flipCameraLabel');
+  if (flipLabel) {
+    flipLabel.textContent = isCameraMirrored ? 'Mirrored' : 'Normal';
+  }
+}
+
+function toggleCameraMirror() {
+  isCameraMirrored = !isCameraMirrored;
+  localStorage.setItem('attendance_camera_mirrored', String(isCameraMirrored));
+  updateCameraMirrorState();
+}
+
+const btnFlipCamera = document.getElementById('btnFlipCamera');
+if (btnFlipCamera) {
+  btnFlipCamera.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleCameraMirror();
+  });
+}
+
+const btnFlipFaceLoginCamera = document.getElementById('btnFlipFaceLoginCamera');
+if (btnFlipFaceLoginCamera) {
+  btnFlipFaceLoginCamera.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleCameraMirror();
+  });
+}
+
 // Initialization
 const initialNow = new Date();
 if (DOM.displayGreetingDate) {
@@ -2110,3 +2170,4 @@ initGeolocation();
 checkSession();
 initSignupDropdowns();
 initFieldWorkDropdowns();
+updateCameraMirrorState();

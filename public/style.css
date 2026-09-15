@@ -750,7 +750,6 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transform: scaleX(-1); /* Mirror for selfie video */
 }
 
 /* Sweeping Biometric Laser Line */
@@ -910,4 +909,61 @@
 .password-toggle-btn:focus-visible {
   outline: 2px solid var(--color-primary);
 }
+
+/* Camera Inversion & Mirror Controls */
+.camera-mirrored {
+  transform: scaleX(-1) !important;
+}
+
+.camera-flip-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 25;
+  background: rgba(15, 23, 42, 0.75);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.camera-flip-btn:hover {
+  background: rgba(15, 23, 42, 0.95);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: scale(1.03);
+}
+
+.screenlock-flip-btn {
+  background: transparent;
+  border: 1px solid var(--color-border-default);
+  color: var(--color-text-secondary);
+  border-radius: 16px;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  margin-top: 4px;
+  margin-bottom: 8px;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.screenlock-flip-btn:hover {
+  background: var(--color-bg-subtle, #f1f5f9);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-strong, #cbd5e1);
+}
+
 
