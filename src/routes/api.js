@@ -801,6 +801,26 @@ router.post('/employee/hotel-stay', requireAuthenticatedEmployee, async (req, re
 });
 
 // ---------------------------------------------------------------------------
+// 8d-2. Employee: End / Check-out Current Hotel Stay
+// ---------------------------------------------------------------------------
+router.post('/employee/hotel-stay/checkout', requireAuthenticatedEmployee, async (req, res) => {
+  try {
+    const employeeId = req.employee.id;
+    const today = new Date().toISOString().split('T')[0];
+    const result = await query(
+      `UPDATE employee_hotel_stays 
+       SET stay_status = 'COMPLETED', checkout_date = COALESCE(checkout_date, $1), updated_at = NOW() 
+       WHERE employee_id = $2 AND stay_status = 'ACTIVE'
+       RETURNING *`,
+      [today, employeeId]
+    );
+    res.json({ success: true, message: 'Hotel stay checked out successfully.', stay: result.rows[0] || null });
+  } catch (err) {
+    return handleApiError(res, req, err);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // 8e. Admin: List All Employee Hotel Stays
 // ---------------------------------------------------------------------------
 router.get('/admin/hotel-stays', requireAuthenticatedAdmin, async (req, res) => {

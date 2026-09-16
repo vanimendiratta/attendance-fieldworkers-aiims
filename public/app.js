@@ -115,18 +115,21 @@ const DOM = {
   textLiveDistance: document.getElementById('textLiveDistance'),
   btnSyncOfficeToCurrent: document.getElementById('btnSyncOfficeToCurrent'),
 
-  // Location Classification & Hotel Details Elements
-  btnLocationField: document.getElementById('btnLocationField'),
-  btnLocationHotel: document.getElementById('btnLocationHotel'),
-  hotelStayInfoBanner: document.getElementById('hotelStayInfoBanner'),
-  bannerHotelTitle: document.getElementById('bannerHotelTitle'),
-  bannerHotelDetails: document.getElementById('bannerHotelDetails'),
-  btnEditHotelStay: document.getElementById('btnEditHotelStay'),
-  btnOpenHotelModal: document.getElementById('btnOpenHotelModal'),
-  modalHotelStayDetails: document.getElementById('modalHotelStayDetails'),
-  btnCloseHotelModal: document.getElementById('btnCloseHotelModal'),
-  btnCancelHotelModal: document.getElementById('btnCancelHotelModal'),
+  // Dedicated View Tabs & Panels
+  tabNavPunch: document.getElementById('tabNavPunch'),
+  tabNavHotel: document.getElementById('tabNavHotel'),
+  panelAttendancePunch: document.getElementById('panelAttendancePunch'),
+  panelHotelStay: document.getElementById('panelHotelStay'),
+  tabHotelStayIndicator: document.getElementById('tabHotelStayIndicator'),
+  bnavHotel: document.getElementById('bnavHotel'),
+  bnavToday: document.getElementById('bnavToday'),
+
+  // Dedicated Hotel Page Elements
+  cardActiveHotelDisplay: document.getElementById('cardActiveHotelDisplay'),
+  badgeActiveHotelStatus: document.getElementById('badgeActiveHotelStatus'),
+  contentActiveHotelStay: document.getElementById('contentActiveHotelStay'),
   formHotelStayDetails: document.getElementById('formHotelStayDetails'),
+  headingHotelForm: document.getElementById('headingHotelForm'),
   inputHotelName: document.getElementById('inputHotelName'),
   inputHotelRoom: document.getElementById('inputHotelRoom'),
   inputHotelPhone: document.getElementById('inputHotelPhone'),
@@ -250,12 +253,9 @@ async function fetchResolvedAddress(lat, lng) {
         DOM.hudAddressBadge.innerHTML = `${window.Icons ? window.Icons.render('mapPin', { size: 12 }) : ''} <span>${data.address}</span>`;
       }
 
-      // Auto-switch location classification if lodging establishment detected
+      // Auto-set location classification if lodging establishment detected
       if (data.isLodging && state.punchLocationType !== 'HOTEL_STAY' && state.workMode !== 'TRAVEL') {
-        setPunchLocationType('HOTEL_STAY');
-        if (DOM.bannerHotelTitle) {
-          DOM.bannerHotelTitle.textContent = `Auto-detected at Hotel: ${data.placeName || 'Accommodation'}`;
-        }
+        state.punchLocationType = 'HOTEL_STAY';
       }
       
       // Auto-prefill Field Work State and District from reverse geocoding if not set by user
@@ -1591,43 +1591,39 @@ if (DOM.btnModeTravel) {
 }
 
 /**
- * Punch Location Classification (Active Field Site vs Hotel / Stay)
+ * Field Operations View Switcher (Attendance Punch vs Individual Hotel Page)
  */
-function setPunchLocationType(type) {
-  state.punchLocationType = type;
-  const isHotel = type === 'HOTEL_STAY';
+function switchEmployeeView(viewName) {
+  const isHotel = viewName === 'hotel';
 
-  if (DOM.btnLocationField) DOM.btnLocationField.classList.toggle('active', !isHotel);
-  if (DOM.btnLocationHotel) DOM.btnLocationHotel.classList.toggle('active', isHotel);
+  if (DOM.panelAttendancePunch) DOM.panelAttendancePunch.style.display = isHotel ? 'none' : 'block';
+  if (DOM.panelHotelStay) DOM.panelHotelStay.style.display = isHotel ? 'block' : 'none';
 
-  if (DOM.hotelStayInfoBanner) {
-    DOM.hotelStayInfoBanner.style.display = isHotel ? 'block' : 'none';
+  if (DOM.tabNavPunch) {
+    DOM.tabNavPunch.classList.toggle('active', !isHotel);
+    DOM.tabNavPunch.setAttribute('aria-selected', !isHotel ? 'true' : 'false');
   }
+  if (DOM.tabNavHotel) {
+    DOM.tabNavHotel.classList.toggle('active', isHotel);
+    DOM.tabNavHotel.setAttribute('aria-selected', isHotel ? 'true' : 'false');
+  }
+
+  if (DOM.bnavToday) DOM.bnavToday.classList.toggle('active', !isHotel);
+  if (DOM.bnavHotel) DOM.bnavHotel.classList.toggle('active', isHotel);
 
   if (isHotel) {
-    if (DOM.lblDutyNotes) DOM.lblDutyNotes.textContent = 'Accommodation Details / Stay Purpose';
-    if (DOM.inputFieldSiteNotes) {
-      DOM.inputFieldSiteNotes.placeholder = state.activeHotelStay 
-        ? `${state.activeHotelStay.hotel_name} (Room ${state.activeHotelStay.room_number || ''})`
-        : 'e.g. Hotel Grand Palace - Room 204';
-    }
-  } else {
-    if (state.workMode !== 'TRAVEL') {
-      if (DOM.lblDutyNotes) DOM.lblDutyNotes.textContent = 'Field Site / Facility Name / Visit Purpose';
-      if (DOM.inputFieldSiteNotes) DOM.inputFieldSiteNotes.placeholder = 'e.g. District Hospital Srinagar / Primary Health Centre';
-    }
+    renderHotelStayPage();
   }
 }
 
-if (DOM.btnLocationField) {
-  DOM.btnLocationField.addEventListener('click', () => setPunchLocationType('FIELD_SITE'));
-}
-if (DOM.btnLocationHotel) {
-  DOM.btnLocationHotel.addEventListener('click', () => setPunchLocationType('HOTEL_STAY'));
-}
+window.switchEmployeeView = switchEmployeeView;
+
+if (DOM.tabNavPunch) DOM.tabNavPunch.addEventListener('click', () => switchEmployeeView('punch'));
+if (DOM.tabNavHotel) DOM.tabNavHotel.addEventListener('click', () => switchEmployeeView('hotel'));
+if (DOM.bnavHotel) DOM.bnavHotel.addEventListener('click', () => switchEmployeeView('hotel'));
 
 /**
- * Hotel / Accommodation Stay Management (Employee Side)
+ * Hotel / Accommodation Stay Management (Dedicated Employee Page)
  */
 async function loadActiveHotelStay() {
   if (!state.currentEmployee) return;
@@ -1638,72 +1634,144 @@ async function loadActiveHotelStay() {
     const data = await res.json();
     if (data.success && data.stay) {
       state.activeHotelStay = data.stay;
-      updateHotelBannerUI(data.stay);
+      state.punchLocationType = 'HOTEL_STAY';
+      if (DOM.tabHotelStayIndicator) DOM.tabHotelStayIndicator.style.display = 'inline-block';
     } else {
       state.activeHotelStay = null;
-      updateHotelBannerUI(null);
+      state.punchLocationType = 'FIELD_SITE';
+      if (DOM.tabHotelStayIndicator) DOM.tabHotelStayIndicator.style.display = 'none';
     }
+    renderHotelStayPage();
   } catch (err) {
     console.warn('Error loading active hotel stay:', err);
   }
 }
 
-function updateHotelBannerUI(stay) {
-  if (!DOM.bannerHotelTitle || !DOM.bannerHotelDetails) return;
-  if (stay) {
-    DOM.bannerHotelTitle.textContent = `Hotel Stay: ${stay.hotel_name} (Room ${stay.room_number || 'N/A'})`;
-    DOM.bannerHotelDetails.innerHTML = `
-      <div><strong>Address:</strong> ${escapeHtml(stay.hotel_address)}</div>
-      ${stay.hotel_phone ? `<div><strong>Phone:</strong> ${escapeHtml(stay.hotel_phone)}</div>` : ''}
-      <div style="font-size: 10px; color: #b45309; margin-top: 2px;">Check-in: ${stay.checkin_date} &rarr; ${stay.checkout_date || 'Ongoing stay'}</div>
-    `;
-  } else {
-    DOM.bannerHotelTitle.textContent = 'Hotel Accommodation Selected';
-    DOM.bannerHotelDetails.textContent = 'No hotel stay registered yet. Click "Edit Details" or "My Hotel" to register your room number and address.';
-  }
-}
-
-function openHotelModal() {
-  if (!DOM.modalHotelStayDetails) return;
-  DOM.modalHotelStayDetails.style.display = 'flex';
-
+function renderHotelStayPage() {
+  const container = DOM.contentActiveHotelStay;
+  const badge = DOM.badgeActiveHotelStatus;
+  const formHeading = DOM.headingHotelForm;
   const todayStr = new Date().toISOString().split('T')[0];
 
-  if (state.activeHotelStay) {
-    const s = state.activeHotelStay;
-    if (DOM.inputHotelName) DOM.inputHotelName.value = s.hotel_name || '';
-    if (DOM.inputHotelRoom) DOM.inputHotelRoom.value = s.room_number || '';
-    if (DOM.inputHotelPhone) DOM.inputHotelPhone.value = s.hotel_phone || '';
-    if (DOM.inputHotelAddress) DOM.inputHotelAddress.value = s.hotel_address || '';
-    if (DOM.inputHotelCheckinDate) DOM.inputHotelCheckinDate.value = s.checkin_date ? s.checkin_date.split('T')[0] : todayStr;
-    if (DOM.inputHotelCheckoutDate) DOM.inputHotelCheckoutDate.value = s.checkout_date ? s.checkout_date.split('T')[0] : '';
-    if (DOM.inputHotelNotes) DOM.inputHotelNotes.value = s.notes || '';
+  const stay = state.activeHotelStay;
 
-    state.capturedHotelLat = s.hotel_lat != null ? Number(s.hotel_lat) : null;
-    state.capturedHotelLng = s.hotel_lng != null ? Number(s.hotel_lng) : null;
+  if (badge) {
+    if (stay) {
+      badge.className = 'badge badge-success';
+      badge.textContent = 'Active Lodging';
+    } else {
+      badge.className = 'badge badge-neutral';
+      badge.textContent = 'No Active Stay';
+    }
+  }
+
+  if (formHeading) {
+    formHeading.textContent = stay ? 'Update Lodging Details' : 'Register Lodging Stay';
+  }
+
+  if (container) {
+    if (stay) {
+      const checkinStr = stay.checkin_date ? stay.checkin_date.split('T')[0] : '--';
+      const checkoutStr = stay.checkout_date ? stay.checkout_date.split('T')[0] : 'Ongoing';
+      const hasGps = stay.hotel_lat != null && stay.hotel_lng != null;
+      const mapPinUrl = hasGps ? `https://www.google.com/maps?q=${Number(stay.hotel_lat).toFixed(6)},${Number(stay.hotel_lng).toFixed(6)}&t=k` : null;
+
+      container.innerHTML = `
+        <div style="background: #f8fafc; border: 1px solid var(--color-border-default); border-radius: 8px; padding: 14px 16px;">
+          <!-- Hotel Name & Room -->
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; flex-wrap: wrap;">
+            <div style="font-weight: 700; font-size: 15px; color: #1e40af; display: inline-flex; align-items: center; gap: 6px;">
+              <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg></span>
+              <span>${escapeHtml(stay.hotel_name)}</span>
+            </div>
+            ${stay.room_number ? `
+              <span style="font-weight: 700; font-size: 12px; padding: 3px 8px; background: #dbeafe; color: #1e40af; border-radius: 4px;">
+                Room ${escapeHtml(stay.room_number)}
+              </span>
+            ` : ''}
+          </div>
+
+          <!-- Address -->
+          <div style="font-size: 12px; color: var(--color-text-secondary); margin-bottom: 8px; line-height: 1.4;">
+            ${escapeHtml(stay.hotel_address)}
+          </div>
+
+          <!-- Phone & Dates -->
+          <div style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--color-text-secondary); margin-bottom: 12px;">
+            ${stay.hotel_phone ? `
+              <div style="display: inline-flex; align-items: center; gap: 4px;">
+                <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span>
+                <span>Reception Phone: <strong>${escapeHtml(stay.hotel_phone)}</strong></span>
+              </div>
+            ` : ''}
+            <div style="display: inline-flex; align-items: center; gap: 4px;">
+              <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+              <span>Stay Duration: <strong>${escapeHtml(checkinStr)}</strong> &rarr; <strong>${escapeHtml(checkoutStr)}</strong></span>
+            </div>
+            ${stay.notes ? `
+              <div style="font-size: 11px; color: var(--color-text-muted); font-style: italic; margin-top: 2px;">
+                Notes: ${escapeHtml(stay.notes)}
+              </div>
+            ` : ''}
+          </div>
+
+          <!-- Action Row: Satellite Map Link & Check Out Button -->
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid var(--color-border-default); padding-top: 10px; flex-wrap: wrap;">
+            ${mapPinUrl ? `
+              <a href="${mapPinUrl}" target="_blank" rel="noopener noreferrer" class="exact-map-pin-link" style="font-size: 11px; font-weight: 600; padding: 4px 8px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 4px;" title="Open Hotel Satellite GPS Pin in Google Maps">
+                <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></span>
+                <span>View Coordinates on Map</span>
+              </a>
+            ` : '<span style="font-size: 11px; color: var(--color-text-muted);">No GPS coordinates</span>'}
+
+            <button type="button" id="btnCheckoutHotelStay" class="btn btn-secondary" style="font-size: 11px; padding: 5px 12px; color: #dc2626; border-color: #fca5a5;">
+              Check Out of Hotel
+            </button>
+          </div>
+        </div>
+      `;
+
+      const btnCheckout = document.getElementById('btnCheckoutHotelStay');
+      if (btnCheckout) {
+        btnCheckout.addEventListener('click', handleCheckoutHotelStay);
+      }
+    } else {
+      container.innerHTML = `
+        <div style="padding: 16px 0; text-align: center; color: var(--color-text-tertiary); font-size: 12px; line-height: 1.5;">
+          No hotel stay registered. If you are staying at a guest house or hotel for field work, enter your lodging information in the form below.
+        </div>
+      `;
+    }
+  }
+
+  // Pre-fill form values
+  if (stay) {
+    if (DOM.inputHotelName) DOM.inputHotelName.value = stay.hotel_name || '';
+    if (DOM.inputHotelRoom) DOM.inputHotelRoom.value = stay.room_number || '';
+    if (DOM.inputHotelPhone) DOM.inputHotelPhone.value = stay.hotel_phone || '';
+    if (DOM.inputHotelAddress) DOM.inputHotelAddress.value = stay.hotel_address || '';
+    if (DOM.inputHotelCheckinDate) DOM.inputHotelCheckinDate.value = stay.checkin_date ? stay.checkin_date.split('T')[0] : todayStr;
+    if (DOM.inputHotelCheckoutDate) DOM.inputHotelCheckoutDate.value = stay.checkout_date ? stay.checkout_date.split('T')[0] : '';
+    if (DOM.inputHotelNotes) DOM.inputHotelNotes.value = stay.notes || '';
+
+    state.capturedHotelLat = stay.hotel_lat != null ? Number(stay.hotel_lat) : null;
+    state.capturedHotelLng = stay.hotel_lng != null ? Number(stay.hotel_lng) : null;
     if (DOM.textHotelGpsDisplay) {
       DOM.textHotelGpsDisplay.textContent = (state.capturedHotelLat && state.capturedHotelLng)
-        ? `${state.capturedHotelLat.toFixed(5)}°, ${state.capturedHotelLng.toFixed(5)}°`
+        ? `${state.capturedHotelLat.toFixed(5)}°, ${state.capturedHotelLng.toFixed(5)}° (Verified)`
         : 'Not captured yet';
     }
   } else {
     if (DOM.inputHotelCheckinDate && !DOM.inputHotelCheckinDate.value) {
       DOM.inputHotelCheckinDate.value = todayStr;
     }
-    // Auto-fill current coordinates if available
-    if (state.currentGps.latitude && state.currentGps.longitude) {
+    if (state.currentGps.latitude && state.currentGps.longitude && !state.capturedHotelLat) {
       state.capturedHotelLat = state.currentGps.latitude;
       state.capturedHotelLng = state.currentGps.longitude;
       if (DOM.textHotelGpsDisplay) {
-        DOM.textHotelGpsDisplay.textContent = `${state.capturedHotelLat.toFixed(5)}°, ${state.capturedHotelLng.toFixed(5)}° (Current fix)`;
+        DOM.textHotelGpsDisplay.textContent = `${state.capturedHotelLat.toFixed(5)}°, ${state.capturedHotelLng.toFixed(5)}° (Current GPS fix)`;
       }
     }
-  }
-}
-
-function closeHotelModal() {
-  if (DOM.modalHotelStayDetails) {
-    DOM.modalHotelStayDetails.style.display = 'none';
   }
 }
 
@@ -1723,7 +1791,7 @@ async function handleSaveHotelStay() {
 
   if (DOM.btnSaveHotelStay) {
     DOM.btnSaveHotelStay.disabled = true;
-    DOM.btnSaveHotelStay.textContent = 'Saving...';
+    DOM.btnSaveHotelStay.textContent = 'Saving Hotel Details...';
   }
 
   try {
@@ -1746,9 +1814,10 @@ async function handleSaveHotelStay() {
     const data = await res.json();
     if (data.success && data.stay) {
       state.activeHotelStay = data.stay;
-      updateHotelBannerUI(data.stay);
-      closeHotelModal();
-      showAlert('Hotel and accommodation details registered successfully.', 'success');
+      state.punchLocationType = 'HOTEL_STAY';
+      if (DOM.tabHotelStayIndicator) DOM.tabHotelStayIndicator.style.display = 'inline-block';
+      renderHotelStayPage();
+      showAlert('Hotel accommodation details recorded successfully.', 'success');
     } else {
       showAlert(`Error saving hotel details: ${data.error || 'Server error'}`, 'danger');
     }
@@ -1762,11 +1831,46 @@ async function handleSaveHotelStay() {
   }
 }
 
-if (DOM.btnOpenHotelModal) DOM.btnOpenHotelModal.addEventListener('click', openHotelModal);
-if (DOM.btnEditHotelStay) DOM.btnEditHotelStay.addEventListener('click', openHotelModal);
-if (DOM.btnCloseHotelModal) DOM.btnCloseHotelModal.addEventListener('click', closeHotelModal);
-if (DOM.btnCancelHotelModal) DOM.btnCancelHotelModal.addEventListener('click', closeHotelModal);
-if (DOM.formHotelStayDetails) DOM.formHotelStayDetails.addEventListener('submit', (e) => { e.preventDefault(); handleSaveHotelStay(); });
+async function handleCheckoutHotelStay() {
+  if (!confirm('Are you sure you want to mark this hotel stay as completed?')) return;
+
+  try {
+    const res = await fetch('/api/employee/hotel-stay/checkout', {
+      method: 'POST',
+      headers: getEmployeeAuthHeaders()
+    });
+    const data = await res.json();
+    if (data.success) {
+      state.activeHotelStay = null;
+      state.punchLocationType = 'FIELD_SITE';
+      if (DOM.tabHotelStayIndicator) DOM.tabHotelStayIndicator.style.display = 'none';
+
+      // Clear form
+      if (DOM.inputHotelName) DOM.inputHotelName.value = '';
+      if (DOM.inputHotelRoom) DOM.inputHotelRoom.value = '';
+      if (DOM.inputHotelPhone) DOM.inputHotelPhone.value = '';
+      if (DOM.inputHotelAddress) DOM.inputHotelAddress.value = '';
+      if (DOM.inputHotelNotes) DOM.inputHotelNotes.value = '';
+      state.capturedHotelLat = null;
+      state.capturedHotelLng = null;
+      if (DOM.textHotelGpsDisplay) DOM.textHotelGpsDisplay.textContent = 'Not captured yet';
+
+      renderHotelStayPage();
+      showAlert('Hotel stay checked out successfully.', 'success');
+    } else {
+      showAlert(`Error checking out: ${data.error || 'Server error'}`, 'danger');
+    }
+  } catch (err) {
+    showAlert(`Failed to checkout hotel stay: ${err.message}`, 'danger');
+  }
+}
+
+if (DOM.formHotelStayDetails) {
+  DOM.formHotelStayDetails.addEventListener('submit', (e) => {
+    e.preventDefault();
+    handleSaveHotelStay();
+  });
+}
 
 if (DOM.btnCaptureHotelGps) {
   DOM.btnCaptureHotelGps.addEventListener('click', () => {

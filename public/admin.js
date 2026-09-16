@@ -73,7 +73,7 @@ function switchView(viewId) {
     viewAttendance: { title: 'Attendance', breadcrumb: 'Verified Records & History' },
     viewTimesheets: { title: 'Cumulative Timesheets', breadcrumb: 'Individual Performance & Hours Breakdown' },
     viewLeave: { title: 'Leave', breadcrumb: 'Requests & Balance' },
-    viewShifts: { title: 'Shifts', breadcrumb: 'Schedules & Calendars' },
+    viewHotelStays: { title: 'Hotel Stays', breadcrumb: 'Field Worker Lodging & Safety Directory' },
     viewReports: { title: 'Reports', breadcrumb: 'Analytics & Payroll Export' },
     viewSettings: { title: 'Organization & Geofence', breadcrumb: 'Policy Configuration' },
     viewAudit: { title: 'Security Audit Logs', breadcrumb: 'Immutable Audit Trail' },
@@ -92,6 +92,7 @@ function switchView(viewId) {
   if (viewId === 'viewEmployees') loadEmployees();
   if (viewId === 'viewAttendance') loadAttendanceRecords();
   if (viewId === 'viewTimesheets') loadTimesheetsView();
+  if (viewId === 'viewHotelStays') loadHotelStaysPageView();
   if (viewId === 'viewAudit') loadAuditLogs();
   if (viewId === 'viewRedcap') loadRedcapData();
 }
@@ -108,7 +109,9 @@ function handleHashRoute() {
     timesheets: 'viewTimesheets',
     timesheet: 'viewTimesheets',
     leave: 'viewLeave',
-    shifts: 'viewShifts',
+    hotels: 'viewHotelStays',
+    hotel: 'viewHotelStays',
+    hotelstays: 'viewHotelStays',
     reports: 'viewReports',
     settings: 'viewSettings',
     audit: 'viewAudit',
@@ -2796,4 +2799,196 @@ window.openHotelStaysModal = openHotelStaysModal;
 window.closeHotelStaysModal = closeHotelStaysModal;
 window.loadHotelStaysList = loadHotelStaysList;
 window.filterHotelStaysList = filterHotelStaysList;
+
+/**
+ * Dedicated Hotel Stays Page View
+ */
+let cachedHotelStaysPage = [];
+
+async function loadHotelStaysPageView() {
+  const container = document.getElementById('adminHotelStaysPageList');
+  if (!container) return;
+  container.innerHTML = '<div style="text-align: center; padding: 32px; color: var(--color-text-muted);">Loading field worker hotel directory...</div>';
+
+  try {
+    const res = await authFetch('/api/admin/hotel-stays');
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      container.innerHTML = `<div style="text-align: center; padding: 24px; color: #dc2626;">Failed to load hotel stays: ${escapeHtml(data.error || 'Server error')}</div>`;
+      return;
+    }
+
+    cachedHotelStaysPage = data.stays || [];
+    updateHotelStaysMetrics(cachedHotelStaysPage);
+    renderHotelStaysPageView();
+  } catch (err) {
+    console.error('Error loading hotel stays page view:', err);
+    container.innerHTML = `<div style="text-align: center; padding: 24px; color: #dc2626;">Failed to load hotel stays: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function updateHotelStaysMetrics(stays) {
+  const total = stays.length;
+  const activeStays = stays.filter(s => s.stay_status === 'ACTIVE');
+  const activeCount = activeStays.length;
+  const uniqueWorkersInActive = new Set(activeStays.map(s => s.employee_id)).size;
+
+  const elTotal = document.getElementById('metricTotalHotelStays');
+  const elActive = document.getElementById('metricActiveHotelStays');
+  const elWorkers = document.getElementById('metricWorkersInHotels');
+
+  if (elTotal) elTotal.textContent = String(total);
+  if (elActive) elActive.textContent = String(activeCount);
+  if (elWorkers) elWorkers.textContent = String(uniqueWorkersInActive);
+}
+
+function renderHotelStaysPageView() {
+  const container = document.getElementById('adminHotelStaysPageList');
+  const badge = document.getElementById('hotelStaysCountBadge');
+  if (!container) return;
+
+  const searchVal = (document.getElementById('hotelStaysSearchInput')?.value || '').toLowerCase().trim();
+  const statusVal = document.getElementById('hotelStaysStatusFilter')?.value || 'ACTIVE';
+
+  let filtered = cachedHotelStaysPage;
+
+  if (statusVal && statusVal !== 'ALL') {
+    filtered = filtered.filter(s => s.stay_status === statusVal);
+  }
+
+  if (searchVal) {
+    filtered = filtered.filter(s => {
+      return (s.employee_name && s.employee_name.toLowerCase().includes(searchVal)) ||
+        (s.employee_id && s.employee_id.toLowerCase().includes(searchVal)) ||
+        (s.department && s.department.toLowerCase().includes(searchVal)) ||
+        (s.hotel_name && s.hotel_name.toLowerCase().includes(searchVal)) ||
+        (s.room_number && s.room_number.toLowerCase().includes(searchVal)) ||
+        (s.hotel_address && s.hotel_address.toLowerCase().includes(searchVal)) ||
+        (s.hotel_phone && s.hotel_phone.toLowerCase().includes(searchVal));
+    });
+  }
+
+  if (badge) {
+    badge.textContent = `${filtered.length} Record${filtered.length === 1 ? '' : 's'}`;
+    badge.className = filtered.length > 0 ? 'badge badge-primary' : 'badge badge-neutral';
+  }
+
+  if (!filtered || filtered.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 40px 20px; color: var(--color-text-muted);">
+        <div style="font-size: 14px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 6px;">No Hotel Stays Found</div>
+        <div style="font-size: 12px; max-width: 420px; margin: 0 auto;">
+          No lodging records match your active search or filter criteria. Field staff can register hotel details directly from their dedicated mobile portal.
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
+    <div style="display: flex; flex-direction: column; gap: 12px;">
+      ${filtered.map(s => {
+        const checkinDate = s.checkin_date ? s.checkin_date.split('T')[0] : '--';
+        const checkoutDate = s.checkout_date ? s.checkout_date.split('T')[0] : 'Ongoing';
+        const hasGps = s.hotel_lat != null && s.hotel_lng != null;
+        const mapPinUrl = hasGps ? `https://www.google.com/maps?q=${Number(s.hotel_lat).toFixed(6)},${Number(s.hotel_lng).toFixed(6)}&t=k` : null;
+        const isActive = s.stay_status === 'ACTIVE';
+
+        return `
+          <div class="hotel-stay-row-card" style="border: 1px solid var(--color-border-default); border-radius: 8px; padding: 14px 18px; background: #ffffff; transition: box-shadow 0.15s ease;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap;">
+              
+              <!-- Left: Worker Info & Hotel Identity -->
+              <div style="flex: 1; min-width: 260px;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap;">
+                  <span style="font-weight: 700; font-size: 14px; color: var(--color-text-primary);">${escapeHtml(s.employee_name || 'Staff Member')}</span>
+                  <span class="badge badge-neutral" style="font-size: 10px; font-family: var(--font-mono);">${escapeHtml(s.employee_id || '')}</span>
+                  <span style="font-size: 11px; color: var(--color-text-tertiary);">${escapeHtml(s.department || 'Field Ops')}</span>
+                  ${s.team_name ? `<span class="badge badge-neutral" style="font-size: 10px;">${escapeHtml(s.team_name)}</span>` : ''}
+                  <span class="${isActive ? 'badge badge-success' : 'badge badge-neutral'}" style="font-size: 10px; margin-left: auto;">
+                    ${isActive ? 'Active Stay' : 'Completed Stay'}
+                  </span>
+                </div>
+
+                <!-- Hotel Name & Room -->
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap;">
+                  <div style="font-weight: 700; font-size: 14px; color: #1e40af; display: inline-flex; align-items: center; gap: 6px;">
+                    <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg></span>
+                    <span>${escapeHtml(s.hotel_name)}</span>
+                  </div>
+                  ${s.room_number ? `
+                    <span style="font-weight: 700; font-size: 11px; padding: 2px 8px; background: #dbeafe; color: #1e40af; border-radius: 4px;">
+                      Room ${escapeHtml(s.room_number)}
+                    </span>
+                  ` : ''}
+                </div>
+
+                <!-- Address -->
+                ${s.hotel_address ? `
+                  <div style="font-size: 12px; color: var(--color-text-secondary); margin-bottom: 6px; line-height: 1.35;">
+                    ${escapeHtml(s.hotel_address)}
+                  </div>
+                ` : ''}
+
+                <!-- Contact & Stay Dates -->
+                <div style="display: flex; align-items: center; gap: 14px; font-size: 11px; color: var(--color-text-tertiary); flex-wrap: wrap;">
+                  ${s.hotel_phone ? `
+                    <div style="display: inline-flex; align-items: center; gap: 4px; color: #1e3a8a; font-weight: 600;">
+                      <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span>
+                      <span>Hotel Reception: ${escapeHtml(s.hotel_phone)}</span>
+                    </div>
+                  ` : ''}
+                  <div style="display: inline-flex; align-items: center; gap: 4px;">
+                    <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+                    <span>Duration: <strong>${escapeHtml(checkinDate)}</strong> &rarr; <strong>${escapeHtml(checkoutDate)}</strong></span>
+                  </div>
+                  ${s.booking_ref ? `<div>Ref: <strong>${escapeHtml(s.booking_ref)}</strong></div>` : ''}
+                </div>
+
+                ${s.notes ? `
+                  <div style="font-size: 11px; color: var(--color-text-muted); font-style: italic; margin-top: 5px;">
+                    Note: ${escapeHtml(s.notes)}
+                  </div>
+                ` : ''}
+              </div>
+
+              <!-- Right: GPS Satellite Link & Worker Timesheet Action -->
+              <div style="display: flex; flex-direction: column; align-items: flex-end; justify-content: space-between; gap: 10px; min-width: 140px;">
+                ${mapPinUrl ? `
+                  <a href="${mapPinUrl}" target="_blank" rel="noopener noreferrer" class="exact-map-pin-link" style="font-size: 12px; font-weight: 600; padding: 4px 8px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 4px;" title="Open Hotel Satellite GPS Pin in Google Maps">
+                    <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></span>
+                    <span>${Number(s.hotel_lat).toFixed(4)}°, ${Number(s.hotel_lng).toFixed(4)}°</span>
+                  </a>
+                ` : `
+                  <span style="font-size: 11px; color: var(--color-text-muted);">No GPS coordinates</span>
+                `}
+
+                <button type="button" class="btn btn-secondary" style="padding: 5px 12px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;" onclick="openPersonTimesheet('${escapeHtml(s.employee_id)}')">
+                  <span>View Timesheet</span>
+                  <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></span>
+                </button>
+              </div>
+
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+// Wire events for the Hotel Stays page
+document.addEventListener('DOMContentLoaded', () => {
+  const inputSearch = document.getElementById('hotelStaysSearchInput');
+  const selectStatus = document.getElementById('hotelStaysStatusFilter');
+  const btnRefresh = document.getElementById('btnRefreshHotelStays');
+
+  if (inputSearch) inputSearch.addEventListener('input', renderHotelStaysPageView);
+  if (selectStatus) selectStatus.addEventListener('change', renderHotelStaysPageView);
+  if (btnRefresh) btnRefresh.addEventListener('click', loadHotelStaysPageView);
+});
+
+window.loadHotelStaysPageView = loadHotelStaysPageView;
+window.renderHotelStaysPageView = renderHotelStaysPageView;
+
 

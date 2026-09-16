@@ -45,6 +45,22 @@
 
     <!-- 3. Main Scrollable Container -->
     <main class="employee-scroll-body">
+
+      <!-- Navigation Tabs: Attendance Punch vs Dedicated Hotel Stay -->
+      <nav class="employee-view-tabs" role="tablist" aria-label="Field Operations Navigation">
+        <button type="button" id="tabNavPunch" class="employee-tab-btn active" role="tab" aria-selected="true" onclick="if(window.switchEmployeeView)window.switchEmployeeView('punch')">
+          <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+          <span>Attendance Punch</span>
+        </button>
+        <button type="button" id="tabNavHotel" class="employee-tab-btn" role="tab" aria-selected="false" onclick="if(window.switchEmployeeView)window.switchEmployeeView('hotel')">
+          <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg></span>
+          <span>Hotel Stay</span>
+          <span id="tabHotelStayIndicator" class="tab-pill-dot" style="display: none;"></span>
+        </button>
+      </nav>
+
+      <!-- PANEL 1: ATTENDANCE PUNCH -->
+      <div id="panelAttendancePunch" class="employee-page-panel">
       
       <!-- Greeting (Section 10) -->
       <section class="employee-greeting">
@@ -85,34 +101,6 @@
               <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></span>
               <span>Official Travel / Transit</span>
             </button>
-          </div>
-
-          <!-- Location Classification Segment: Active Field Site vs Hotel / Stay -->
-          <div class="punch-location-toggle" id="togglePunchLocation" style="margin-bottom: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-            <button type="button" id="btnLocationField" class="duty-mode-btn active" title="Punching from active field survey site, health clinic or hospital" style="padding: 6px 10px; font-size: 11px;">
-              <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.5 2.8C2.1 11 2 11.5 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg></span>
-              <span>Field Site / Facility</span>
-            </button>
-            <button type="button" id="btnLocationHotel" class="duty-mode-btn" title="Punching from hotel or accommodation stay" style="padding: 6px 10px; font-size: 11px;">
-              <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M3 7v14M21 7v14M6 11h2M6 15h2M10 11h2M10 15h2M14 11h2M14 15h2M18 11h2M18 15h2M9 3h6v4H9z"/></svg></span>
-              <span>Hotel / Stay</span>
-            </button>
-          </div>
-
-          <!-- Quick Hotel Access Bar -->
-          <div id="hotelStayInfoBanner" style="display: none; background: #fffbeb; border: 1px solid #fde68a; border-radius: var(--radius-sm); padding: 8px 10px; margin-bottom: 12px;">
-            <div style="display: flex; align-items: center; justify-content: space-between;">
-              <span style="font-size: 11px; font-weight: 700; color: #92400e; display: inline-flex; align-items: center; gap: 4px;">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M3 7v14M21 7v14M6 11h2M6 15h2M10 11h2M10 15h2M14 11h2M14 15h2M18 11h2M18 15h2M9 3h6v4H9z"/></svg>
-                <span id="bannerHotelTitle">Hotel Accommodation Punch</span>
-              </span>
-              <button type="button" id="btnEditHotelStay" class="btn btn-secondary" style="font-size: 10px; padding: 2px 7px;">
-                Edit Details
-              </button>
-            </div>
-            <div id="bannerHotelDetails" style="font-size: 11px; color: #78350f; margin-top: 3px; line-height: 1.3;">
-              No hotel registered yet. Click to enter your room number and hotel address.
-            </div>
           </div>
 
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding: 2px 2px;">
@@ -187,11 +175,6 @@
               Field Site / Client Name / Visit Purpose
             </label>
             <input type="text" id="inputFieldSiteNotes" class="field-site-input" placeholder="e.g. AIIMS Trauma Center - On-site Inspection" />
-
-            <button type="button" id="btnOpenHotelModal" class="btn btn-secondary" style="font-size: 11px; padding: 6px 12px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%; margin-top: 8px;">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M3 7v14M21 7v14M6 11h2M6 15h2M10 11h2M10 15h2M14 11h2M14 15h2M18 11h2M18 15h2M9 3h6v4H9z"/></svg>
-              <span>My Hotel / Accommodation Details</span>
-            </button>
           </div>
         </div>
 
@@ -300,14 +283,115 @@
           </li>
         </ul>
       </section>
+      </div> <!-- /panelAttendancePunch -->
+
+      <!-- PANEL 2: INDIVIDUAL HOTEL STAY PAGE -->
+      <div id="panelHotelStay" class="employee-page-panel" style="display: none;">
+        <!-- Hotel Page Greeting Header -->
+        <section class="employee-greeting" style="margin-bottom: 16px;">
+          <div class="greeting-sup">OUTSTATION ACCOMMODATION</div>
+          <h1 class="greeting-name" style="font-size: 20px;">Hotel & Lodging Stay</h1>
+          <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 4px; line-height: 1.4;">
+            Register and update your hotel details, room number, and GPS verification pin during outstation field visits.
+          </div>
+        </section>
+
+        <!-- Active Lodging Status Card -->
+        <section class="surface-card" id="cardActiveHotelDisplay" style="padding: 18px; margin-bottom: 16px; border-radius: 12px; border: 1px solid var(--color-border-default);">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--color-text-secondary);">Current Lodging Status</span>
+            <span id="badgeActiveHotelStatus" class="badge badge-neutral" style="font-size: 11px;">No Active Stay</span>
+          </div>
+
+          <div id="contentActiveHotelStay">
+            <div style="padding: 16px 0; text-align: center; color: var(--color-text-tertiary); font-size: 12px;">
+              No hotel stay registered. If you are staying at a guest house or hotel for field work, register your stay using the form below.
+            </div>
+          </div>
+        </section>
+
+        <!-- Register / Update Hotel Stay Details Card -->
+        <section class="surface-card" style="padding: 18px; border-radius: 12px; border: 1px solid var(--color-border-default); margin-bottom: 24px;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 14px;">
+            <span class="ui-icon ui-icon-sm" style="color: #1e40af;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>
+            <div>
+              <h2 style="font-size: 15px; font-weight: 700; margin: 0; color: var(--color-text-primary);" id="headingHotelForm">Register / Update Lodging</h2>
+              <div style="font-size: 11px; color: var(--color-text-tertiary);">Official field survey accommodation record</div>
+            </div>
+          </div>
+
+          <form id="formHotelStayDetails">
+            <div style="margin-bottom: 12px;">
+              <label for="inputHotelName" style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">Hotel / Guest House Name *</label>
+              <input type="text" id="inputHotelName" class="form-input" placeholder="e.g. Hotel Grand Palace / AIIMS Guest House" required style="width: 100%; font-size: 13px; padding: 9px 12px;">
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+              <div>
+                <label for="inputHotelRoom" style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">Room Number</label>
+                <input type="text" id="inputHotelRoom" class="form-input" placeholder="e.g. 204" style="width: 100%; font-size: 13px; padding: 9px 12px;">
+              </div>
+              <div>
+                <label for="inputHotelPhone" style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">Hotel / Reception Phone</label>
+                <input type="tel" id="inputHotelPhone" class="form-input" placeholder="e.g. +91 9876543210" style="width: 100%; font-size: 13px; padding: 9px 12px;">
+              </div>
+            </div>
+
+            <div style="margin-bottom: 12px;">
+              <label for="inputHotelAddress" style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">Full Hotel Address & Landmark *</label>
+              <textarea id="inputHotelAddress" class="form-input" rows="2" placeholder="e.g. Boulevard Road, Near Dal Gate, Srinagar, Jammu & Kashmir" required style="width: 100%; font-size: 13px; padding: 9px 12px; resize: vertical;"></textarea>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px;">
+              <div>
+                <label for="inputHotelCheckinDate" style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">Check-In Date *</label>
+                <input type="date" id="inputHotelCheckinDate" class="form-input" required style="width: 100%; font-size: 13px; padding: 8px 12px;">
+              </div>
+              <div>
+                <label for="inputHotelCheckoutDate" style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">Expected Check-Out Date</label>
+                <input type="date" id="inputHotelCheckoutDate" class="form-input" style="width: 100%; font-size: 13px; padding: 8px 12px;">
+              </div>
+            </div>
+
+            <!-- GPS Verification Capture Box -->
+            <div style="background: #f8fafc; border: 1px solid var(--color-border-default); border-radius: 8px; padding: 12px; margin-bottom: 14px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+                <div>
+                  <div style="font-size: 11px; font-weight: 700; color: var(--color-text-primary);">Hotel GPS Verification Pin</div>
+                  <div id="textHotelGpsDisplay" style="font-size: 11px; color: var(--color-text-muted); font-family: var(--font-mono); margin-top: 2px;">Not captured yet</div>
+                </div>
+                <button type="button" id="btnCaptureHotelGps" class="btn btn-secondary" style="font-size: 11px; padding: 6px 12px; display: inline-flex; align-items: center; gap: 5px;">
+                  <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></span>
+                  <span>Capture Current GPS</span>
+                </button>
+              </div>
+            </div>
+
+            <div style="margin-bottom: 16px;">
+              <label for="inputHotelNotes" style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">Booking Reference / Project Notes (Optional)</label>
+              <input type="text" id="inputHotelNotes" class="form-input" placeholder="e.g. AIIMS CDER Jammu & Kashmir survey lodging" style="width: 100%; font-size: 13px; padding: 9px 12px;">
+            </div>
+
+            <div style="display: flex; gap: 10px;">
+              <button type="submit" id="btnSaveHotelStay" class="btn btn-primary" style="flex: 1; font-size: 13px; padding: 10px 16px; font-weight: 600;">
+                Save Hotel Details
+              </button>
+            </div>
+          </form>
+        </section>
+      </div> <!-- /panelHotelStay -->
 
     </main>
 
     <!-- 4. Mobile Bottom Navigation Bar (Section 17) -->
     <nav class="employee-bottom-nav">
-      <button class="bottom-nav-item active" id="bnavToday">
+      <button class="bottom-nav-item active" id="bnavToday" onclick="if(window.switchEmployeeView)window.switchEmployeeView('punch')">
         <span class="ui-icon ui-icon-md"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
-        <span>Today</span>
+        <span>Punch</span>
+      </button>
+      <button class="bottom-nav-item" id="bnavHotel" onclick="if(window.switchEmployeeView)window.switchEmployeeView('hotel')">
+        <span class="ui-icon ui-icon-md"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg></span>
+        <span>Hotel Stay</span>
       </button>
       <button class="bottom-nav-item" id="bnavHistory" onclick="alert('Attendance History: Verified attendance records are synchronized directly with your employer’s REDCap instance.')">
         <span class="ui-icon ui-icon-md"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
@@ -759,75 +843,6 @@
       "Dadra & Nagar Haveli and Daman & Diu": ["Dadra and Nagar Haveli"]
     };
   </script>
-  <!-- Dedicated Hotel / Accommodation Stay Modal -->
-  <div class="camera-overlay-backdrop" id="modalHotelStayDetails" style="display: none;" role="dialog" aria-modal="true">
-    <div class="camera-dialog-box" style="max-width: 480px; max-height: 90vh; overflow-y: auto;">
-      <div class="camera-dialog-header">
-        <div>
-          <h3 style="font-size: 15px; font-weight: 600;">My Hotel / Accommodation Details</h3>
-          <p style="font-size: 11px; color: var(--color-text-tertiary);">Share your current outstation stay information for official field records</p>
-        </div>
-        <button type="button" id="btnCloseHotelModal" class="btn-close-icon" aria-label="Close modal">&times;</button>
-      </div>
-
-      <form id="formHotelStayDetails" style="padding: 16px;">
-        <div style="margin-bottom: 12px;">
-          <label style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">Hotel / Guest House Name *</label>
-          <input type="text" id="inputHotelName" class="form-input" placeholder="e.g. Hotel Grand Palace / AIIMS Guest House" required style="width: 100%; font-size: 12px; padding: 8px 10px;">
-        </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
-          <div>
-            <label style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">Room Number *</label>
-            <input type="text" id="inputHotelRoom" class="form-input" placeholder="e.g. 204" required style="width: 100%; font-size: 12px; padding: 8px 10px;">
-          </div>
-          <div>
-            <label style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">Hotel / Reception Phone</label>
-            <input type="tel" id="inputHotelPhone" class="form-input" placeholder="e.g. +91 9876543210" style="width: 100%; font-size: 12px; padding: 8px 10px;">
-          </div>
-        </div>
-
-        <div style="margin-bottom: 12px;">
-          <label style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">Full Hotel Address & Landmark *</label>
-          <textarea id="inputHotelAddress" class="form-input" rows="2" placeholder="e.g. Boulevard Road, Near Dal Gate, Srinagar, Jammu & Kashmir" required style="width: 100%; font-size: 12px; padding: 8px 10px; resize: vertical;"></textarea>
-        </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
-          <div>
-            <label style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">Check-In Date *</label>
-            <input type="date" id="inputHotelCheckinDate" class="form-input" required style="width: 100%; font-size: 12px; padding: 6px 10px;">
-          </div>
-          <div>
-            <label style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">Expected Check-Out Date</label>
-            <input type="date" id="inputHotelCheckoutDate" class="form-input" style="width: 100%; font-size: 12px; padding: 6px 10px;">
-          </div>
-        </div>
-
-        <div style="background: #f8fafc; border: 1px solid var(--color-border-default); border-radius: 6px; padding: 10px 12px; margin-bottom: 14px;">
-          <div style="display: flex; align-items: center; justify-content: space-between;">
-            <div>
-              <div style="font-size: 11px; font-weight: 600; color: var(--color-text-primary);">Hotel GPS Pin Coordinates</div>
-              <div id="textHotelGpsDisplay" style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono); margin-top: 2px;">Not captured yet</div>
-            </div>
-            <button type="button" id="btnCaptureHotelGps" class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px; white-space: nowrap;">
-              Set Current Location
-            </button>
-          </div>
-        </div>
-
-        <div style="margin-bottom: 16px;">
-          <label style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">Booking Reference / Notes (Optional)</label>
-          <input type="text" id="inputHotelNotes" class="form-input" placeholder="e.g. AIIMS CDER field survey accommodation" style="width: 100%; font-size: 12px; padding: 8px 10px;">
-        </div>
-
-        <div style="display: flex; gap: 8px; justify-content: flex-end;">
-          <button type="button" id="btnCancelHotelModal" class="btn btn-secondary" style="font-size: 12px; padding: 8px 14px;">Cancel</button>
-          <button type="submit" id="btnSaveHotelStay" class="btn btn-primary" style="font-size: 12px; padding: 8px 16px;">Save Hotel Details</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
   <script src="./face_biometric_client.js?v=3"></script>
   <script src="./app.js?v=16"></script>
 </body>

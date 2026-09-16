@@ -72,9 +72,9 @@
               </a>
             </li>
             <li>
-              <a class="nav-link" data-view="viewShifts" id="navShifts">
-                <span class="nav-icon"><span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg></span></span>
-                <span>Shifts</span>
+              <a class="nav-link" data-view="viewHotelStays" id="navHotelStays">
+                <span class="nav-icon"><span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg></span></span>
+                <span>Hotel Stays</span>
               </a>
             </li>
             <li>
@@ -513,12 +513,65 @@
           </div>
         </section>
 
-        <section id="viewShifts" class="admin-view-panel" style="display: none;">
-          <div class="surface-card" style="padding: 32px; text-align: center;">
-            <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 6px;">Shift Configurations</h3>
-            <p style="font-size: 13px; color: var(--color-text-tertiary); max-width: 480px; margin: 0 auto 20px;">
-              Configured shift: 09:00 AM – 05:00 PM (8.0 Hours). Overtime starts automatically past required shift hours.
-            </p>
+        <!-- VIEW: HOTEL STAYS (Dedicated Field Worker Lodging Directory) -->
+        <section id="viewHotelStays" class="admin-view-panel" style="display: none;">
+          <!-- Top Metric Cards -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 20px;">
+            <div class="surface-card" style="padding: 16px 20px;">
+              <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-tertiary); margin-bottom: 4px;">Total Lodgings Recorded</div>
+              <div id="metricTotalHotelStays" style="font-size: 24px; font-weight: 700; color: var(--color-text-primary);">--</div>
+              <div style="font-size: 11px; color: var(--color-text-secondary); margin-top: 4px;">Registered accommodation history</div>
+            </div>
+            <div class="surface-card" style="padding: 16px 20px;">
+              <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: #b45309; margin-bottom: 4px;">Active Hotel Stays</div>
+              <div id="metricActiveHotelStays" style="font-size: 24px; font-weight: 700; color: #d97706;">--</div>
+              <div style="font-size: 11px; color: var(--color-text-secondary); margin-top: 4px;">Field workers currently staying</div>
+            </div>
+            <div class="surface-card" style="padding: 16px 20px;">
+              <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: #0369a1; margin-bottom: 4px;">Workers in Outstation Stay</div>
+              <div id="metricWorkersInHotels" style="font-size: 24px; font-weight: 700; color: #0284c7;">--</div>
+              <div style="font-size: 11px; color: var(--color-text-secondary); margin-top: 4px;">Assigned across state territories</div>
+            </div>
+          </div>
+
+          <!-- Filter & Search Bar -->
+          <div class="surface-card" style="margin-bottom: 20px; padding: 18px 24px;">
+            <div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px;">
+              <div style="display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap;">
+                <div>
+                  <label for="hotelStaysSearchInput" style="display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); margin-bottom: 4px;">Search Worker, Hotel or City</label>
+                  <input type="text" id="hotelStaysSearchInput" class="form-input" placeholder="e.g. Srinagar, Grand Palace, Sharma..." style="min-width: 260px; font-size: 13px; padding: 7px 12px;">
+                </div>
+                <div>
+                  <label for="hotelStaysStatusFilter" style="display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); margin-bottom: 4px;">Stay Status</label>
+                  <select id="hotelStaysStatusFilter" class="form-select" style="min-width: 160px; font-size: 13px; padding: 7px 12px;">
+                    <option value="ALL">All Stays</option>
+                    <option value="ACTIVE" selected>Active Lodgings Only</option>
+                    <option value="COMPLETED">Completed Stays</option>
+                  </select>
+                </div>
+              </div>
+              <div style="display: flex; gap: 10px;">
+                <button type="button" id="btnRefreshHotelStays" class="btn btn-secondary" style="font-size: 13px; padding: 7px 14px; display: inline-flex; align-items: center; gap: 6px;">
+                  <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg></span>
+                  <span>Refresh</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Hotel Stays Directory List / Table Container -->
+          <div class="surface-card" style="padding: 20px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+              <div>
+                <h3 style="font-size: 15px; font-weight: 600; margin: 0;">Field Worker Lodging Directory</h3>
+                <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 2px;">Verified hotel names, room numbers, contact details, and GPS coordinates</div>
+              </div>
+              <div id="hotelStaysCountBadge" class="badge badge-neutral" style="font-size: 12px;">Loading stays...</div>
+            </div>
+            <div id="adminHotelStaysPageList">
+              <!-- Rendered via loadHotelStaysPageView() -->
+            </div>
           </div>
         </section>
 
