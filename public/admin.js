@@ -543,15 +543,312 @@ async function handleEmailAttendanceBackup() {
 }
 
 /**
+ * Working Hours Color Coding & Category Calculator
+ * - 8 or more hours: GREEN
+ * - Between 6 and 8 hours: YELLOW
+ * - Less than 6 hours: RED
+ * - In Progress: BLUE
+ */
+function computeWorkingHoursMeta(r) {
+  const isCheckedOut = Boolean(r.checkout_server_timestamp) || r.attendance_status === 'COMPLETED';
+  if (!isCheckedOut) {
+    return {
+      hours: null,
+      hoursStr: 'In Progress',
+      badgeHtml: '<span class="badge-hours-progress">In Progress</span>',
+      rowClass: 'att-row-progress',
+      category: 'IN_PROGRESS'
+    };
+  }
+
+  const sec = Number(r.net_working_seconds) || 0;
+  const hrs = sec / 3600;
+  const formatted = `${hrs.toFixed(2)}h`;
+
+  if (hrs >= 8) {
+    // 8 or more hours: GREEN
+    return {
+      hours: hrs,
+      hoursStr: formatted,
+      badgeHtml: `<span class="badge-hours-green" title="Full Shift: ${formatted} (&ge; 8 hrs)">${formatted}</span>`,
+      rowClass: 'att-row-green',
+      category: 'GREEN'
+    };
+  } else if (hrs >= 6) {
+    // between 6 and 8 hours: YELLOW
+    return {
+      hours: hrs,
+      hoursStr: formatted,
+      badgeHtml: `<span class="badge-hours-yellow" title="Partial Shift: ${formatted} (6-8 hrs)">${formatted}</span>`,
+      rowClass: 'att-row-yellow',
+      category: 'YELLOW'
+    };
+  } else {
+    // less than 6 hours: RED
+    return {
+      hours: hrs,
+      hoursStr: formatted,
+      badgeHtml: `<span class="badge-hours-red" title="Short / Under Hours: ${formatted} (&lt; 6 hrs)">${formatted}</span>`,
+      rowClass: 'att-row-red',
+      category: 'RED'
+    };
+  }
+}
+
+let attendanceViewMode = 'INDIVIDUAL';
+let viewModeToggleInitialized = false;
+
+function initAttendanceViewModeToggle() {
+  if (viewModeToggleInitialized) return;
+  const btnIndiv = document.getElementById('btnViewModeIndividual');
+  const btnUnified = document.getElementById('btnViewModeUnified');
+  if (!btnIndiv || !btnUnified) return;
+  viewModeToggleInitialized = true;
+
+  btnIndiv.onclick = () => {
+    attendanceViewMode = 'INDIVIDUAL';
+    btnIndiv.style.background = '#fff';
+    btnIndiv.style.color = 'var(--color-text-primary)';
+    btnIndiv.style.fontWeight = '600';
+    btnIndiv.style.boxShadow = '0 1px 2px rgba(0,0,0,0.08)';
+
+    btnUnified.style.background = 'transparent';
+    btnUnified.style.color = 'var(--color-text-secondary)';
+    btnUnified.style.fontWeight = '500';
+    btnUnified.style.boxShadow = 'none';
+
+    const indivContainer = document.getElementById('attendanceIndividualTablesContainer');
+    const unifiedWrap = document.getElementById('attendanceUnifiedTableWrap');
+    if (indivContainer) indivContainer.style.display = 'block';
+    if (unifiedWrap) unifiedWrap.style.display = 'none';
+  };
+
+  btnUnified.onclick = () => {
+    attendanceViewMode = 'UNIFIED';
+    btnUnified.style.background = '#fff';
+    btnUnified.style.color = 'var(--color-text-primary)';
+    btnUnified.style.fontWeight = '600';
+    btnUnified.style.boxShadow = '0 1px 2px rgba(0,0,0,0.08)';
+
+    btnIndiv.style.background = 'transparent';
+    btnIndiv.style.color = 'var(--color-text-secondary)';
+    btnIndiv.style.fontWeight = '500';
+    btnIndiv.style.boxShadow = 'none';
+
+    const indivContainer = document.getElementById('attendanceIndividualTablesContainer');
+    const unifiedWrap = document.getElementById('attendanceUnifiedTableWrap');
+    if (indivContainer) indivContainer.style.display = 'none';
+    if (unifiedWrap) unifiedWrap.style.display = 'block';
+  };
+}
+
+/**
+ * Render Individual Attendance Tables for Each Person
+ */
+function renderIndividualAttendanceTables(records) {
+  const container = document.getElementById('attendanceIndividualTablesContainer');
+  if (!container) return;
+
+  if (!records || records.length === 0) {
+    container.innerHTML = '<div style="text-align: center; color: var(--color-text-muted); padding: 48px;">No matching attendance records found.</div>';
+    return;
+  }
+
+  // Group records by employee
+  const employeeMap = new Map();
+  for (const r of records) {
+    const empId = r.employee_id || 'UNKNOWN';
+    if (!employeeMap.has(empId)) {
+      employeeMap.set(empId, {
+        id: empId,
+        name: r.employee_name || 'Unknown Employee',
+        department: r.department || 'CDER',
+        designation: r.designation || 'Staff',
+        team: r.team_name || 'Direct Assignment',
+        state: r.state || '',
+        district: r.district || '',
+        records: []
+      });
+    }
+    employeeMap.get(empId).records.push(r);
+  }
+
+  const cardsHtml = Array.from(employeeMap.values()).map(emp => {
+    const totalRecords = emp.records.length;
+    const completed = emp.records.filter(r => r.checkout_server_timestamp || r.attendance_status === 'COMPLETED');
+    const totalSec = completed.reduce((acc, r) => acc + (Number(r.net_working_seconds) || 0), 0);
+    const totalHrs = totalSec / 3600;
+    const avgHrs = completed.length > 0 ? (totalHrs / completed.length) : 0;
+
+    let greenCount = 0;
+    let yellowCount = 0;
+    let redCount = 0;
+    let progressCount = 0;
+
+    for (const r of emp.records) {
+      const meta = computeWorkingHoursMeta(r);
+      if (meta.category === 'GREEN') greenCount++;
+      else if (meta.category === 'YELLOW') yellowCount++;
+      else if (meta.category === 'RED') redCount++;
+      else progressCount++;
+    }
+
+    const rowsHtml = emp.records.map(r => {
+      const checkinTime = new Date(r.checkin_server_timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const checkoutTime = r.checkout_server_timestamp
+        ? new Date(r.checkout_server_timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : '--:--';
+
+      const hoursMeta = computeWorkingHoursMeta(r);
+
+      const statusBadge = r.attendance_status === 'COMPLETED'
+        ? '<span class="badge badge-neutral">Completed</span>'
+        : (r.attendance_status === 'ON_BREAK'
+          ? '<span class="badge badge-warning">On Break</span>'
+          : '<span class="badge badge-success">Working</span>');
+
+      const checkinPhoto = r.checkin_photo
+        ? `<img src="${r.checkin_photo}" class="table-photo-thumb" alt="Checkin" onclick="event.stopPropagation(); openPhotoLightbox('${r.checkin_photo}')" title="Click to view full photo">`
+        : '<span style="color: var(--color-text-muted);">None</span>';
+
+      const checkoutPhoto = r.checkout_photo
+        ? `<img src="${r.checkout_photo}" class="table-photo-thumb" alt="Checkout" onclick="event.stopPropagation(); openPhotoLightbox('${r.checkout_photo}')" title="Click to view full photo">`
+        : '<span style="color: var(--color-text-muted);">--</span>';
+
+      const isField = r.work_mode === 'FIELD_WORK';
+      const dateStr = r.checkin_server_timestamp ? new Date(r.checkin_server_timestamp).toISOString().split('T')[0] : '';
+
+      return `
+        <tr id="att-row-${r.id}" class="${hoursMeta.rowClass}" onclick="openAttendanceDrawer('${r.id}')" style="cursor: pointer;">
+          <td style="font-weight: 600; font-size: 12px; white-space: nowrap;">${dateStr}</td>
+          <td style="font-family: var(--font-mono); font-size: 12px; white-space: nowrap;">${checkinTime}</td>
+          <td>${checkinPhoto}</td>
+          <td>
+            ${isField ? `
+              <span class="badge" style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; font-size: 10px; margin-bottom: 2px; display: inline-flex; align-items: center; gap: 4px;">
+                ${window.Icons ? window.Icons.render('car', { size: 10 }) : ''}
+                <span>Field ${r.field_site_notes ? '· ' + escapeHtml(r.field_site_notes) : ''}</span>
+              </span>
+              <div style="font-size: 11px; color: var(--color-text-primary); max-width: 220px; line-height: 1.3;">
+                ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Premises'))}
+              </div>
+              <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">±${r.checkin_accuracy}m accuracy</div>
+            ` : `
+              <span class="badge badge-neutral" style="font-size: 10px; margin-bottom: 2px;">Office Premises</span>
+              <div style="font-size: 11px; color: var(--color-text-secondary); max-width: 200px;">${escapeHtml(r.checkin_address || 'Office Premises')}</div>
+            `}
+          </td>
+          <td style="font-family: var(--font-mono); font-size: 12px; white-space: nowrap;">${checkoutTime}</td>
+          <td>${checkoutPhoto}</td>
+          <td style="white-space: nowrap;">${hoursMeta.badgeHtml}</td>
+          <td>${statusBadge}</td>
+          <td style="white-space: nowrap; text-align: right;">
+            <div style="display: inline-flex; align-items: center; gap: 4px;">
+              <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="event.stopPropagation(); openAttendanceDrawer('${r.id}')">View</button>
+              <button class="btn btn-danger" style="padding: 3px 8px; font-size: 11px;" onclick="event.stopPropagation(); handleDeleteAttendance('${r.id}', '${escapeHtml(r.employee_name)}')" title="Delete attendance record">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    return `
+      <div class="emp-attendance-card" id="emp-card-${escapeHtml(emp.id)}">
+        <div class="emp-attendance-header">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="user-avatar" style="width: 38px; height: 38px; font-size: 15px; font-weight: 700; background: var(--color-brand); color: #fff;">
+              ${escapeHtml(emp.name.charAt(0).toUpperCase())}
+            </div>
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-weight: 700; font-size: 14px; color: var(--color-text-primary);">${escapeHtml(emp.name)}</span>
+                <span class="badge badge-neutral" style="font-family: var(--font-mono); font-size: 11px;">${escapeHtml(emp.id)}</span>
+                <span style="font-size: 12px; color: var(--color-text-tertiary);">${escapeHtml(emp.department)}</span>
+              </div>
+              <div style="font-size: 11px; color: var(--color-text-muted); margin-top: 2px;">
+                Team: <strong>${escapeHtml(emp.team)}</strong> ${emp.district ? `· ${escapeHtml(emp.district)}, ${escapeHtml(emp.state)}` : ''}
+              </div>
+            </div>
+          </div>
+
+          <!-- Cumulative KPIs & Hours Breakdown for this person -->
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span class="emp-attendance-pill" title="Total Recorded Shifts">
+              <strong>${totalRecords}</strong> Shift${totalRecords === 1 ? '' : 's'}
+            </span>
+            <span class="emp-attendance-pill" title="Total Productive Hours">
+              Total: <strong>${totalHrs.toFixed(2)}h</strong>
+            </span>
+            <span class="emp-attendance-pill" title="Average Hours per Shift">
+              Avg: <strong>${avgHrs.toFixed(2)}h/shift</strong>
+            </span>
+            <span class="badge-hours-green" style="font-size: 11px; padding: 2px 7px;" title="Shifts with &ge; 8 hours">
+              ${greenCount} &ge; 8h
+            </span>
+            <span class="badge-hours-yellow" style="font-size: 11px; padding: 2px 7px;" title="Shifts with 6-8 hours">
+              ${yellowCount} 6-8h
+            </span>
+            ${redCount > 0 ? `
+              <span class="badge-hours-red" style="font-size: 11px; padding: 2px 7px;" title="Shifts with &lt; 6 hours">
+                ${redCount} &lt; 6h
+              </span>
+            ` : ''}
+
+            <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px; margin-left: 4px;" onclick="openPersonTimesheet('${escapeHtml(emp.id)}')">
+              Full Timesheet
+            </button>
+            <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;" onclick="exportPersonTimesheetCsv('${escapeHtml(emp.id)}')">
+              Export CSV
+            </button>
+          </div>
+        </div>
+
+        <div class="table-responsive-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Check-In</th>
+                <th>Photo</th>
+                <th>Location / Notes</th>
+                <th>Checkout</th>
+                <th>Photo</th>
+                <th>Working Hours</th>
+                <th>Status</th>
+                <th style="text-align: right;">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = cardsHtml;
+}
+
+/**
  * Filter & Render Attendance Table
  */
 function renderAttendanceTable(records) {
-  const tbody = document.getElementById('attendanceMainTableBody');
-  const countLabel = document.getElementById('attendanceCountLabel');
+  initAttendanceViewModeToggle();
 
+  const countLabel = document.getElementById('attendanceCountLabel');
   if (countLabel) {
     countLabel.textContent = `Showing ${records.length} record${records.length === 1 ? '' : 's'}`;
   }
+
+  // Render Mode 1: Individual Tables for Each Person
+  renderIndividualAttendanceTables(records);
+
+  // Render Mode 2: Unified Consolidated Table
+  const tbody = document.getElementById('attendanceMainTableBody');
+  if (!tbody) return;
 
   if (records.length === 0) {
     tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; color: var(--color-text-muted); padding: 32px;">No matching attendance records found.</td></tr>`;
@@ -564,9 +861,7 @@ function renderAttendanceTable(records) {
       ? new Date(r.checkout_server_timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       : '--:--';
 
-    const netHours = r.net_working_seconds
-      ? `${(r.net_working_seconds / 3600).toFixed(2)}h`
-      : (r.attendance_status === 'COMPLETED' ? '0.00h' : 'In Progress');
+    const hoursMeta = computeWorkingHoursMeta(r);
 
     const statusBadge = r.attendance_status === 'COMPLETED'
       ? '<span class="badge badge-neutral">Completed</span>'
@@ -585,7 +880,7 @@ function renderAttendanceTable(records) {
     const isField = r.work_mode === 'FIELD_WORK';
 
     return `
-      <tr id="att-row-${r.id}" onclick="openAttendanceDrawer('${r.id}')" style="cursor: pointer;">
+      <tr id="att-row-${r.id}" class="${hoursMeta.rowClass}" onclick="openAttendanceDrawer('${r.id}')" style="cursor: pointer;">
         <td>
           <div style="display: flex; align-items: center; gap: 8px;">
             <div class="table-emp-avatar">${r.employee_name.charAt(0)}</div>
@@ -629,7 +924,7 @@ function renderAttendanceTable(records) {
         </td>
         <td style="font-family: var(--font-mono);">${checkoutTime}</td>
         <td>${checkoutPhoto}</td>
-        <td style="font-family: var(--font-mono); font-weight: 600; color: var(--color-primary);">${netHours}</td>
+        <td style="white-space: nowrap;">${hoursMeta.badgeHtml}</td>
         <td>${statusBadge}</td>
         <td style="white-space: nowrap;">
           <div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px;">
@@ -1694,8 +1989,10 @@ function renderTimesheetSessions(records) {
     else if (r.attendance_status === 'OVERTIME') statusBadge = '<span class="badge" style="background: #f5f3ff; color: #7c3aed; border: 1px solid #ddd6fe;">Overtime</span>';
     else if (r.attendance_status === 'CHECKED_IN') statusBadge = '<span class="badge badge-primary">Active Shift</span>';
 
+    const hoursMeta = computeWorkingHoursMeta(r);
+
     return `
-      <tr id="ts-row-${r.id}">
+      <tr id="ts-row-${r.id}" class="${hoursMeta.rowClass}">
         <td>
           <div style="font-weight: 600; font-size: 12px; color: var(--color-text-primary);">${dateStr}</div>
           <div style="font-size: 11px; color: var(--color-text-tertiary);">${dayStr}</div>
@@ -1704,7 +2001,7 @@ function renderTimesheetSessions(records) {
         <td style="max-width: 170px;">${checkinLoc}</td>
         <td style="font-family: var(--font-mono); font-size: 12px;">${checkoutTime}</td>
         <td style="max-width: 170px;">${checkoutLoc}</td>
-        <td style="font-family: var(--font-mono); font-weight: 700; color: var(--color-primary);">${netHours}</td>
+        <td style="white-space: nowrap;">${hoursMeta.badgeHtml}</td>
         <td style="font-family: var(--font-mono); font-size: 12px; color: var(--color-text-secondary);">${grossHours}</td>
         <td style="font-size: 12px;">${breakMins}</td>
         <td style="font-size: 12px; font-weight: 600; color: #7c3aed;">${overtime}</td>

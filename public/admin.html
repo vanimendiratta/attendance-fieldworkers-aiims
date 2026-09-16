@@ -320,8 +320,44 @@
           </div>
         </section>
 
-        <!-- VIEW 2: FULL ATTENDANCE TABLE (Section 8 & 17) -->
+        <!-- VIEW 2: ATTENDANCE RECORDS & INDIVIDUAL TABLES -->
         <section id="viewAttendance" class="admin-view-panel" style="display: none;">
+          <!-- Hours Color Coding Legend & View Mode Toggle -->
+          <div class="surface-card" style="margin-bottom: 16px; padding: 12px 20px;">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;">
+              <!-- Color coding legend -->
+              <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 12px;">
+                <span style="font-weight: 600; color: var(--color-text-secondary);">Working Hours Coding:</span>
+                <span style="display: inline-flex; align-items: center; gap: 6px;">
+                  <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #10b981;"></span>
+                  <strong style="color: #15803d;">&ge; 8 Hours (Full Shift)</strong>
+                </span>
+                <span style="display: inline-flex; align-items: center; gap: 6px;">
+                  <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #f59e0b;"></span>
+                  <strong style="color: #b45309;">6 – 8 Hours (Partial Shift)</strong>
+                </span>
+                <span style="display: inline-flex; align-items: center; gap: 6px;">
+                  <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #ef4444;"></span>
+                  <strong style="color: #b91c1c;">&lt; 6 Hours (Under Hours)</strong>
+                </span>
+                <span style="display: inline-flex; align-items: center; gap: 6px;">
+                  <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #3b82f6;"></span>
+                  <span style="color: var(--color-text-muted);">Active / In Progress</span>
+                </span>
+              </div>
+
+              <!-- View mode switcher -->
+              <div style="display: inline-flex; background: #e2e8f0; border-radius: 6px; padding: 2px;">
+                <button type="button" id="btnViewModeIndividual" class="btn" style="font-size: 11px; padding: 5px 12px; border: none; background: #fff; color: var(--color-text-primary); box-shadow: 0 1px 2px rgba(0,0,0,0.08); font-weight: 600; border-radius: 4px;">
+                  Individual Person Tables
+                </button>
+                <button type="button" id="btnViewModeUnified" class="btn" style="font-size: 11px; padding: 5px 12px; border: none; background: transparent; color: var(--color-text-secondary); box-shadow: none; font-weight: 500; border-radius: 4px;">
+                  Combined All Records Table
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div class="table-container">
             <div class="table-toolbar">
               <div class="table-filters" style="flex-wrap: wrap; gap: 8px;">
@@ -363,7 +399,13 @@
               </div>
             </div>
 
-            <div class="table-responsive-wrap">
+            <!-- VIEW MODE 1: INDIVIDUAL ATTENDANCE TABLES FOR EACH PERSON -->
+            <div id="attendanceIndividualTablesContainer" style="padding: 16px 20px;">
+              <div style="text-align: center; color: var(--color-text-muted); padding: 32px;">Loading individual person tables...</div>
+            </div>
+
+            <!-- VIEW MODE 2: UNIFIED CONSOLIDATED ATTENDANCE TABLE -->
+            <div class="table-responsive-wrap" id="attendanceUnifiedTableWrap" style="display: none;">
               <table class="data-table" id="attendanceMainTable">
                 <thead>
                   <tr>
@@ -375,7 +417,7 @@
                     <th>Check-In Location</th>
                     <th>Checkout Time</th>
                     <th>Checkout Photo</th>
-                    <th>Net Hours</th>
+                    <th>Net Working Hours</th>
                     <th>Status</th>
                     <th style="text-align: right;">Actions</th>
                   </tr>
