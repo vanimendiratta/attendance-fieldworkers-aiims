@@ -797,10 +797,11 @@ function renderDailyAttendanceTables(records) {
       filterNote = `No matching attendance records found for date ${selectedHistoricalDate}.`;
     }
   } else if (currentAttendanceDateWindow === 'ALL') {
-    displayedDates = allDates.slice().sort((a, b) => a.localeCompare(b));
+    // Newest table on top
+    displayedDates = allDates.slice().sort((a, b) => b.localeCompare(a));
   } else {
-    // Default: RECENT_WEEK in chronological order (earlier day first: Tuesday = Table 1, Wednesday = Table 2)
-    displayedDates = recentDatesList.slice().sort((a, b) => a.localeCompare(b));
+    // Default: RECENT_WEEK with newest table on top (e.g. Wednesday / Today = Table 1, Tuesday = Table 2)
+    displayedDates = recentDatesList.slice().sort((a, b) => b.localeCompare(a));
   }
 
   if (displayedDates.length === 0) {
