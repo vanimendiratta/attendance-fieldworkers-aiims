@@ -678,7 +678,11 @@ router.get('/attendance/current', requireAuthenticatedEmployee, async (req, res)
 router.post('/attendance/check-in', requireAuthenticatedEmployee, async (req, res) => {
   try {
     const employee = req.employee;
-    const { photo, latitude, longitude, accuracy, client_timestamp, idempotency_key, work_mode, field_site_notes, team_id, state, district } = req.body;
+    const { 
+      photo, latitude, longitude, accuracy, client_timestamp, idempotency_key, 
+      work_mode, field_site_notes, team_id, state, district,
+      punch_location_type, hotel_stay_id, hotel_name, hotel_room, hotel_phone
+    } = req.body;
 
     if (!photo) return res.status(400).json({ success: false, error: 'Real-time live camera photo is required. Gallery uploads are disabled.' });
     if (latitude === undefined || longitude === undefined || accuracy === undefined) {
@@ -693,6 +697,11 @@ router.post('/attendance/check-in', requireAuthenticatedEmployee, async (req, re
       clientTimestamp: client_timestamp, idempotencyKey: idempotency_key,
       workMode: work_mode || 'FIELD_WORK', fieldSiteNotes: field_site_notes || null,
       teamId: team_id || null, state: state || null, district: district || null,
+      punchLocationType: punch_location_type || 'FIELD_SITE',
+      hotelStayId: hotel_stay_id || null,
+      hotelName: hotel_name || null,
+      hotelRoom: hotel_room || null,
+      hotelPhone: hotel_phone || null,
       clientIp, userAgent
     });
     res.json({ success: true, ...result });
@@ -700,16 +709,158 @@ router.post('/attendance/check-in', requireAuthenticatedEmployee, async (req, re
 });
 
 // ---------------------------------------------------------------------------
-// 8b. Location Preview
+// 8b. Location Preview with Detailed Place Identification
 // ---------------------------------------------------------------------------
 router.get('/location/preview', async (req, res) => {
   try {
     const { lat, lng } = req.query;
     if (!lat || !lng) return res.status(400).json({ success: false, error: 'Latitude and longitude required.' });
-    const address = await geoService.reverseGeocode(parseFloat(lat), parseFloat(lng));
-    const matched = matchStateAndDistrict({ state: address, city: address });
-    res.json({ success: true, address, state: matched.state, district: matched.district });
+    const details = await geoService.reverseGeocodeDetailed(parseFloat(lat), parseFloat(lng));
+    const matched = matchStateAndDistrict({ state: details.address, city: details.address });
+    res.json({ 
+      success: true, 
+      address: details.address, 
+      placeName: details.placeName,
+      placeType: details.placeType,
+      isLodging: details.isLodging,
+      isHealthFacility: details.isHealthFacility,
+      coordinatesUrl: details.coordinatesUrl,
+      state: matched.state, 
+      district: matched.district 
+    });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+// ---------------------------------------------------------------------------
+// 8c. Employee: Get Current Active Hotel Stay
+// ---------------------------------------------------------------------------
+router.get('/employee/hotel-stay/active', requireAuthenticatedEmployee, async (req, res) => {
+  try {
+    const employeeId = req.employee.id;
+    const result = await query(
+      `SELECT * FROM employee_hotel_stays 
+       WHERE employee_id = $1 AND stay_status = 'ACTIVE' 
+       ORDER BY created_at DESC LIMIT 1`,
+      [employeeId]
+    );
+    res.json({ success: true, stay: result.rows[0] || null });
+  } catch (err) {
+    return handleApiError(res, req, err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 8d. Employee: Register or Update Hotel Stay Details
+// ---------------------------------------------------------------------------
+router.post('/employee/hotel-stay', requireAuthenticatedEmployee, async (req, res) => {
+  try {
+    const employeeId = req.employee.id;
+    const employerId = req.employee.employer_id || 'ORG-001';
+    const {
+      hotel_name, room_number, hotel_address, hotel_phone,
+      checkin_date, checkout_date, booking_ref, hotel_lat, hotel_lng, notes
+    } = req.body;
+
+    if (!hotel_name || !hotel_address) {
+      return res.status(400).json({ success: false, error: 'Hotel name and hotel address are required.' });
+    }
+
+    const stayId = `STAY-${employeeId}-${Date.now().toString(36)}`;
+    const cIn = checkin_date ? String(checkin_date).split('T')[0] : new Date().toISOString().split('T')[0];
+    const cOut = checkout_date ? String(checkout_date).split('T')[0] : null;
+
+    // Mark previous active stays as completed
+    await query(
+      `UPDATE employee_hotel_stays 
+       SET stay_status = 'COMPLETED', updated_at = NOW() 
+       WHERE employee_id = $1 AND stay_status = 'ACTIVE'`,
+      [employeeId]
+    );
+
+    const result = await query(
+      `INSERT INTO employee_hotel_stays (
+         id, employer_id, employee_id, hotel_name, room_number, hotel_address, hotel_phone,
+         checkin_date, checkout_date, booking_ref, hotel_lat, hotel_lng, stay_status, notes,
+         created_at, updated_at
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'ACTIVE', $13, NOW(), NOW())
+       RETURNING *`,
+      [
+        stayId, employerId, employeeId, String(hotel_name).trim(), room_number ? String(room_number).trim() : null,
+        String(hotel_address).trim(), hotel_phone ? String(hotel_phone).trim() : null,
+        cIn, cOut, booking_ref ? String(booking_ref).trim() : null,
+        hotel_lat != null && !isNaN(hotel_lat) ? parseFloat(hotel_lat) : null,
+        hotel_lng != null && !isNaN(hotel_lng) ? parseFloat(hotel_lng) : null,
+        notes ? String(notes).trim() : null
+      ]
+    );
+
+    res.json({ success: true, stay: result.rows[0], message: 'Hotel stay details registered successfully.' });
+  } catch (err) {
+    return handleApiError(res, req, err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 8e. Admin: List All Employee Hotel Stays
+// ---------------------------------------------------------------------------
+router.get('/admin/hotel-stays', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const employerId = req.employerId;
+    const { employee_id, status, search } = req.query;
+    const params = [employerId];
+    let sql = `
+      SELECT s.*, e.name AS employee_name, e.department, e.designation, e.phone AS employee_phone,
+             COALESCE(t.name, 'Direct Assignment') AS team_name
+      FROM employee_hotel_stays s
+      JOIN employees e ON s.employee_id = e.id
+      LEFT JOIN teams t ON e.team_id = t.id
+      WHERE s.employer_id = $1
+    `;
+
+    if (employee_id && employee_id !== 'ALL') {
+      params.push(employee_id);
+      sql += ` AND s.employee_id = $${params.length}`;
+    }
+    if (status && status !== 'ALL') {
+      params.push(status);
+      sql += ` AND s.stay_status = $${params.length}`;
+    }
+    if (search && search.trim()) {
+      params.push(`%${search.trim().toLowerCase()}%`);
+      const n = params.length;
+      sql += ` AND (
+        LOWER(e.name) LIKE $${n} OR
+        LOWER(s.hotel_name) LIKE $${n} OR
+        LOWER(s.hotel_address) LIKE $${n} OR
+        LOWER(COALESCE(s.room_number, '')) LIKE $${n}
+      )`;
+    }
+
+    sql += ' ORDER BY s.created_at DESC';
+    const result = await query(sql, params);
+    res.json({ success: true, stays: result.rows });
+  } catch (err) {
+    return handleApiError(res, req, err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 8f. Admin: List Stays for Specific Employee
+// ---------------------------------------------------------------------------
+router.get('/admin/employees/:id/hotel-stays', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const employerId = req.employerId;
+    const employeeId = req.params.id;
+    const result = await query(
+      `SELECT * FROM employee_hotel_stays 
+       WHERE employer_id = $1 AND employee_id = $2 
+       ORDER BY created_at DESC`,
+      [employerId, employeeId]
+    );
+    res.json({ success: true, stays: result.rows });
+  } catch (err) {
+    return handleApiError(res, req, err);
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -868,6 +1019,9 @@ async function getFilteredAttendanceRecords({ employerId, employee_id, work_mode
     r.holiday_type = hInfo ? hInfo.holiday_type : (isSunday ? 'WEEKLY_OFF' : null);
     r.compoff_earned = r.is_holiday_work ? 1 : 0;
 
+    r.exact_coordinates_url = r.exact_coordinates_url || (r.checkin_lat != null && r.checkin_lng != null ? `https://www.google.com/maps?q=${Number(r.checkin_lat).toFixed(6)},${Number(r.checkin_lng).toFixed(6)}` : null);
+    r.punch_location_type = r.punch_location_type || (r.work_mode === 'TRAVEL' ? 'TRAVEL_TRANSIT' : 'FIELD_SITE');
+
     const netH = r.net_working_seconds != null ? (r.net_working_seconds / 3600) : 0;
     r.shift_variance_hours = Number((netH - shiftTargetHours).toFixed(2));
     r.shift_target_hours = shiftTargetHours;
@@ -897,9 +1051,11 @@ function generateAttendanceCsv(records) {
   const headers = [
     'Attendance ID','Employee ID','Employee Name','Department','Designation','Email',
     'Organization','Team Name','State / UT','District','Work Mode','Attendance Status',
+    'Location Classification','Hotel / Stay Name','Hotel Room Number','Hotel Contact Phone',
     'Holiday / Sunday Duty','Holiday Name','Comp-Off Credit',
     'Check-In Date','Check-In Time','Check-In Server Timestamp (UTC)',
     'Check-In Latitude','Check-In Longitude','Check-In GPS Accuracy (m)',
+    'Exact Google Maps Satellite Pin URL',
     'Check-In Geofence Distance (m)','Check-In Geofence Status','Check-In Address',
     'Checkout Date','Checkout Time','Checkout Server Timestamp (UTC)',
     'Checkout Latitude','Checkout Longitude','Checkout GPS Accuracy (m)',
@@ -914,10 +1070,17 @@ function generateAttendanceCsv(records) {
     const checkinTime  = r.checkin_server_timestamp  ? new Date(r.checkin_server_timestamp).toLocaleTimeString('en-US', { hour12: false }) : '';
     const checkoutDate = r.checkout_server_timestamp ? new Date(r.checkout_server_timestamp).toISOString().split('T')[0] : '';
     const checkoutTime = r.checkout_server_timestamp ? new Date(r.checkout_server_timestamp).toLocaleTimeString('en-US', { hour12: false }) : '';
+    const exactMapUrl  = r.exact_coordinates_url || (r.checkin_lat != null && r.checkin_lng != null ? `https://www.google.com/maps?q=${Number(r.checkin_lat).toFixed(6)},${Number(r.checkin_lng).toFixed(6)}` : '');
+    const locationTypeLabel = r.punch_location_type === 'HOTEL_STAY' ? 'Hotel / Accommodation' : (r.work_mode === 'TRAVEL' ? 'Official Transit' : 'Active Field Site');
+
     rows.push([
       r.id, r.employee_id, r.employee_name, r.department, r.designation, r.email,
       r.employer_name, r.team_name || 'Direct Assignment', r.state, r.district,
       r.work_mode === 'TRAVEL' ? 'Official Travel' : (r.work_mode === 'FIELD_WORK' ? 'Field Work' : 'Office Duty'), r.attendance_status,
+      locationTypeLabel,
+      r.hotel_name || '',
+      r.hotel_room || '',
+      r.hotel_phone || '',
       r.is_holiday_work ? 'Yes' : 'No',
       r.holiday_name || '',
       r.compoff_earned ? '1 Comp-Off' : '0',
@@ -925,6 +1088,7 @@ function generateAttendanceCsv(records) {
       r.checkin_lat   != null ? Number(r.checkin_lat).toFixed(6)   : '',
       r.checkin_lng   != null ? Number(r.checkin_lng).toFixed(6)   : '',
       r.checkin_accuracy  != null ? Number(r.checkin_accuracy).toFixed(1)  : '',
+      exactMapUrl,
       r.checkin_geofence_distance != null ? Number(r.checkin_geofence_distance).toFixed(1) : '',
       r.checkin_geofence_status || '', r.checkin_address || '',
       checkoutDate, checkoutTime, r.checkout_server_timestamp || '',
@@ -1117,7 +1281,8 @@ function generateIndividualTimesheetCsv(employee, summary, records) {
   lines.push(['ITEMIZED CHECK-IN & CHECK-OUT ATTENDANCE LOG'].map(escapeCsvCell).join(','));
   const headers = [
     'Shift ID', 'Date', 'Day of Week',
-    'Check-In Time', 'Check-In Server Timestamp (UTC)', 'Check-In Address', 'Check-In Coordinates', 'Check-In Accuracy (m)',
+    'Location Type', 'Hotel / Stay Name', 'Hotel Room', 'Hotel Contact Phone',
+    'Check-In Time', 'Check-In Server Timestamp (UTC)', 'Check-In Address', 'Check-In Coordinates', 'Exact Google Maps URL', 'Check-In Accuracy (m)',
     'Check-Out Time', 'Check-Out Server Timestamp (UTC)', 'Check-Out Address', 'Check-Out Coordinates', 'Check-Out Accuracy (m)',
     'Attendance Status', 'Work Mode', 'Holiday / Sunday Duty', 'Holiday Name', 'Comp-Off Credit (+1)',
     'Net Working Time (HH:MM)', 'Net Working Hours (Dec)', 'Shift Variance vs Target (Dec)', 'Gross Working Time (HH:MM)', 'Gross Working Hours (Dec)',
@@ -1139,15 +1304,22 @@ function generateIndividualTimesheetCsv(employee, summary, records) {
 
     const checkinCoords = (r.checkin_lat != null && r.checkin_lng != null) ? `${Number(r.checkin_lat).toFixed(6)}, ${Number(r.checkin_lng).toFixed(6)}` : '';
     const checkoutCoords = (r.checkout_lat != null && r.checkout_lng != null) ? `${Number(r.checkout_lat).toFixed(6)}, ${Number(r.checkout_lng).toFixed(6)}` : '';
+    const exactMapUrl = r.exact_coordinates_url || (r.checkin_lat != null && r.checkin_lng != null ? `https://www.google.com/maps?q=${Number(r.checkin_lat).toFixed(6)},${Number(r.checkin_lng).toFixed(6)}` : '');
+    const locationTypeLabel = r.punch_location_type === 'HOTEL_STAY' ? 'Hotel / Stay' : (r.work_mode === 'TRAVEL' ? 'Official Transit' : 'Active Field Site');
 
     lines.push([
       r.id,
       dateStr,
       dayStr,
+      locationTypeLabel,
+      r.hotel_name || '',
+      r.hotel_room || '',
+      r.hotel_phone || '',
       checkinTimeStr,
       r.checkin_server_timestamp || '',
       r.checkin_address || '',
       checkinCoords,
+      exactMapUrl,
       r.checkin_accuracy != null ? Number(r.checkin_accuracy).toFixed(1) : '',
       checkoutTimeStr,
       r.checkout_server_timestamp || '',

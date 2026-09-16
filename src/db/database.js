@@ -198,7 +198,41 @@ async function initSeed() {
     );
   }
 
-  console.log('[DB] Seed complete with official holidays.');
+  // Ensure employee_hotel_stays table exists
+  await query(`
+    CREATE TABLE IF NOT EXISTS employee_hotel_stays (
+      id TEXT PRIMARY KEY,
+      employer_id TEXT NOT NULL,
+      employee_id TEXT NOT NULL,
+      hotel_name TEXT NOT NULL,
+      room_number TEXT,
+      hotel_address TEXT NOT NULL,
+      hotel_phone TEXT,
+      checkin_date DATE NOT NULL,
+      checkout_date DATE,
+      booking_ref TEXT,
+      hotel_lat NUMERIC(10, 7),
+      hotel_lng NUMERIC(10, 7),
+      stay_status TEXT DEFAULT 'ACTIVE',
+      notes TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  // Ensure attendance table has location classification & hotel stay columns
+  await query(`
+    ALTER TABLE attendance ADD COLUMN IF NOT EXISTS punch_location_type TEXT DEFAULT 'FIELD_SITE';
+    ALTER TABLE attendance ADD COLUMN IF NOT EXISTS hotel_stay_id TEXT;
+    ALTER TABLE attendance ADD COLUMN IF NOT EXISTS hotel_name TEXT;
+    ALTER TABLE attendance ADD COLUMN IF NOT EXISTS hotel_room TEXT;
+    ALTER TABLE attendance ADD COLUMN IF NOT EXISTS hotel_phone TEXT;
+    ALTER TABLE attendance ADD COLUMN IF NOT EXISTS location_place_name TEXT;
+    ALTER TABLE attendance ADD COLUMN IF NOT EXISTS location_place_type TEXT;
+    ALTER TABLE attendance ADD COLUMN IF NOT EXISTS exact_coordinates_url TEXT;
+  `);
+
+  console.log('[DB] Seed complete with official holidays and hotel stay tracking.');
 }
 
 // ---------------------------------------------------------------------------

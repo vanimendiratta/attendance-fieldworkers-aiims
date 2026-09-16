@@ -37,6 +37,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnEmailBackup) btnEmailBackup.addEventListener('click', handleEmailAttendanceBackup);
   const btnOpenHolidays = document.getElementById('btnOpenHolidaysModal');
   if (btnOpenHolidays) btnOpenHolidays.addEventListener('click', openHolidaysModal);
+  const btnOpenHotelStays = document.getElementById('btnOpenHotelStaysModal');
+  if (btnOpenHotelStays) btnOpenHotelStays.addEventListener('click', openHotelStaysModal);
 });
 
 /**
@@ -797,28 +799,65 @@ function renderIndividualAttendanceTables(records) {
           <td style="font-family: var(--font-mono); font-size: 12px; white-space: nowrap;">${checkinTime}</td>
           <td>${checkinPhoto}</td>
           <td>
-            ${isTravel ? `
-              <span class="badge" style="background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; font-size: 10px; margin-bottom: 2px; display: inline-flex; align-items: center; gap: 4px;">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
-                <span>Travel / Transit ${r.field_site_notes ? '· ' + escapeHtml(r.field_site_notes) : ''}</span>
-              </span>
-              <div style="font-size: 11px; color: var(--color-text-primary); max-width: 220px; line-height: 1.3;">
-                ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Transit Origin'))}
-              </div>
-              <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">Official Transit Duty</div>
-            ` : (isField ? `
-              <span class="badge" style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; font-size: 10px; margin-bottom: 2px; display: inline-flex; align-items: center; gap: 4px;">
-                ${window.Icons ? window.Icons.render('car', { size: 10 }) : ''}
-                <span>Field ${r.field_site_notes ? '· ' + escapeHtml(r.field_site_notes) : ''}</span>
-              </span>
-              <div style="font-size: 11px; color: var(--color-text-primary); max-width: 220px; line-height: 1.3;">
-                ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Premises'))}
-              </div>
-              <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">±${r.checkin_accuracy}m accuracy</div>
-            ` : `
-              <span class="badge badge-neutral" style="font-size: 10px; margin-bottom: 2px;">Office Premises</span>
-              <div style="font-size: 11px; color: var(--color-text-secondary); max-width: 200px;">${escapeHtml(r.checkin_address || 'Office Premises')}</div>
-            `)}
+            ${(() => {
+              const mapPinUrl = r.exact_coordinates_url || (r.checkin_lat != null && r.checkin_lng != null ? `https://www.google.com/maps?q=${Number(r.checkin_lat).toFixed(6)},${Number(r.checkin_lng).toFixed(6)}&t=k` : '');
+              const mapPinHtml = mapPinUrl ? `
+                <div style="margin-top: 3px;">
+                  <a href="${mapPinUrl}" target="_blank" rel="noopener noreferrer" class="exact-map-pin-link" onclick="event.stopPropagation();" title="View exact GPS pin in Google Maps Satellite view">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                    <span>${Number(r.checkin_lat).toFixed(5)}°, ${Number(r.checkin_lng).toFixed(5)}°</span>
+                  </a>
+                </div>
+              ` : '';
+
+              if (r.punch_location_type === 'HOTEL_STAY' || r.hotel_name) {
+                return `
+                  <span class="badge-location-hotel" style="margin-bottom: 2px;">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M9 9h1m4 0h1M9 13h1m4 0h1M9 17h1m4 0h1"/></svg>
+                    <span>Hotel: ${escapeHtml(r.hotel_name || 'Hotel Stay')} ${r.hotel_room ? '(Rm ' + escapeHtml(r.hotel_room) + ')' : ''}</span>
+                  </span>
+                  <div style="font-size: 11px; color: var(--color-text-primary); max-width: 220px; line-height: 1.3;">
+                    ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Hotel Lodging'))}
+                  </div>
+                  ${r.hotel_phone ? `<div style="font-size: 10px; color: #4338ca; margin-top: 1px;">Reception: ${escapeHtml(r.hotel_phone)}</div>` : ''}
+                  ${mapPinHtml}
+                `;
+              }
+
+              if (isTravel) {
+                return `
+                  <span class="badge" style="background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; font-size: 10px; margin-bottom: 2px; display: inline-flex; align-items: center; gap: 4px;">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+                    <span>Travel / Transit ${r.field_site_notes ? '· ' + escapeHtml(r.field_site_notes) : ''}</span>
+                  </span>
+                  <div style="font-size: 11px; color: var(--color-text-primary); max-width: 220px; line-height: 1.3;">
+                    ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Transit Origin'))}
+                  </div>
+                  <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">Official Transit Duty</div>
+                  ${mapPinHtml}
+                `;
+              }
+
+              if (isField) {
+                return `
+                  <span class="badge-location-field" style="margin-bottom: 2px;">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+                    <span>Field Site ${r.field_site_notes ? '· ' + escapeHtml(r.field_site_notes) : ''}</span>
+                  </span>
+                  <div style="font-size: 11px; color: var(--color-text-primary); max-width: 220px; line-height: 1.3;">
+                    ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Premises'))}
+                  </div>
+                  <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">±${r.checkin_accuracy}m accuracy</div>
+                  ${mapPinHtml}
+                `;
+              }
+
+              return `
+                <span class="badge badge-neutral" style="font-size: 10px; margin-bottom: 2px;">Office Premises</span>
+                <div style="font-size: 11px; color: var(--color-text-secondary); max-width: 200px;">${escapeHtml(r.checkin_address || 'Office Premises')}</div>
+                ${mapPinHtml}
+              `;
+            })()}
           </td>
           <td style="font-family: var(--font-mono); font-size: 12px; white-space: nowrap;">${checkoutTime}</td>
           <td>${checkoutPhoto}</td>
@@ -999,35 +1038,72 @@ function renderAttendanceTable(records) {
         <td style="font-family: var(--font-mono);">${checkinTime}</td>
         <td>${checkinPhoto}</td>
         <td>
-          ${isTravel ? `
-            <span class="badge" style="background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; font-size: 10px; margin-bottom: 3px; display: inline-flex; align-items: center; gap: 4px;">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
-              <span>Travel / Transit ${r.field_site_notes ? '· ' + escapeHtml(r.field_site_notes) : ''}</span>
-            </span>
-            <div style="font-size: 11px; color: var(--color-text-primary); font-weight: 500; max-width: 210px; white-space: normal; line-height: 1.3;">
-              ${r.checkin_address || `${r.checkin_lat.toFixed(4)}°, ${r.checkin_lng.toFixed(4)}°`}
-            </div>
-            <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">Official Transit Duty</div>
-          ` : (isField ? `
-            <span class="badge" style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; font-size: 10px; margin-bottom: 3px; display: inline-flex; align-items: center; gap: 4px;">
-              ${window.Icons ? window.Icons.render('car', { size: 11 }) : ''}
-              <span>Field Work ${r.field_site_notes ? '· ' + escapeHtml(r.field_site_notes) : ''}</span>
-            </span>
-            <div style="font-size: 11px; color: var(--color-text-primary); font-weight: 500; max-width: 210px; white-space: normal; line-height: 1.3;">
-              ${r.checkin_address || `${r.checkin_lat.toFixed(4)}°, ${r.checkin_lng.toFixed(4)}°`}
-            </div>
-            <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">±${r.checkin_accuracy}m accuracy</div>
-          ` : `
-            <span class="badge ${r.checkin_geofence_status === 'WITHIN_GEOFENCE' ? 'badge-neutral' : 'badge-warning'}" style="font-size: 10px; margin-bottom: 3px; display: inline-flex; align-items: center; gap: 4px;">
-              ${r.checkin_geofence_status === 'WITHIN_GEOFENCE' 
-                ? `${window.Icons ? window.Icons.render('building', { size: 11 }) : ''} <span>In Office</span>` 
-                : `${window.Icons ? window.Icons.render('alertTriangle', { size: 11 }) : ''} <span>Outside (${Math.round(r.checkin_geofence_distance || 0)}m)</span>`}
-            </span>
-            <div style="font-size: 11px; color: var(--color-text-secondary); max-width: 200px; white-space: normal; line-height: 1.3;">
-              ${r.checkin_address || 'Office Premises'}
-            </div>
-            <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">±${r.checkin_accuracy}m accuracy</div>
-          `)}
+          ${(() => {
+            const mapPinUrl = r.exact_coordinates_url || (r.checkin_lat != null && r.checkin_lng != null ? `https://www.google.com/maps?q=${Number(r.checkin_lat).toFixed(6)},${Number(r.checkin_lng).toFixed(6)}&t=k` : '');
+            const mapPinHtml = mapPinUrl ? `
+              <div style="margin-top: 3px;">
+                <a href="${mapPinUrl}" target="_blank" rel="noopener noreferrer" class="exact-map-pin-link" onclick="event.stopPropagation();" title="View exact GPS pin in Google Maps Satellite view">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                  <span>${Number(r.checkin_lat).toFixed(5)}°, ${Number(r.checkin_lng).toFixed(5)}°</span>
+                </a>
+              </div>
+            ` : '';
+
+            if (r.punch_location_type === 'HOTEL_STAY' || r.hotel_name) {
+              return `
+                <span class="badge-location-hotel" style="margin-bottom: 3px;">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M9 9h1m4 0h1M9 13h1m4 0h1M9 17h1m4 0h1"/></svg>
+                  <span>Hotel: ${escapeHtml(r.hotel_name || 'Hotel Stay')} ${r.hotel_room ? '(Rm ' + escapeHtml(r.hotel_room) + ')' : ''}</span>
+                </span>
+                <div style="font-size: 11px; color: var(--color-text-primary); font-weight: 500; max-width: 210px; white-space: normal; line-height: 1.3;">
+                  ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Hotel Lodging'))}
+                </div>
+                ${r.hotel_phone ? `<div style="font-size: 10px; color: #4338ca; margin-top: 1px;">Reception: ${escapeHtml(r.hotel_phone)}</div>` : ''}
+                ${mapPinHtml}
+              `;
+            }
+
+            if (isTravel) {
+              return `
+                <span class="badge" style="background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; font-size: 10px; margin-bottom: 3px; display: inline-flex; align-items: center; gap: 4px;">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+                  <span>Travel / Transit ${r.field_site_notes ? '· ' + escapeHtml(r.field_site_notes) : ''}</span>
+                </span>
+                <div style="font-size: 11px; color: var(--color-text-primary); font-weight: 500; max-width: 210px; white-space: normal; line-height: 1.3;">
+                  ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Transit Origin'))}
+                </div>
+                <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">Official Transit Duty</div>
+                ${mapPinHtml}
+              `;
+            }
+
+            if (isField) {
+              return `
+                <span class="badge-location-field" style="margin-bottom: 3px;">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+                  <span>Field Work ${r.field_site_notes ? '· ' + escapeHtml(r.field_site_notes) : ''}</span>
+                </span>
+                <div style="font-size: 11px; color: var(--color-text-primary); font-weight: 500; max-width: 210px; white-space: normal; line-height: 1.3;">
+                  ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Premises'))}
+                </div>
+                <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">±${r.checkin_accuracy}m accuracy</div>
+                ${mapPinHtml}
+              `;
+            }
+
+            return `
+              <span class="badge ${r.checkin_geofence_status === 'WITHIN_GEOFENCE' ? 'badge-neutral' : 'badge-warning'}" style="font-size: 10px; margin-bottom: 3px; display: inline-flex; align-items: center; gap: 4px;">
+                ${r.checkin_geofence_status === 'WITHIN_GEOFENCE' 
+                  ? `${window.Icons ? window.Icons.render('building', { size: 11 }) : ''} <span>In Office</span>` 
+                  : `${window.Icons ? window.Icons.render('alertTriangle', { size: 11 }) : ''} <span>Outside (${Math.round(r.checkin_geofence_distance || 0)}m)</span>`}
+              </span>
+              <div style="font-size: 11px; color: var(--color-text-secondary); max-width: 200px; white-space: normal; line-height: 1.3;">
+                ${escapeHtml(r.checkin_address || 'Office Premises')}
+              </div>
+              <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">±${r.checkin_accuracy}m accuracy</div>
+              ${mapPinHtml}
+            `;
+          })()}
         </td>
         <td style="font-family: var(--font-mono);">${checkoutTime}</td>
         <td>${checkoutPhoto}</td>
@@ -1136,10 +1212,18 @@ async function openAttendanceDrawer(recordId) {
     }
 
     // Geofence & Map
+    const isHotel = (record.punch_location_type === 'HOTEL_STAY') || Boolean(record.hotel_name);
     const isTravel = record.work_mode === 'TRAVEL';
     const isField = record.work_mode === 'FIELD_WORK';
     const geoBadge = document.getElementById('drwGeofenceBadge');
-    if (isTravel) {
+
+    if (isHotel) {
+      geoBadge.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M9 9h1m4 0h1M9 13h1m4 0h1M9 17h1m4 0h1"/></svg> <span>Hotel Stay Lodging Verified</span>`;
+      geoBadge.className = 'badge-location-hotel';
+      geoBadge.style.background = '#eef2ff';
+      geoBadge.style.color = '#4338ca';
+      geoBadge.style.border = '1px solid #c7d2fe';
+    } else if (isTravel) {
       geoBadge.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg> <span>Official Travel / Transit (${record.field_site_notes || 'Transit Verified'})</span>`;
       geoBadge.className = 'badge';
       geoBadge.style.background = '#fdf2f8';
@@ -1160,7 +1244,37 @@ async function openAttendanceDrawer(recordId) {
       geoBadge.style.color = '';
       geoBadge.style.border = '';
     }
-    document.getElementById('drwAddressText').textContent = record.checkin_address || `Coordinates: ${record.checkin_lat.toFixed(5)}° N, ${record.checkin_lng.toFixed(5)}° E`;
+    document.getElementById('drwAddressText').textContent = record.checkin_address || (record.checkin_lat != null ? `Coordinates: ${Number(record.checkin_lat).toFixed(5)}° N, ${Number(record.checkin_lng).toFixed(5)}° E` : 'Coordinates unspecified');
+
+    // Hotel Stay Details in Drawer
+    const hotelBox = document.getElementById('drwHotelStayDetailsBlock');
+    if (hotelBox) {
+      if (isHotel) {
+        hotelBox.style.display = 'block';
+        const nameEl = document.getElementById('drwHotelName');
+        const roomEl = document.getElementById('drwHotelRoom');
+        const phoneEl = document.getElementById('drwHotelPhone');
+        if (nameEl) nameEl.textContent = record.hotel_name || 'Hotel Stay';
+        if (roomEl) roomEl.textContent = record.hotel_room ? `Room ${record.hotel_room}` : 'Room Unspecified';
+        if (phoneEl) phoneEl.textContent = record.hotel_phone ? `Reception Contact: ${record.hotel_phone}` : 'Reception desk phone not recorded';
+      } else {
+        hotelBox.style.display = 'none';
+      }
+    }
+
+    // Google Maps Satellite Link in Drawer
+    const mapLinkEl = document.getElementById('drwGoogleMapsLink');
+    const coordsTextEl = document.getElementById('drwCoordsText');
+    if (mapLinkEl && record.checkin_lat != null && record.checkin_lng != null) {
+      const pinUrl = record.exact_coordinates_url || `https://www.google.com/maps?q=${Number(record.checkin_lat).toFixed(6)},${Number(record.checkin_lng).toFixed(6)}&t=k`;
+      mapLinkEl.href = pinUrl;
+      mapLinkEl.style.display = 'inline-flex';
+      if (coordsTextEl) {
+        coordsTextEl.textContent = `Satellite Map Pin: ${Number(record.checkin_lat).toFixed(5)}°, ${Number(record.checkin_lng).toFixed(5)}°`;
+      }
+    } else if (mapLinkEl) {
+      mapLinkEl.style.display = 'none';
+    }
 
     // Breaks list
     const breaksContainer = document.getElementById('drwBreaksList');
@@ -2118,14 +2232,43 @@ function renderTimesheetSessions(records) {
       : '<span style="color: var(--color-text-muted); font-size: 11px;">--</span>';
 
     // Location coordinates
+    const inPinUrl = r.exact_coordinates_url || (r.checkin_lat != null && r.checkin_lng != null ? `https://www.google.com/maps?q=${Number(r.checkin_lat).toFixed(6)},${Number(r.checkin_lng).toFixed(6)}&t=k` : '');
+    const inPinHtml = inPinUrl ? `
+      <div style="margin-top: 3px;">
+        <a href="${inPinUrl}" target="_blank" rel="noopener noreferrer" class="exact-map-pin-link" onclick="event.stopPropagation();" title="View exact GPS pin on Google Maps Satellite">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+          <span>${Number(r.checkin_lat).toFixed(5)}°, ${Number(r.checkin_lng).toFixed(5)}°</span>
+        </a>
+      </div>
+    ` : '';
+
+    const isHotelPunch = (r.punch_location_type === 'HOTEL_STAY') || Boolean(r.hotel_name);
+
     const checkinLoc = `
+      ${isHotelPunch ? `
+        <span class="badge-location-hotel" style="font-size: 10px; margin-bottom: 2px;">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M9 9h1m4 0h1M9 13h1m4 0h1M9 17h1m4 0h1"/></svg>
+          <span>Hotel Stay</span>
+        </span>
+      ` : ''}
       <div style="font-size: 11px; font-weight: 500; color: var(--color-text-primary); line-height: 1.3;">
         ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Premises'))}
       </div>
       <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">
         ${r.checkin_accuracy != null ? `±${Math.round(r.checkin_accuracy)}m accuracy` : ''}
       </div>
+      ${inPinHtml}
     `;
+
+    const outPinUrl = (r.checkout_lat != null && r.checkout_lng != null ? `https://www.google.com/maps?q=${Number(r.checkout_lat).toFixed(6)},${Number(r.checkout_lng).toFixed(6)}&t=k` : '');
+    const outPinHtml = outPinUrl ? `
+      <div style="margin-top: 3px;">
+        <a href="${outPinUrl}" target="_blank" rel="noopener noreferrer" class="exact-map-pin-link" onclick="event.stopPropagation();" title="View exact GPS pin on Google Maps Satellite">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+          <span>${Number(r.checkout_lat).toFixed(5)}°, ${Number(r.checkout_lng).toFixed(5)}°</span>
+        </a>
+      </div>
+    ` : '';
 
     const checkoutLoc = r.checkout_server_timestamp ? `
       <div style="font-size: 11px; font-weight: 500; color: var(--color-text-primary); line-height: 1.3;">
@@ -2134,6 +2277,7 @@ function renderTimesheetSessions(records) {
       <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">
         ${r.checkout_accuracy != null ? `±${Math.round(r.checkout_accuracy)}m accuracy` : ''}
       </div>
+      ${outPinHtml}
     ` : '<span style="color: var(--color-text-muted); font-size: 11px;">--</span>';
 
     // Status badge
@@ -2173,12 +2317,17 @@ function renderTimesheetSessions(records) {
         <td style="font-size: 12px;">${breakMins}</td>
         <td style="font-size: 12px; font-weight: 600; color: #7c3aed;">${overtime}</td>
         <td style="max-width: 160px; font-size: 11px; color: var(--color-text-secondary); line-height: 1.3;">
-          ${r.work_mode === 'TRAVEL' ? `
+          ${isHotelPunch ? `
+            <span class="badge-location-hotel" style="font-size: 10px; margin-bottom: 2px;">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M9 9h1m4 0h1M9 13h1m4 0h1M9 17h1m4 0h1"/></svg>
+              <span>${escapeHtml(r.hotel_name || 'Hotel Stay')} ${r.hotel_room ? '(Rm ' + escapeHtml(r.hotel_room) + ')' : ''}</span>
+            </span><br>
+          ` : (r.work_mode === 'TRAVEL' ? `
             <span class="badge" style="background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; font-size: 10px; margin-bottom: 2px; display: inline-flex; align-items: center; gap: 4px;">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
               <span>Transit / Travel</span>
-            </span><br>` : ''}
-          ${escapeHtml(r.field_site_notes || (r.work_mode === 'TRAVEL' ? 'Official Travel / Transit' : 'Routine Field Work'))}
+            </span><br>` : '')}
+          ${escapeHtml(r.field_site_notes || (isHotelPunch ? (r.hotel_name || 'Hotel Lodging Stay') : (r.work_mode === 'TRAVEL' ? 'Official Travel / Transit' : 'Routine Field Work')))}
         </td>
         <td>
           <div style="display: flex; gap: 4px; align-items: center;">
@@ -2373,4 +2522,167 @@ async function handleDeleteHoliday(id, name) {
 
 window.handleAddHoliday = handleAddHoliday;
 window.handleDeleteHoliday = handleDeleteHoliday;
+
+/**
+ * Field Worker Hotel & Lodging Directory Modal Management
+ */
+let cachedHotelStays = [];
+
+async function openHotelStaysModal() {
+  const modal = document.getElementById('modalManageHotelStays');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  modal.classList.add('active');
+
+  const searchInput = document.getElementById('inputSearchHotelStays');
+  if (searchInput) searchInput.value = '';
+
+  await loadHotelStaysList();
+}
+
+function closeHotelStaysModal() {
+  const modal = document.getElementById('modalManageHotelStays');
+  if (!modal) return;
+  modal.style.display = 'none';
+  modal.classList.remove('active');
+}
+
+async function loadHotelStaysList() {
+  const container = document.getElementById('hotelStaysListContainer');
+  if (!container) return;
+  container.innerHTML = '<div style="text-align: center; padding: 24px; color: var(--color-text-muted);">Loading hotel stays...</div>';
+
+  try {
+    const res = await authFetch('/api/admin/hotel-stays');
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      container.innerHTML = `<div style="text-align: center; padding: 24px; color: #dc2626;">Failed to load hotel stays: ${escapeHtml(data.error || 'Unknown error')}</div>`;
+      return;
+    }
+
+    cachedHotelStays = data.stays || [];
+    renderHotelStaysList(cachedHotelStays);
+  } catch (err) {
+    console.error('Error loading hotel stays:', err);
+    container.innerHTML = `<div style="text-align: center; padding: 24px; color: #dc2626;">Failed to load hotel stays: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function filterHotelStaysList() {
+  const q = (document.getElementById('inputSearchHotelStays')?.value || '').toLowerCase().trim();
+  if (!q) {
+    renderHotelStaysList(cachedHotelStays);
+    return;
+  }
+
+  const filtered = cachedHotelStays.filter(s => {
+    return (s.employee_name && s.employee_name.toLowerCase().includes(q)) ||
+      (s.employee_id && s.employee_id.toLowerCase().includes(q)) ||
+      (s.hotel_name && s.hotel_name.toLowerCase().includes(q)) ||
+      (s.room_number && s.room_number.toLowerCase().includes(q)) ||
+      (s.hotel_address && s.hotel_address.toLowerCase().includes(q)) ||
+      (s.hotel_phone && s.hotel_phone.toLowerCase().includes(q));
+  });
+
+  renderHotelStaysList(filtered);
+}
+
+function renderHotelStaysList(stays) {
+  const container = document.getElementById('hotelStaysListContainer');
+  if (!container) return;
+
+  if (!stays || stays.length === 0) {
+    container.innerHTML = '<div style="text-align: center; padding: 28px; color: var(--color-text-muted);">No hotel stays registered yet. Field personnel can register their active hotel details directly on the mobile punch portal.</div>';
+    return;
+  }
+
+  container.innerHTML = stays.map(s => {
+    const checkinDate = s.checkin_date || '--';
+    const checkoutDate = s.checkout_date || '--';
+    const hasGps = s.hotel_lat != null && s.hotel_lng != null;
+    const mapPinUrl = hasGps ? `https://www.google.com/maps?q=${Number(s.hotel_lat).toFixed(6)},${Number(s.hotel_lng).toFixed(6)}&t=k` : null;
+
+    return `
+      <div class="hotel-stay-card" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; padding: 12px 16px; border: 1px solid var(--color-border-default); border-radius: 8px; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
+        <div style="flex: 1; min-width: 0;">
+          <!-- Top Row: Employee & Stay Status -->
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-weight: 700; font-size: 13px; color: var(--color-text-primary);">${escapeHtml(s.employee_name || 'Staff Member')}</span>
+              <span class="badge badge-neutral" style="font-size: 10px; font-family: var(--font-mono);">${escapeHtml(s.employee_id || '')}</span>
+              <span style="font-size: 11px; color: var(--color-text-tertiary);">${escapeHtml(s.department || 'CDER')}</span>
+            </div>
+            <span class="${s.stay_status === 'ACTIVE' ? 'badge badge-success' : 'badge badge-neutral'}" style="font-size: 10px;">
+              ${s.stay_status === 'ACTIVE' ? 'Active Lodging' : 'Past Stay'}
+            </span>
+          </div>
+
+          <!-- Hotel Name & Room -->
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+            <div style="font-weight: 700; font-size: 14px; color: #3730a3; display: flex; align-items: center; gap: 6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M9 9h1m4 0h1M9 13h1m4 0h1M9 17h1m4 0h1"/></svg>
+              <span>${escapeHtml(s.hotel_name)}</span>
+            </div>
+            ${s.room_number ? `
+              <span style="font-weight: 700; font-size: 12px; padding: 2px 8px; background: #e0e7ff; color: #3730a3; border-radius: 4px;">
+                Room ${escapeHtml(s.room_number)}
+              </span>
+            ` : ''}
+          </div>
+
+          <!-- Address -->
+          ${s.hotel_address ? `
+            <div style="font-size: 12px; color: var(--color-text-secondary); margin-bottom: 4px; line-height: 1.3;">
+              ${escapeHtml(s.hotel_address)}
+            </div>
+          ` : ''}
+
+          <!-- Phone & Stay Dates Strip -->
+          <div style="display: flex; align-items: center; gap: 16px; font-size: 11px; color: var(--color-text-tertiary); margin-top: 6px; flex-wrap: wrap;">
+            ${s.hotel_phone ? `
+              <div style="display: inline-flex; align-items: center; gap: 4px; color: #4338ca; font-weight: 600;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                <span>Reception: ${escapeHtml(s.hotel_phone)}</span>
+              </div>
+            ` : ''}
+            <div style="display: inline-flex; align-items: center; gap: 4px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+              <span>Stay: ${escapeHtml(checkinDate)} &rarr; ${escapeHtml(checkoutDate)}</span>
+            </div>
+            ${s.booking_ref ? `
+              <div>Booking Ref: <strong>${escapeHtml(s.booking_ref)}</strong></div>
+            ` : ''}
+          </div>
+
+          <!-- Notes -->
+          ${s.notes ? `
+            <div style="font-size: 11px; color: var(--color-text-muted); font-style: italic; margin-top: 4px;">
+              Notes: ${escapeHtml(s.notes)}
+            </div>
+          ` : ''}
+        </div>
+
+        <!-- Right Side: Satellite GPS Map Link & Action -->
+        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px; white-space: nowrap;">
+          ${mapPinUrl ? `
+            <a href="${mapPinUrl}" target="_blank" rel="noopener noreferrer" class="exact-map-pin-link" title="Open Hotel Satellite GPS Pin in Google Maps">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+              <span>${Number(s.hotel_lat).toFixed(4)}°, ${Number(s.hotel_lng).toFixed(4)}°</span>
+            </a>
+          ` : `
+            <span style="font-size: 11px; color: var(--color-text-muted);">No GPS coordinates</span>
+          `}
+          <button type="button" class="btn btn-secondary" style="padding: 4px 10px; font-size: 11px;" onclick="closeHotelStaysModal(); openPersonTimesheet('${escapeHtml(s.employee_id)}')">
+            Timesheet &rarr;
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+window.openHotelStaysModal = openHotelStaysModal;
+window.closeHotelStaysModal = closeHotelStaysModal;
+window.loadHotelStaysList = loadHotelStaysList;
+window.filterHotelStaysList = filterHotelStaysList;
 

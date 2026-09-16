@@ -118,14 +118,33 @@ function evaluateGeofence(empLat, empLng, officeLat, officeLng, radiusMeters = 1
  * Reverse Geocode helper (formats human-readable street/facility name)
  */
 async function reverseGeocode(lat, lng) {
+  const detailed = await reverseGeocodeDetailed(lat, lng);
+  return detailed.address;
+}
+
+/**
+ * Detailed Reverse Geocode returning structured place metadata,
+ * explicitly identifying whether the location is a hotel/lodging, health facility, or field site.
+ */
+async function reverseGeocodeDetailed(lat, lng) {
+  const defaultFallback = {
+    address: `Field Coordinates (${Number(lat).toFixed(5)}°, ${Number(lng).toFixed(5)}°)`,
+    placeName: '',
+    placeType: 'FIELD_SITE',
+    isLodging: false,
+    isHealthFacility: false,
+    rawAddress: {},
+    coordinatesUrl: `https://www.google.com/maps?q=${Number(lat).toFixed(6)},${Number(lng).toFixed(6)}&t=k`
+  };
+
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2800); // 2.8s fast timeout
+    const timeout = setTimeout(() => controller.abort(), 3500);
 
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'ApexAttendanceSystem/1.0 (FieldWorkVerification)' }
+      headers: { 'User-Agent': 'ApexAttendanceSystem/2.0 (AIIMSFieldWorkVerification)' }
     });
     clearTimeout(timeout);
 
@@ -133,28 +152,67 @@ async function reverseGeocode(lat, lng) {
       const data = await res.json();
       if (data && data.address) {
         const addr = data.address;
-        const placeName = addr.hospital || addr.amenity || addr.building || addr.office || addr.commercial || addr.shop || addr.leisure || '';
-        const road = addr.road || addr.street || addr.pedestrian || '';
-        const area = addr.suburb || addr.neighbourhood || addr.residential || addr.quarter || '';
+
+        // Lodging & Hotel detection
+        const lodgingName = addr.hotel || addr.guest_house || addr.motel || addr.hostel || addr.resort || addr.lodging || '';
+        const healthName = addr.hospital || addr.clinic || addr.health_post || addr.dispensary || '';
+        const generalPlaceName = data.name || addr.amenity || addr.building || addr.office || addr.commercial || addr.shop || addr.leisure || '';
+
+        const primaryPlaceName = lodgingName || healthName || generalPlaceName || '';
+
+        const isLodging = Boolean(
+          lodgingName ||
+          data.class === 'tourism' ||
+          data.type === 'hotel' ||
+          data.type === 'guest_house' ||
+          data.type === 'motel' ||
+          data.type === 'hostel' ||
+          /(hotel|resort|lodge|inn|guest\s*house|circuit\s*house|homestay|rest\s*house|bhawan|dharamshala|bhavan|residency)/i.test(primaryPlaceName)
+        );
+
+        const isHealthFacility = Boolean(
+          healthName ||
+          data.type === 'hospital' ||
+          data.type === 'clinic' ||
+          data.type === 'health_post' ||
+          /(hospital|clinic|health\s*centre|phc|chc|dispensary|medical|aiims)/i.test(primaryPlaceName)
+        );
+
+        let placeType = 'FIELD_SITE';
+        if (isLodging) placeType = 'HOTEL';
+        else if (isHealthFacility) placeType = 'HEALTH_FACILITY';
+
+        const road = addr.road || addr.street || addr.pedestrian || addr.footway || '';
+        const area = addr.suburb || addr.neighbourhood || addr.residential || addr.quarter || addr.village || '';
         const city = addr.city || addr.town || addr.county || addr.state_district || '';
         const state = addr.state || '';
         const postcode = addr.postcode || '';
 
-        const parts = [placeName, road, area, city, state, postcode].filter(Boolean);
-        if (parts.length > 0) {
-          return parts.join(', ');
-        }
+        const parts = [primaryPlaceName, road, area, city, state, postcode].filter(Boolean);
+        const formattedAddress = parts.length > 0 ? parts.join(', ') : (data.display_name || defaultFallback.address);
+
+        return {
+          address: formattedAddress,
+          placeName: primaryPlaceName,
+          placeType,
+          isLodging,
+          isHealthFacility,
+          rawAddress: addr,
+          coordinatesUrl: `https://www.google.com/maps?q=${Number(lat).toFixed(6)},${Number(lng).toFixed(6)}&t=k`
+        };
       }
       if (data && data.display_name) {
-        return data.display_name;
+        return {
+          ...defaultFallback,
+          address: data.display_name
+        };
       }
     }
   } catch (e) {
-    // Fallback on timeout or network interruption
+    // Network timeout or error
   }
 
-  // Fallback format
-  return `Field Location (${Number(lat).toFixed(5)}°, ${Number(lng).toFixed(5)}°)`;
+  return defaultFallback;
 }
 
 /**
@@ -190,5 +248,7 @@ module.exports = {
   validateGpsAccuracy,
   evaluateGeofence,
   reverseGeocode,
+  reverseGeocodeDetailed,
   checkLocationAnomalies
 };
+

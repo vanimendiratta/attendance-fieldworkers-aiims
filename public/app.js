@@ -26,6 +26,12 @@ const state = {
   resolvedAddress: null,
   isResolvingAddress: false,
 
+  // Location classification & Outstation Stay
+  punchLocationType: 'FIELD_SITE', // 'FIELD_SITE' or 'HOTEL_STAY'
+  activeHotelStay: null,
+  capturedHotelLat: null,
+  capturedHotelLng: null,
+
   currentGps: {
     latitude: 28.5662,
     longitude: 77.2136,
@@ -108,6 +114,29 @@ const DOM = {
   textOfficeLocationLabel: document.getElementById('textOfficeLocationLabel'),
   textLiveDistance: document.getElementById('textLiveDistance'),
   btnSyncOfficeToCurrent: document.getElementById('btnSyncOfficeToCurrent'),
+
+  // Location Classification & Hotel Details Elements
+  btnLocationField: document.getElementById('btnLocationField'),
+  btnLocationHotel: document.getElementById('btnLocationHotel'),
+  hotelStayInfoBanner: document.getElementById('hotelStayInfoBanner'),
+  bannerHotelTitle: document.getElementById('bannerHotelTitle'),
+  bannerHotelDetails: document.getElementById('bannerHotelDetails'),
+  btnEditHotelStay: document.getElementById('btnEditHotelStay'),
+  btnOpenHotelModal: document.getElementById('btnOpenHotelModal'),
+  modalHotelStayDetails: document.getElementById('modalHotelStayDetails'),
+  btnCloseHotelModal: document.getElementById('btnCloseHotelModal'),
+  btnCancelHotelModal: document.getElementById('btnCancelHotelModal'),
+  formHotelStayDetails: document.getElementById('formHotelStayDetails'),
+  inputHotelName: document.getElementById('inputHotelName'),
+  inputHotelRoom: document.getElementById('inputHotelRoom'),
+  inputHotelPhone: document.getElementById('inputHotelPhone'),
+  inputHotelAddress: document.getElementById('inputHotelAddress'),
+  inputHotelCheckinDate: document.getElementById('inputHotelCheckinDate'),
+  inputHotelCheckoutDate: document.getElementById('inputHotelCheckoutDate'),
+  btnCaptureHotelGps: document.getElementById('btnCaptureHotelGps'),
+  textHotelGpsDisplay: document.getElementById('textHotelGpsDisplay'),
+  inputHotelNotes: document.getElementById('inputHotelNotes'),
+  btnSaveHotelStay: document.getElementById('btnSaveHotelStay'),
 
   // Camera Modal elements
   cameraModal: document.getElementById('cameraModal'),
@@ -219,6 +248,14 @@ async function fetchResolvedAddress(lat, lng) {
       lastGeocodedLng = lng;
       if (DOM.hudAddressBadge) {
         DOM.hudAddressBadge.innerHTML = `${window.Icons ? window.Icons.render('mapPin', { size: 12 }) : ''} <span>${data.address}</span>`;
+      }
+
+      // Auto-switch location classification if lodging establishment detected
+      if (data.isLodging && state.punchLocationType !== 'HOTEL_STAY' && state.workMode !== 'TRAVEL') {
+        setPunchLocationType('HOTEL_STAY');
+        if (DOM.bannerHotelTitle) {
+          DOM.bannerHotelTitle.textContent = `Auto-detected at Hotel: ${data.placeName || 'Accommodation'}`;
+        }
       }
       
       // Auto-prefill Field Work State and District from reverse geocoding if not set by user
@@ -1425,6 +1462,7 @@ function setupLoggedInState(sessionData) {
 
   loadEmployerConfig(sessionData.employer.id);
   refreshAttendanceStatus();
+  loadActiveHotelStay();
 }
 
 async function loadEmployerConfig(employerId) {
@@ -1550,6 +1588,199 @@ if (DOM.btnModeField) {
 }
 if (DOM.btnModeTravel) {
   DOM.btnModeTravel.addEventListener('click', () => setDutyMode('TRAVEL'));
+}
+
+/**
+ * Punch Location Classification (Active Field Site vs Hotel / Stay)
+ */
+function setPunchLocationType(type) {
+  state.punchLocationType = type;
+  const isHotel = type === 'HOTEL_STAY';
+
+  if (DOM.btnLocationField) DOM.btnLocationField.classList.toggle('active', !isHotel);
+  if (DOM.btnLocationHotel) DOM.btnLocationHotel.classList.toggle('active', isHotel);
+
+  if (DOM.hotelStayInfoBanner) {
+    DOM.hotelStayInfoBanner.style.display = isHotel ? 'block' : 'none';
+  }
+
+  if (isHotel) {
+    if (DOM.lblDutyNotes) DOM.lblDutyNotes.textContent = 'Accommodation Details / Stay Purpose';
+    if (DOM.inputFieldSiteNotes) {
+      DOM.inputFieldSiteNotes.placeholder = state.activeHotelStay 
+        ? `${state.activeHotelStay.hotel_name} (Room ${state.activeHotelStay.room_number || ''})`
+        : 'e.g. Hotel Grand Palace - Room 204';
+    }
+  } else {
+    if (state.workMode !== 'TRAVEL') {
+      if (DOM.lblDutyNotes) DOM.lblDutyNotes.textContent = 'Field Site / Facility Name / Visit Purpose';
+      if (DOM.inputFieldSiteNotes) DOM.inputFieldSiteNotes.placeholder = 'e.g. District Hospital Srinagar / Primary Health Centre';
+    }
+  }
+}
+
+if (DOM.btnLocationField) {
+  DOM.btnLocationField.addEventListener('click', () => setPunchLocationType('FIELD_SITE'));
+}
+if (DOM.btnLocationHotel) {
+  DOM.btnLocationHotel.addEventListener('click', () => setPunchLocationType('HOTEL_STAY'));
+}
+
+/**
+ * Hotel / Accommodation Stay Management (Employee Side)
+ */
+async function loadActiveHotelStay() {
+  if (!state.currentEmployee) return;
+  try {
+    const res = await fetch('/api/employee/hotel-stay/active', {
+      headers: getEmployeeAuthHeaders()
+    });
+    const data = await res.json();
+    if (data.success && data.stay) {
+      state.activeHotelStay = data.stay;
+      updateHotelBannerUI(data.stay);
+    } else {
+      state.activeHotelStay = null;
+      updateHotelBannerUI(null);
+    }
+  } catch (err) {
+    console.warn('Error loading active hotel stay:', err);
+  }
+}
+
+function updateHotelBannerUI(stay) {
+  if (!DOM.bannerHotelTitle || !DOM.bannerHotelDetails) return;
+  if (stay) {
+    DOM.bannerHotelTitle.textContent = `Hotel Stay: ${stay.hotel_name} (Room ${stay.room_number || 'N/A'})`;
+    DOM.bannerHotelDetails.innerHTML = `
+      <div><strong>Address:</strong> ${escapeHtml(stay.hotel_address)}</div>
+      ${stay.hotel_phone ? `<div><strong>Phone:</strong> ${escapeHtml(stay.hotel_phone)}</div>` : ''}
+      <div style="font-size: 10px; color: #b45309; margin-top: 2px;">Check-in: ${stay.checkin_date} &rarr; ${stay.checkout_date || 'Ongoing stay'}</div>
+    `;
+  } else {
+    DOM.bannerHotelTitle.textContent = 'Hotel Accommodation Selected';
+    DOM.bannerHotelDetails.textContent = 'No hotel stay registered yet. Click "Edit Details" or "My Hotel" to register your room number and address.';
+  }
+}
+
+function openHotelModal() {
+  if (!DOM.modalHotelStayDetails) return;
+  DOM.modalHotelStayDetails.style.display = 'flex';
+
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  if (state.activeHotelStay) {
+    const s = state.activeHotelStay;
+    if (DOM.inputHotelName) DOM.inputHotelName.value = s.hotel_name || '';
+    if (DOM.inputHotelRoom) DOM.inputHotelRoom.value = s.room_number || '';
+    if (DOM.inputHotelPhone) DOM.inputHotelPhone.value = s.hotel_phone || '';
+    if (DOM.inputHotelAddress) DOM.inputHotelAddress.value = s.hotel_address || '';
+    if (DOM.inputHotelCheckinDate) DOM.inputHotelCheckinDate.value = s.checkin_date ? s.checkin_date.split('T')[0] : todayStr;
+    if (DOM.inputHotelCheckoutDate) DOM.inputHotelCheckoutDate.value = s.checkout_date ? s.checkout_date.split('T')[0] : '';
+    if (DOM.inputHotelNotes) DOM.inputHotelNotes.value = s.notes || '';
+
+    state.capturedHotelLat = s.hotel_lat != null ? Number(s.hotel_lat) : null;
+    state.capturedHotelLng = s.hotel_lng != null ? Number(s.hotel_lng) : null;
+    if (DOM.textHotelGpsDisplay) {
+      DOM.textHotelGpsDisplay.textContent = (state.capturedHotelLat && state.capturedHotelLng)
+        ? `${state.capturedHotelLat.toFixed(5)}°, ${state.capturedHotelLng.toFixed(5)}°`
+        : 'Not captured yet';
+    }
+  } else {
+    if (DOM.inputHotelCheckinDate && !DOM.inputHotelCheckinDate.value) {
+      DOM.inputHotelCheckinDate.value = todayStr;
+    }
+    // Auto-fill current coordinates if available
+    if (state.currentGps.latitude && state.currentGps.longitude) {
+      state.capturedHotelLat = state.currentGps.latitude;
+      state.capturedHotelLng = state.currentGps.longitude;
+      if (DOM.textHotelGpsDisplay) {
+        DOM.textHotelGpsDisplay.textContent = `${state.capturedHotelLat.toFixed(5)}°, ${state.capturedHotelLng.toFixed(5)}° (Current fix)`;
+      }
+    }
+  }
+}
+
+function closeHotelModal() {
+  if (DOM.modalHotelStayDetails) {
+    DOM.modalHotelStayDetails.style.display = 'none';
+  }
+}
+
+async function handleSaveHotelStay() {
+  const name = DOM.inputHotelName?.value.trim();
+  const room = DOM.inputHotelRoom?.value.trim();
+  const phone = DOM.inputHotelPhone?.value.trim();
+  const address = DOM.inputHotelAddress?.value.trim();
+  const checkinDate = DOM.inputHotelCheckinDate?.value;
+  const checkoutDate = DOM.inputHotelCheckoutDate?.value;
+  const notes = DOM.inputHotelNotes?.value.trim();
+
+  if (!name || !address) {
+    showAlert('Hotel name and full address are required.', 'danger');
+    return;
+  }
+
+  if (DOM.btnSaveHotelStay) {
+    DOM.btnSaveHotelStay.disabled = true;
+    DOM.btnSaveHotelStay.textContent = 'Saving...';
+  }
+
+  try {
+    const res = await fetch('/api/employee/hotel-stay', {
+      method: 'POST',
+      headers: getEmployeeAuthHeaders(),
+      body: JSON.stringify({
+        hotel_name: name,
+        room_number: room,
+        hotel_phone: phone,
+        hotel_address: address,
+        checkin_date: checkinDate,
+        checkout_date: checkoutDate || null,
+        notes,
+        hotel_lat: state.capturedHotelLat,
+        hotel_lng: state.capturedHotelLng
+      })
+    });
+
+    const data = await res.json();
+    if (data.success && data.stay) {
+      state.activeHotelStay = data.stay;
+      updateHotelBannerUI(data.stay);
+      closeHotelModal();
+      showAlert('Hotel and accommodation details registered successfully.', 'success');
+    } else {
+      showAlert(`Error saving hotel details: ${data.error || 'Server error'}`, 'danger');
+    }
+  } catch (err) {
+    showAlert(`Failed to save hotel details: ${err.message}`, 'danger');
+  } finally {
+    if (DOM.btnSaveHotelStay) {
+      DOM.btnSaveHotelStay.disabled = false;
+      DOM.btnSaveHotelStay.textContent = 'Save Hotel Details';
+    }
+  }
+}
+
+if (DOM.btnOpenHotelModal) DOM.btnOpenHotelModal.addEventListener('click', openHotelModal);
+if (DOM.btnEditHotelStay) DOM.btnEditHotelStay.addEventListener('click', openHotelModal);
+if (DOM.btnCloseHotelModal) DOM.btnCloseHotelModal.addEventListener('click', closeHotelModal);
+if (DOM.btnCancelHotelModal) DOM.btnCancelHotelModal.addEventListener('click', closeHotelModal);
+if (DOM.formHotelStayDetails) DOM.formHotelStayDetails.addEventListener('submit', (e) => { e.preventDefault(); handleSaveHotelStay(); });
+
+if (DOM.btnCaptureHotelGps) {
+  DOM.btnCaptureHotelGps.addEventListener('click', () => {
+    if (state.currentGps.latitude && state.currentGps.longitude) {
+      state.capturedHotelLat = state.currentGps.latitude;
+      state.capturedHotelLng = state.currentGps.longitude;
+      if (DOM.textHotelGpsDisplay) {
+        DOM.textHotelGpsDisplay.textContent = `${state.capturedHotelLat.toFixed(5)}°, ${state.capturedHotelLng.toFixed(5)}° (Captured)`;
+      }
+      showAlert('Current GPS position captured for hotel location.', 'success');
+    } else {
+      showAlert('Acquiring GPS fix... please wait a moment.', 'warning');
+    }
+  });
 }
 
 function renderReadyToCheckInState() {
@@ -2059,7 +2290,12 @@ DOM.btnConfirmSubmission.addEventListener('click', async () => {
       field_site_notes: DOM.inputFieldSiteNotes ? DOM.inputFieldSiteNotes.value.trim() : null,
       state: activeState,
       district: activeDistrict,
-      team_id: activeTeamId
+      team_id: activeTeamId,
+      punch_location_type: state.punchLocationType || 'FIELD_SITE',
+      hotel_stay_id: state.activeHotelStay?.id || null,
+      hotel_name: state.activeHotelStay?.hotel_name || null,
+      hotel_room: state.activeHotelStay?.room_number || null,
+      hotel_phone: state.activeHotelStay?.hotel_phone || null
     };
 
     let data = null;

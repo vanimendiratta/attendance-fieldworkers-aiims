@@ -91,6 +91,7 @@ class AttendanceService {
     employee, photoData, latitude, longitude, accuracy,
     clientTimestamp, idempotencyKey, workMode = 'OFFICE',
     fieldSiteNotes = null, teamId = null, state = null, district = null,
+    punchLocationType = 'FIELD_SITE', hotelStayId = null, hotelName = null, hotelRoom = null, hotelPhone = null,
     clientIp, userAgent
   }) {
     if (!employee || !employee.id) throw new Error('Authentication required.');
@@ -175,9 +176,54 @@ class AttendanceService {
       throw new Error('Tampering detected: Reused or previously submitted attendance photo cannot be accepted.');
     }
 
-    // 8. Server timestamp & geocode
+    // 8. Server timestamp, detailed geocode & exact Google Maps coordinates
     const serverTimestamp = new Date().toISOString();
-    const reverseAddress  = await geoService.reverseGeocode(lat, lng);
+    const reverseDetails  = await geoService.reverseGeocodeDetailed(lat, lng);
+    const reverseAddress  = reverseDetails.address;
+    const exactCoordinatesUrl = `https://www.google.com/maps?q=${Number(lat).toFixed(6)},${Number(lng).toFixed(6)}`;
+
+    // Hotel proximity & stay resolution
+    let resolvedLocationType = punchLocationType || (mode === 'TRAVEL' ? 'TRAVEL_TRANSIT' : 'FIELD_SITE');
+    let resolvedHotelStayId  = hotelStayId || null;
+    let resolvedHotelName    = hotelName ? String(hotelName).trim() : null;
+    let resolvedHotelRoom    = hotelRoom ? String(hotelRoom).trim() : null;
+    let resolvedHotelPhone   = hotelPhone ? String(hotelPhone).trim() : null;
+
+    // Check active hotel stay in DB for this employee
+    try {
+      const activeStayRes = await query(
+        `SELECT * FROM employee_hotel_stays 
+         WHERE employee_id = $1 AND stay_status = 'ACTIVE' 
+         ORDER BY created_at DESC LIMIT 1`,
+        [employee.id]
+      );
+      if (activeStayRes.rows.length > 0) {
+        const activeStay = activeStayRes.rows[0];
+        if (!resolvedHotelStayId) resolvedHotelStayId = activeStay.id;
+        if (!resolvedHotelName) resolvedHotelName = activeStay.hotel_name;
+        if (!resolvedHotelRoom) resolvedHotelRoom = activeStay.room_number;
+        if (!resolvedHotelPhone) resolvedHotelPhone = activeStay.hotel_phone;
+
+        // If hotel coordinates are registered, evaluate proximity
+        if (activeStay.hotel_lat && activeStay.hotel_lng) {
+          const distToHotel = geoService.calculateHaversineDistance(
+            Number(activeStay.hotel_lat), Number(activeStay.hotel_lng),
+            lat, lng
+          );
+          if (distToHotel <= 150) {
+            resolvedLocationType = 'HOTEL_STAY';
+          }
+        }
+      }
+    } catch (e) {
+      // Ignore if table not yet initialized
+    }
+
+    // If reverse geocoding identified lodging and user hasn't explicitly set it
+    if (reverseDetails.isLodging && resolvedLocationType !== 'HOTEL_STAY' && mode !== 'TRAVEL') {
+      resolvedLocationType = 'HOTEL_STAY';
+      if (!resolvedHotelName) resolvedHotelName = reverseDetails.placeName;
+    }
 
     // 9. Resolve team / state / district
     let finalTeamId  = teamId || employee.team_id || null;
@@ -233,6 +279,8 @@ class AttendanceService {
            checkin_location_timestamp, checkin_server_timestamp, checkin_address,
            checkin_geofence_distance, checkin_geofence_status,
            work_mode, field_site_notes, team_id, state, district,
+           punch_location_type, hotel_stay_id, hotel_name, hotel_room, hotel_phone,
+           location_place_name, location_place_type, exact_coordinates_url,
            idempotency_key, redcap_sync_status, created_at, updated_at
          ) VALUES (
            $1,$2,$3,$4,
@@ -240,7 +288,9 @@ class AttendanceService {
            $10,$11,$12,
            $13,$14,
            $15,$16,$17,$18,$19,
-           $20,$21,$22,$23
+           $20,$21,$22,$23,$24,
+           $25,$26,$27,
+           $28,$29,$30,$31
          )`,
         [
           attendanceId, employee.id, org.id, 'CHECKED_IN',
@@ -249,6 +299,8 @@ class AttendanceService {
           geofenceResult.distance, geofenceResult.status,
           mode, fieldSiteNotes ? String(fieldSiteNotes).trim() : null,
           finalTeamId, finalState, finalDistrict,
+          resolvedLocationType, resolvedHotelStayId, resolvedHotelName, resolvedHotelRoom, resolvedHotelPhone,
+          reverseDetails.placeName || null, reverseDetails.placeType || null, exactCoordinatesUrl,
           idempotencyKey || null, 'PENDING', serverTimestamp, serverTimestamp
         ]
       );
