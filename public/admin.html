@@ -60,6 +60,12 @@
               </a>
             </li>
             <li>
+              <a class="nav-link" data-view="viewTimesheets" id="navTimesheets">
+                <span class="nav-icon"><span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span></span>
+                <span>Individual Timesheets</span>
+              </a>
+            </li>
+            <li>
               <a class="nav-link" data-view="viewLeave" id="navLeave">
                 <span class="nav-icon"><span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span></span>
                 <span>Leave</span>
@@ -435,15 +441,209 @@
           </div>
         </section>
 
-        <section id="viewReports" class="admin-view-panel" style="display: none;">
-          <div class="surface-card" style="padding: 32px; text-align: center;">
-            <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 6px;">Attendance Reports</h3>
-            <p style="font-size: 13px; color: var(--color-text-tertiary); max-width: 480px; margin: 0 auto 20px;">
-              Export weekly and monthly payroll attendance summaries synchronized with REDCap.
+        <!-- VIEW: CUMULATIVE INDIVIDUAL TIMESHEETS -->
+        <section id="viewTimesheets" class="admin-view-panel" style="display: none;">
+          <!-- Top Selector & Filter Bar -->
+          <div class="surface-card" style="margin-bottom: 20px; padding: 18px 24px;">
+            <div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px;">
+              <div style="display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap;">
+                <div>
+                  <label for="timesheetEmployeeSelect" style="display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); margin-bottom: 4px;">Select Field Worker / Employee</label>
+                  <select id="timesheetEmployeeSelect" class="form-select" style="min-width: 250px; font-size: 13px; padding: 7px 12px;">
+                    <option value="">-- Choose Employee --</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="timesheetStartDate" style="display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); margin-bottom: 4px;">From Date</label>
+                  <input type="date" id="timesheetStartDate" class="form-input" style="padding: 7px 12px; font-size: 13px;">
+                </div>
+                <div>
+                  <label for="timesheetEndDate" style="display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); margin-bottom: 4px;">To Date</label>
+                  <input type="date" id="timesheetEndDate" class="form-input" style="padding: 7px 12px; font-size: 13px;">
+                </div>
+                <div>
+                  <label for="timesheetStatusFilter" style="display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); margin-bottom: 4px;">Status</label>
+                  <select id="timesheetStatusFilter" class="form-select" style="padding: 7px 12px; font-size: 13px;">
+                    <option value="ALL">All Statuses</option>
+                    <option value="PRESENT">Present</option>
+                    <option value="HALF_DAY">Half Day</option>
+                    <option value="OVERTIME">Overtime</option>
+                  </select>
+                </div>
+                <div>
+                  <button id="btnApplyTimesheetFilter" class="btn btn-secondary" style="font-size: 12px; padding: 7px 14px; font-weight: 500;">Filter</button>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <button id="btnExportIndividualTimesheetCsv" class="btn btn-primary" style="font-size: 12px; display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px;" disabled>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  <span>Export Person CSV</span>
+                </button>
+                <button id="btnPrintTimesheet" class="btn btn-secondary" style="font-size: 12px; display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px;" onclick="window.print()" disabled>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                  <span>Print</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Timesheet Content Area (Shown when worker is selected) -->
+          <div id="timesheetContentArea" style="display: none;">
+            <!-- Employee Profile Block -->
+            <div class="surface-card" style="margin-bottom: 20px; padding: 18px 24px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+                <div style="display: flex; align-items: center; gap: 16px;">
+                  <div class="user-avatar" id="tsAvatar" style="width: 48px; height: 48px; font-size: 18px; font-weight: 700; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--color-brand); color: #fff;">
+                    ?
+                  </div>
+                  <div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <h2 id="tsEmployeeName" style="font-size: 17px; font-weight: 700; margin: 0; color: var(--color-text-primary);">Employee Name</h2>
+                      <span id="tsEmployeeId" class="badge badge-neutral" style="font-family: var(--font-mono); font-size: 12px;">ID</span>
+                      <span class="badge badge-success"><span class="badge-dot"></span>Active Worker</span>
+                    </div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 16px; margin-top: 6px; font-size: 12px; color: var(--color-text-secondary);">
+                      <div><strong style="color: var(--color-text-primary);">Department:</strong> <span id="tsDepartment">CDER</span></div>
+                      <div><strong style="color: var(--color-text-primary);">Designation:</strong> <span id="tsDesignation">Staff</span></div>
+                      <div><strong style="color: var(--color-text-primary);">Team / Division:</strong> <span id="tsTeam">Direct Assignment</span></div>
+                      <div><strong style="color: var(--color-text-primary);">Territory:</strong> <span id="tsTerritory">Delhi</span></div>
+                      <div><strong style="color: var(--color-text-primary);">Email:</strong> <span id="tsEmail">email@example.com</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Cumulative Summary KPI Grid (6 metrics) -->
+            <div class="timesheet-kpi-grid">
+              <div class="timesheet-kpi-card">
+                <div class="timesheet-kpi-header">
+                  <span class="timesheet-kpi-title">Total Shifts Worked</span>
+                  <span class="ui-icon ui-icon-sm" style="color: var(--color-brand);"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+                </div>
+                <div class="timesheet-kpi-value" id="tsStatTotalShifts">0</div>
+                <div class="timesheet-kpi-footer" id="tsStatCompletedShifts">0 completed checkouts</div>
+              </div>
+
+              <div class="timesheet-kpi-card">
+                <div class="timesheet-kpi-header">
+                  <span class="timesheet-kpi-title">Total Working Hours</span>
+                  <span class="ui-icon ui-icon-sm" style="color: #2563eb;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+                </div>
+                <div class="timesheet-kpi-value"><span id="tsStatTotalHours">0.00</span><span class="timesheet-kpi-unit">hrs</span></div>
+                <div class="timesheet-kpi-footer" id="tsStatNetFormatted">Net working time: 0h 0m</div>
+              </div>
+
+              <div class="timesheet-kpi-card">
+                <div class="timesheet-kpi-header">
+                  <span class="timesheet-kpi-title">Average Working Hours</span>
+                  <span class="ui-icon ui-icon-sm" style="color: #059669;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span>
+                </div>
+                <div class="timesheet-kpi-value"><span id="tsStatAvgHours">0.00</span><span class="timesheet-kpi-unit">hrs/shift</span></div>
+                <div class="timesheet-kpi-footer" id="tsStatAvgFormatted">Average shift length: 0h 0m</div>
+              </div>
+
+              <div class="timesheet-kpi-card">
+                <div class="timesheet-kpi-header">
+                  <span class="timesheet-kpi-title">Total Break Time</span>
+                  <span class="ui-icon ui-icon-sm" style="color: #d97706;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
+                </div>
+                <div class="timesheet-kpi-value"><span id="tsStatTotalBreaks">0</span><span class="timesheet-kpi-unit">mins</span></div>
+                <div class="timesheet-kpi-footer" id="tsStatBreakHours">0.00 cumulative hours</div>
+              </div>
+
+              <div class="timesheet-kpi-card">
+                <div class="timesheet-kpi-header">
+                  <span class="timesheet-kpi-title">Total Overtime</span>
+                  <span class="ui-icon ui-icon-sm" style="color: #7c3aed;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 10"/></svg></span>
+                </div>
+                <div class="timesheet-kpi-value"><span id="tsStatOvertimeHours">0.00</span><span class="timesheet-kpi-unit">hrs</span></div>
+                <div class="timesheet-kpi-footer" id="tsStatOvertimeFormatted">+0h 0m overtime</div>
+              </div>
+
+              <div class="timesheet-kpi-card">
+                <div class="timesheet-kpi-header">
+                  <span class="timesheet-kpi-title">Completion Rate</span>
+                  <span class="ui-icon ui-icon-sm" style="color: #10b981;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></span>
+                </div>
+                <div class="timesheet-kpi-value" id="tsStatCompletionRate">100%</div>
+                <div class="timesheet-kpi-footer" id="tsStatDateRange">All recorded check-ins</div>
+              </div>
+            </div>
+
+            <!-- Itemized Shift Table -->
+            <div class="table-container">
+              <div class="table-toolbar">
+                <div>
+                  <h3 style="font-size: 15px; font-weight: 600;">Every Check-In &amp; Check-Out Session</h3>
+                  <p style="font-size: 12px; color: var(--color-text-tertiary);" id="tsTableSubheading">Detailed timestamps, working hours, break durations, GPS coordinates, and field site notes</p>
+                </div>
+                <input type="text" id="tsSearchInput" placeholder="Search sessions (date, site, notes)..." class="form-input" style="width: 240px; font-size: 12px; padding: 6px 12px;">
+              </div>
+
+              <div class="table-responsive-wrap">
+                <table class="data-table" id="tsTable">
+                  <thead>
+                    <tr>
+                      <th>Date &amp; Shift</th>
+                      <th>Check-In</th>
+                      <th>Check-In Location</th>
+                      <th>Check-Out</th>
+                      <th>Check-Out Location</th>
+                      <th>Net Hours</th>
+                      <th>Gross Hours</th>
+                      <th>Breaks</th>
+                      <th>Overtime</th>
+                      <th>Field Notes</th>
+                      <th>Photos</th>
+                      <th>Status</th>
+                      <th style="text-align: right;">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tsTableBody">
+                    <tr><td colspan="13" style="text-align: center; color: var(--color-text-muted); padding: 32px;">Loading timesheet sessions...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Empty State (when no employee chosen yet) -->
+          <div id="timesheetEmptyPlaceholder" class="surface-card" style="padding: 48px 24px; text-align: center;">
+            <div class="ui-icon" style="width: 48px; height: 48px; margin: 0 auto 16px; color: var(--color-text-muted);">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            </div>
+            <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">Select an Employee to View Cumulative Timesheet</h3>
+            <p style="font-size: 13px; color: var(--color-text-tertiary); max-width: 520px; margin: 0 auto 20px;">
+              Choose any field worker or staff member from the dropdown above, or click "Timesheet" next to an employee's row in the Employee Directory.
             </p>
-            <a href="/api/admin/redcap/data-dictionary.csv" download class="btn btn-primary" style="font-size: 13px;">
-              Download REDCap CSV Dictionary
-            </a>
+          </div>
+        </section>
+
+        <!-- VIEW: ATTENDANCE REPORTS & PAYROLL -->
+        <section id="viewReports" class="admin-view-panel" style="display: none;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
+            <div class="surface-card" style="padding: 24px;">
+              <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 6px;">Individual Cumulative Timesheets</h3>
+              <p style="font-size: 13px; color: var(--color-text-tertiary); margin-bottom: 16px;">
+                Comprehensive person-by-person timesheets showing all check-ins, check-outs, net working hours, average hours/day, break times, and field work verification.
+              </p>
+              <button class="btn btn-primary" onclick="switchView('viewTimesheets')" style="font-size: 13px; display: inline-flex; align-items: center; gap: 6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                <span>Open Individual Timesheets</span>
+              </button>
+            </div>
+
+            <div class="surface-card" style="padding: 24px;">
+              <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 6px;">REDCap Gateway &amp; Data Dictionary</h3>
+              <p style="font-size: 13px; color: var(--color-text-tertiary); margin-bottom: 16px;">
+                Export attendance telemetry and data dictionary synchronized with REDCap for payroll and administrative verification.
+              </p>
+              <a href="/api/admin/redcap/data-dictionary.csv" download class="btn btn-secondary" style="font-size: 13px; display: inline-flex; align-items: center; gap: 6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span>Download REDCap CSV</span>
+              </a>
+            </div>
           </div>
         </section>
 
@@ -786,6 +986,10 @@
 
       <!-- Drawer Footer Actions -->
       <div class="drawer-footer">
+        <button type="button" class="btn btn-primary" id="btnDrawerOpenTimesheet" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 6px 14px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          <span>Cumulative Timesheet</span>
+        </button>
         <button type="button" class="btn btn-danger" id="btnDrawerDeleteAttendance" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 6px 14px;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
           <span>Delete Record</span>

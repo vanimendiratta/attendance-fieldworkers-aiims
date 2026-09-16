@@ -760,7 +760,7 @@ router.post('/attendance/check-out', requireAuthenticatedEmployee, async (req, r
 // ---------------------------------------------------------------------------
 // Attendance record helper (for admin routes)
 // ---------------------------------------------------------------------------
-async function getFilteredAttendanceRecords({ employerId, work_mode, status, state, district, team_id, search }) {
+async function getFilteredAttendanceRecords({ employerId, employee_id, work_mode, status, state, district, team_id, search }) {
   const params = [employerId];
   let sql = `
     SELECT a.*, e.name AS employee_name, e.department, e.designation, e.email,
@@ -775,6 +775,10 @@ async function getFilteredAttendanceRecords({ employerId, work_mode, status, sta
     WHERE a.employer_id = $1
   `;
 
+  if (employee_id && employee_id !== 'ALL') {
+    params.push(employee_id);
+    sql += ` AND a.employee_id = $${params.length}`;
+  }
   if (work_mode && work_mode !== 'ALL') {
     params.push(work_mode);
     sql += ` AND a.work_mode = $${params.length}`;
@@ -894,8 +898,8 @@ function generateAttendanceCsv(records) {
 // ---------------------------------------------------------------------------
 router.get('/admin/attendance', requireAuthenticatedAdmin, async (req, res) => {
   try {
-    const { work_mode, status, state, district, team_id, search } = req.query;
-    const records = await getFilteredAttendanceRecords({ employerId: req.employerId, work_mode, status, state, district, team_id, search });
+    const { employee_id, work_mode, status, state, district, team_id, search } = req.query;
+    const records = await getFilteredAttendanceRecords({ employerId: req.employerId, employee_id, work_mode, status, state, district, team_id, search });
     res.json({ success: true, employer_id: req.employerId, records });
   } catch (err) { res.status(500).json({ success: false, error: isProductionEnvironment() ? 'Internal server error' : err.message }); }
 });
@@ -905,8 +909,8 @@ router.get('/admin/attendance', requireAuthenticatedAdmin, async (req, res) => {
 // ---------------------------------------------------------------------------
 router.get('/admin/attendance/export.csv', requireAuthenticatedAdmin, async (req, res) => {
   try {
-    const { work_mode, status, state, district, team_id, search } = req.query;
-    const records = await getFilteredAttendanceRecords({ employerId: req.employerId, work_mode, status, state, district, team_id, search });
+    const { employee_id, work_mode, status, state, district, team_id, search } = req.query;
+    const records = await getFilteredAttendanceRecords({ employerId: req.employerId, employee_id, work_mode, status, state, district, team_id, search });
     const csvData  = generateAttendanceCsv(records);
     const dateStr  = new Date().toISOString().split('T')[0];
     const filename = `attendance_export_${req.employerId}_${dateStr}.csv`;
@@ -1012,6 +1016,345 @@ router.get('/cron/daily-attendance-backup', async (req, res) => {
       timestamp: new Date().toISOString(),
       results
     });
+  } catch (err) {
+    return handleApiError(res, req, err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 12d. Cumulative Individual Timesheet Helper & CSV Generator
+// ---------------------------------------------------------------------------
+function formatSecToHhMm(totalSec) {
+  if (totalSec == null || isNaN(totalSec) || totalSec <= 0) return '0h 00m';
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  return `${h}h ${String(m).padStart(2, '0')}m`;
+}
+
+function generateIndividualTimesheetCsv(employee, summary, records) {
+  const lines = [];
+
+  // Title & Metadata block
+  lines.push(['CUMULATIVE INDIVIDUAL TIMESHEET REPORT'].map(escapeCsvCell).join(','));
+  lines.push(['Report Generated At (UTC)', new Date().toISOString(), 'Organization', employee.employer_name || 'AIIMS'].map(escapeCsvCell).join(','));
+  lines.push([]);
+
+  // Employee Profile
+  lines.push(['EMPLOYEE PROFILE'].map(escapeCsvCell).join(','));
+  lines.push(['Employee ID', employee.id, 'Full Name', employee.name].map(escapeCsvCell).join(','));
+  lines.push(['Department', employee.department || 'CDER', 'Designation', employee.designation || 'Staff'].map(escapeCsvCell).join(','));
+  lines.push(['Email Address', employee.email || 'N/A', 'Contact Phone', employee.phone || 'N/A'].map(escapeCsvCell).join(','));
+  lines.push(['Team / Unit', employee.team_name || 'Direct Assignment', 'State / District', `${employee.state || 'N/A'} / ${employee.district || 'N/A'}`].map(escapeCsvCell).join(','));
+  lines.push([]);
+
+  // Cumulative Metrics
+  lines.push(['CUMULATIVE ATTENDANCE & WORKING HOURS SUMMARY'].map(escapeCsvCell).join(','));
+  lines.push(['Total Shifts / Check-Ins', summary.totalRecords, 'Completed Shifts (With Check-Out)', summary.completedRecords].map(escapeCsvCell).join(','));
+  lines.push(['Active / In-Progress Shifts', summary.inProgressRecords, 'Shift Completion Rate', summary.completionRate + '%'].map(escapeCsvCell).join(','));
+  lines.push(['Total Net Working Hours (Dec)', Number(summary.totalNetWorkingHours || 0).toFixed(2) + ' hrs', 'Total Net Working Time (HH:MM)', summary.totalNetWorkingFormatted].map(escapeCsvCell).join(','));
+  lines.push(['Average Working Hours / Shift', Number(summary.avgWorkingHoursPerShift || 0).toFixed(2) + ' hrs/shift', 'Average Working Time / Shift (HH:MM)', summary.avgWorkingFormatted].map(escapeCsvCell).join(','));
+  lines.push(['Total Gross Working Hours (Dec)', Number(summary.totalGrossWorkingHours || 0).toFixed(2) + ' hrs', 'Total Gross Working Time (HH:MM)', summary.totalGrossWorkingFormatted].map(escapeCsvCell).join(','));
+  lines.push(['Total Break Duration (Minutes)', summary.totalBreakMinutes + ' mins', 'Total Break Duration (Hours)', Number(summary.totalBreakHours || 0).toFixed(2) + ' hrs'].map(escapeCsvCell).join(','));
+  lines.push(['Total Overtime Hours (Dec)', Number(summary.totalOvertimeHours || 0).toFixed(2) + ' hrs', 'Total Overtime Time (HH:MM)', summary.totalOvertimeFormatted].map(escapeCsvCell).join(','));
+  lines.push(['First Check-In Date', summary.firstRecordDate || 'N/A', 'Latest Check-In Date', summary.lastRecordDate || 'N/A'].map(escapeCsvCell).join(','));
+  lines.push([]);
+
+  // Itemized Session Log
+  lines.push(['ITEMIZED CHECK-IN & CHECK-OUT ATTENDANCE LOG'].map(escapeCsvCell).join(','));
+  const headers = [
+    'Shift ID', 'Date', 'Day of Week',
+    'Check-In Time', 'Check-In Server Timestamp (UTC)', 'Check-In Address', 'Check-In Coordinates', 'Check-In Accuracy (m)',
+    'Check-Out Time', 'Check-Out Server Timestamp (UTC)', 'Check-Out Address', 'Check-Out Coordinates', 'Check-Out Accuracy (m)',
+    'Attendance Status', 'Work Mode',
+    'Net Working Time (HH:MM)', 'Net Working Hours (Dec)', 'Gross Working Time (HH:MM)', 'Gross Working Hours (Dec)',
+    'Break Duration (Mins)', 'Overtime (HH:MM)', 'Overtime Hours (Dec)',
+    'Field Site Notes', 'Check-In Photo URL', 'Check-Out Photo URL'
+  ];
+  lines.push(headers.map(escapeCsvCell).join(','));
+
+  const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  for (const r of records) {
+    const dIn = r.checkin_server_timestamp ? new Date(r.checkin_server_timestamp) : null;
+    const dateStr = dIn ? dIn.toISOString().split('T')[0] : '';
+    const dayStr = dIn ? daysOfWeek[dIn.getUTCDay()] : '';
+    const checkinTimeStr = dIn ? dIn.toLocaleTimeString('en-US', { hour12: false }) : '';
+
+    const dOut = r.checkout_server_timestamp ? new Date(r.checkout_server_timestamp) : null;
+    const checkoutTimeStr = dOut ? dOut.toLocaleTimeString('en-US', { hour12: false }) : (r.checkout_server_timestamp ? '' : 'In Progress');
+
+    const checkinCoords = (r.checkin_lat != null && r.checkin_lng != null) ? `${Number(r.checkin_lat).toFixed(6)}, ${Number(r.checkin_lng).toFixed(6)}` : '';
+    const checkoutCoords = (r.checkout_lat != null && r.checkout_lng != null) ? `${Number(r.checkout_lat).toFixed(6)}, ${Number(r.checkout_lng).toFixed(6)}` : '';
+
+    lines.push([
+      r.id,
+      dateStr,
+      dayStr,
+      checkinTimeStr,
+      r.checkin_server_timestamp || '',
+      r.checkin_address || '',
+      checkinCoords,
+      r.checkin_accuracy != null ? Number(r.checkin_accuracy).toFixed(1) : '',
+      checkoutTimeStr,
+      r.checkout_server_timestamp || '',
+      r.checkout_address || '',
+      checkoutCoords,
+      r.checkout_accuracy != null ? Number(r.checkout_accuracy).toFixed(1) : '',
+      r.attendance_status || '',
+      r.work_mode === 'FIELD_WORK' ? 'Field Work' : 'Office Duty',
+      formatSecToHhMm(r.net_working_seconds),
+      r.net_working_seconds != null ? (r.net_working_seconds / 3600).toFixed(2) : '0.00',
+      formatSecToHhMm(r.gross_working_seconds),
+      r.gross_working_seconds != null ? (r.gross_working_seconds / 3600).toFixed(2) : '0.00',
+      r.break_seconds != null ? Math.round(r.break_seconds / 60) : '0',
+      formatSecToHhMm(r.overtime_seconds),
+      r.overtime_seconds != null ? (r.overtime_seconds / 3600).toFixed(2) : '0.00',
+      r.field_site_notes || '',
+      r.checkin_photo || '',
+      r.checkout_photo || ''
+    ].map(escapeCsvCell).join(','));
+  }
+
+  return '\uFEFF' + lines.join('\r\n');
+}
+
+// ---------------------------------------------------------------------------
+// 12e. Admin: Cumulative Individual Timesheet JSON
+// ---------------------------------------------------------------------------
+router.get('/admin/employees/:id/timesheet', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const employerId = req.employerId;
+    const empId = req.params.id;
+
+    const empRes = await query(
+      `SELECT e.id, e.employer_id, e.name, e.email, e.phone, e.department, e.designation, e.is_admin, e.is_active,
+              e.team_id, e.state, e.district, e.created_at,
+              COALESCE(t.name, 'Unassigned') AS team_name,
+              o.name AS employer_name
+       FROM employees e
+       LEFT JOIN teams t ON e.team_id = t.id
+       JOIN organizations o ON e.employer_id = o.id
+       WHERE e.id = $1 AND e.employer_id = $2`,
+      [empId, employerId]
+    );
+    const employee = empRes.rows[0];
+    if (!employee) {
+      return res.status(404).json({ success: false, error: 'Employee not found for this organization.' });
+    }
+
+    const { start_date, end_date, status } = req.query;
+    const params = [employerId, empId];
+    let sql = `
+      SELECT a.*,
+             COALESCE(a.state, e.state, t.state) AS state,
+             COALESCE(a.district, e.district, t.district) AS district,
+             COALESCE(t.name, 'Direct Assignment') AS team_name
+      FROM attendance a
+      JOIN employees e ON a.employee_id = e.id
+      LEFT JOIN teams t ON a.team_id = t.id OR e.team_id = t.id
+      WHERE a.employer_id = $1 AND a.employee_id = $2
+    `;
+
+    if (status && status !== 'ALL') {
+      params.push(status);
+      sql += ` AND a.attendance_status = $${params.length}`;
+    }
+    if (start_date) {
+      params.push(`${start_date}T00:00:00.000Z`);
+      sql += ` AND (a.checkin_server_timestamp >= $${params.length} OR a.created_at >= $${params.length})`;
+    }
+    if (end_date) {
+      params.push(`${end_date}T23:59:59.999Z`);
+      sql += ` AND (a.checkin_server_timestamp <= $${params.length} OR a.created_at <= $${params.length})`;
+    }
+
+    sql += ' ORDER BY a.checkin_server_timestamp DESC, a.created_at DESC';
+
+    const recordsRes = await query(sql, params);
+    const rows = recordsRes.rows;
+
+    if (storageService.isStorageConfigured()) {
+      for (const r of rows) {
+        if (r.checkin_photo && !r.checkin_photo.startsWith('/uploads/')) {
+          r.checkin_photo = await storageService.resolvePhotoUrl(r.checkin_photo);
+        }
+        if (r.checkout_photo && !r.checkout_photo.startsWith('/uploads/')) {
+          r.checkout_photo = await storageService.resolvePhotoUrl(r.checkout_photo);
+        }
+      }
+    }
+
+    const totalRecords = rows.length;
+    const completedRecords = rows.filter(r => r.checkout_server_timestamp != null).length;
+    const inProgressRecords = totalRecords - completedRecords;
+
+    const totalNetWorkingSeconds = rows.reduce((acc, r) => acc + (Number(r.net_working_seconds) || 0), 0);
+    const totalGrossWorkingSeconds = rows.reduce((acc, r) => acc + (Number(r.gross_working_seconds) || 0), 0);
+    const totalBreakSeconds = rows.reduce((acc, r) => acc + (Number(r.break_seconds) || 0), 0);
+    const totalOvertimeSeconds = rows.reduce((acc, r) => acc + (Number(r.overtime_seconds) || 0), 0);
+
+    const totalNetWorkingHours = Number((totalNetWorkingSeconds / 3600).toFixed(2));
+    const totalGrossWorkingHours = Number((totalGrossWorkingSeconds / 3600).toFixed(2));
+    const totalBreakMinutes = Math.round(totalBreakSeconds / 60);
+    const totalBreakHours = Number((totalBreakSeconds / 3600).toFixed(2));
+    const totalOvertimeHours = Number((totalOvertimeSeconds / 3600).toFixed(2));
+
+    const avgDenominator = completedRecords > 0 ? completedRecords : (totalRecords > 0 ? totalRecords : 1);
+    const avgWorkingSecondsPerShift = Math.round(totalNetWorkingSeconds / avgDenominator);
+    const avgWorkingHoursPerShift = Number((totalNetWorkingSeconds / avgDenominator / 3600).toFixed(2));
+
+    const completionRate = totalRecords > 0 ? Math.round((completedRecords / totalRecords) * 100) : 0;
+
+    const summary = {
+      totalRecords,
+      completedRecords,
+      inProgressRecords,
+      totalNetWorkingSeconds,
+      totalNetWorkingHours,
+      totalNetWorkingFormatted: formatSecToHhMm(totalNetWorkingSeconds),
+      avgWorkingSecondsPerShift,
+      avgWorkingHoursPerShift,
+      avgWorkingFormatted: formatSecToHhMm(avgWorkingSecondsPerShift),
+      totalGrossWorkingSeconds,
+      totalGrossWorkingHours,
+      totalGrossWorkingFormatted: formatSecToHhMm(totalGrossWorkingSeconds),
+      totalBreakSeconds,
+      totalBreakMinutes,
+      totalBreakHours,
+      totalBreakFormatted: formatSecToHhMm(totalBreakSeconds),
+      totalOvertimeSeconds,
+      totalOvertimeHours,
+      totalOvertimeFormatted: formatSecToHhMm(totalOvertimeSeconds),
+      completionRate,
+      firstRecordDate: rows.length > 0 && rows[rows.length - 1].checkin_server_timestamp ? rows[rows.length - 1].checkin_server_timestamp.split('T')[0] : null,
+      lastRecordDate: rows.length > 0 && rows[0].checkin_server_timestamp ? rows[0].checkin_server_timestamp.split('T')[0] : null
+    };
+
+    res.json({
+      success: true,
+      employee,
+      summary,
+      records: rows
+    });
+  } catch (err) {
+    return handleApiError(res, req, err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 12f. Admin: Export Individual Timesheet (.CSV)
+// ---------------------------------------------------------------------------
+router.get('/admin/employees/:id/timesheet/export.csv', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const employerId = req.employerId;
+    const empId = req.params.id;
+
+    const empRes = await query(
+      `SELECT e.id, e.employer_id, e.name, e.email, e.phone, e.department, e.designation, e.is_admin, e.is_active,
+              e.team_id, e.state, e.district, e.created_at,
+              COALESCE(t.name, 'Unassigned') AS team_name,
+              o.name AS employer_name
+       FROM employees e
+       LEFT JOIN teams t ON e.team_id = t.id
+       JOIN organizations o ON e.employer_id = o.id
+       WHERE e.id = $1 AND e.employer_id = $2`,
+      [empId, employerId]
+    );
+    const employee = empRes.rows[0];
+    if (!employee) {
+      return res.status(404).json({ success: false, error: 'Employee not found.' });
+    }
+
+    const { start_date, end_date, status } = req.query;
+    const params = [employerId, empId];
+    let sql = `
+      SELECT a.*,
+             COALESCE(a.state, e.state, t.state) AS state,
+             COALESCE(a.district, e.district, t.district) AS district,
+             COALESCE(t.name, 'Direct Assignment') AS team_name
+      FROM attendance a
+      JOIN employees e ON a.employee_id = e.id
+      LEFT JOIN teams t ON a.team_id = t.id OR e.team_id = t.id
+      WHERE a.employer_id = $1 AND a.employee_id = $2
+    `;
+
+    if (status && status !== 'ALL') {
+      params.push(status);
+      sql += ` AND a.attendance_status = $${params.length}`;
+    }
+    if (start_date) {
+      params.push(`${start_date}T00:00:00.000Z`);
+      sql += ` AND (a.checkin_server_timestamp >= $${params.length} OR a.created_at >= $${params.length})`;
+    }
+    if (end_date) {
+      params.push(`${end_date}T23:59:59.999Z`);
+      sql += ` AND (a.checkin_server_timestamp <= $${params.length} OR a.created_at <= $${params.length})`;
+    }
+
+    sql += ' ORDER BY a.checkin_server_timestamp DESC, a.created_at DESC';
+
+    const recordsRes = await query(sql, params);
+    const rows = recordsRes.rows;
+
+    if (storageService.isStorageConfigured()) {
+      for (const r of rows) {
+        if (r.checkin_photo && !r.checkin_photo.startsWith('/uploads/')) {
+          r.checkin_photo = await storageService.resolvePhotoUrl(r.checkin_photo);
+        }
+        if (r.checkout_photo && !r.checkout_photo.startsWith('/uploads/')) {
+          r.checkout_photo = await storageService.resolvePhotoUrl(r.checkout_photo);
+        }
+      }
+    }
+
+    const totalRecords = rows.length;
+    const completedRecords = rows.filter(r => r.checkout_server_timestamp != null).length;
+    const inProgressRecords = totalRecords - completedRecords;
+
+    const totalNetWorkingSeconds = rows.reduce((acc, r) => acc + (Number(r.net_working_seconds) || 0), 0);
+    const totalGrossWorkingSeconds = rows.reduce((acc, r) => acc + (Number(r.gross_working_seconds) || 0), 0);
+    const totalBreakSeconds = rows.reduce((acc, r) => acc + (Number(r.break_seconds) || 0), 0);
+    const totalOvertimeSeconds = rows.reduce((acc, r) => acc + (Number(r.overtime_seconds) || 0), 0);
+
+    const totalNetWorkingHours = Number((totalNetWorkingSeconds / 3600).toFixed(2));
+    const totalGrossWorkingHours = Number((totalGrossWorkingSeconds / 3600).toFixed(2));
+    const totalBreakMinutes = Math.round(totalBreakSeconds / 60);
+    const totalBreakHours = Number((totalBreakSeconds / 3600).toFixed(2));
+    const totalOvertimeHours = Number((totalOvertimeSeconds / 3600).toFixed(2));
+
+    const avgDenominator = completedRecords > 0 ? completedRecords : (totalRecords > 0 ? totalRecords : 1);
+    const avgWorkingSecondsPerShift = Math.round(totalNetWorkingSeconds / avgDenominator);
+    const avgWorkingHoursPerShift = Number((totalNetWorkingSeconds / avgDenominator / 3600).toFixed(2));
+    const completionRate = totalRecords > 0 ? Math.round((completedRecords / totalRecords) * 100) : 0;
+
+    const summary = {
+      totalRecords,
+      completedRecords,
+      inProgressRecords,
+      totalNetWorkingHours,
+      totalNetWorkingFormatted: formatSecToHhMm(totalNetWorkingSeconds),
+      avgWorkingHoursPerShift,
+      avgWorkingFormatted: formatSecToHhMm(avgWorkingSecondsPerShift),
+      totalGrossWorkingHours,
+      totalGrossWorkingFormatted: formatSecToHhMm(totalGrossWorkingSeconds),
+      totalBreakMinutes,
+      totalBreakHours,
+      totalOvertimeHours,
+      totalOvertimeFormatted: formatSecToHhMm(totalOvertimeSeconds),
+      completionRate,
+      firstRecordDate: rows.length > 0 && rows[rows.length - 1].checkin_server_timestamp ? rows[rows.length - 1].checkin_server_timestamp.split('T')[0] : null,
+      lastRecordDate: rows.length > 0 && rows[0].checkin_server_timestamp ? rows[0].checkin_server_timestamp.split('T')[0] : null
+    };
+
+    const csvData = generateIndividualTimesheetCsv(employee, summary, rows);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const safeName = (employee.name || 'employee').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = `timesheet_${safeName}_${empId}_${dateStr}.csv`;
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.send(csvData);
   } catch (err) {
     return handleApiError(res, req, err);
   }

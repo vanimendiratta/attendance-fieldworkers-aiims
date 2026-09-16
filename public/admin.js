@@ -67,6 +67,7 @@ function switchView(viewId) {
     viewTeams: { title: 'Teams & Districts', breadcrumb: 'Territorial Divisions & Workforce Rosters' },
     viewEmployees: { title: 'Employees', breadcrumb: 'Directory & Management' },
     viewAttendance: { title: 'Attendance', breadcrumb: 'Verified Records & History' },
+    viewTimesheets: { title: 'Cumulative Timesheets', breadcrumb: 'Individual Performance & Hours Breakdown' },
     viewLeave: { title: 'Leave', breadcrumb: 'Requests & Balance' },
     viewShifts: { title: 'Shifts', breadcrumb: 'Schedules & Calendars' },
     viewReports: { title: 'Reports', breadcrumb: 'Analytics & Payroll Export' },
@@ -86,6 +87,7 @@ function switchView(viewId) {
   if (viewId === 'viewTeams') loadTeamsView();
   if (viewId === 'viewEmployees') loadEmployees();
   if (viewId === 'viewAttendance') loadAttendanceRecords();
+  if (viewId === 'viewTimesheets') loadTimesheetsView();
   if (viewId === 'viewAudit') loadAuditLogs();
   if (viewId === 'viewRedcap') loadRedcapData();
 }
@@ -99,6 +101,8 @@ function handleHashRoute() {
     teams: 'viewTeams',
     employees: 'viewEmployees',
     attendance: 'viewAttendance',
+    timesheets: 'viewTimesheets',
+    timesheet: 'viewTimesheets',
     leave: 'viewLeave',
     shifts: 'viewShifts',
     reports: 'viewReports',
@@ -629,6 +633,10 @@ function renderAttendanceTable(records) {
         <td>${statusBadge}</td>
         <td style="white-space: nowrap;">
           <div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px;">
+            <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;" onclick="event.stopPropagation(); openPersonTimesheet('${escapeHtml(r.employee_id)}')" title="View cumulative timesheet for this employee">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              <span>Timesheet</span>
+            </button>
             <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;" onclick="event.stopPropagation(); openAttendanceDrawer('${r.id}')">
               <span>View</span>
               <span class="ui-icon ui-icon-xs">${window.Icons ? window.Icons.raw('arrowRight') : ''}</span>
@@ -748,10 +756,17 @@ async function openAttendanceDrawer(recordId) {
       breaksContainer.innerHTML = 'No breaks recorded during this shift.';
     }
 
-    // Wire up drawer delete button
+    // Wire up drawer action buttons
     const drawerDeleteBtn = document.getElementById('btnDrawerDeleteAttendance');
     if (drawerDeleteBtn) {
       drawerDeleteBtn.onclick = () => handleDeleteAttendance(record.id, record.employee_name);
+    }
+    const drawerTimesheetBtn = document.getElementById('btnDrawerOpenTimesheet');
+    if (drawerTimesheetBtn) {
+      drawerTimesheetBtn.onclick = () => {
+        closeAttendanceDrawer();
+        openPersonTimesheet(record.employee_id);
+      };
     }
 
     // Open drawer
@@ -850,6 +865,10 @@ async function loadEmployees() {
         <td><span class="badge badge-success"><span class="badge-dot"></span>Active</span></td>
         <td>
           <div style="display: inline-flex; gap: 6px; align-items: center;">
+            <button class="btn btn-primary" onclick="openPersonTimesheet('${escapeHtml(e.id)}')" style="padding: 4px 10px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              <span>Timesheet</span>
+            </button>
             <button class="btn btn-secondary" onclick="handleEditEmployee('${escapeHtml(e.id)}', '${escapeHtml(e.name)}', '${escapeHtml(e.department || '')}', '${escapeHtml(e.designation || '')}')" style="padding: 4px 10px; font-size: 11px;">Edit Profile</button>
             <button class="btn btn-danger" onclick="handleDeleteEmployee('${escapeHtml(e.id)}', '${escapeHtml(e.name)}')" style="padding: 4px 10px; font-size: 11px;">Delete</button>
           </div>
@@ -1436,3 +1455,315 @@ function closePhotoLightbox() {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closePhotoLightbox();
 });
+
+/**
+ * ==========================================================================
+ * Cumulative Individual Timesheet Feature
+ * ==========================================================================
+ */
+let currentTimesheetEmpId = null;
+let cachedTimesheetData = null;
+let timesheetListenersBound = false;
+
+async function loadTimesheetsView(preselectedEmpId) {
+  if (!currentEmployerSession) return;
+
+  const empSelect = document.getElementById('timesheetEmployeeSelect');
+  if (!empSelect) return;
+
+  // Bind controls once
+  if (!timesheetListenersBound) {
+    timesheetListenersBound = true;
+
+    empSelect.addEventListener('change', (e) => {
+      const selectedId = e.target.value;
+      if (selectedId) {
+        loadEmployeeTimesheet(selectedId);
+      } else {
+        const contentArea = document.getElementById('timesheetContentArea');
+        const emptyPlaceholder = document.getElementById('timesheetEmptyPlaceholder');
+        const btnExport = document.getElementById('btnExportIndividualTimesheetCsv');
+        const btnPrint = document.getElementById('btnPrintTimesheet');
+        if (contentArea) contentArea.style.display = 'none';
+        if (emptyPlaceholder) emptyPlaceholder.style.display = 'block';
+        if (btnExport) btnExport.disabled = true;
+        if (btnPrint) btnPrint.disabled = true;
+        currentTimesheetEmpId = null;
+      }
+    });
+
+    const btnFilter = document.getElementById('btnApplyTimesheetFilter');
+    if (btnFilter) {
+      btnFilter.addEventListener('click', () => {
+        if (currentTimesheetEmpId) {
+          loadEmployeeTimesheet(currentTimesheetEmpId);
+        }
+      });
+    }
+
+    const btnExport = document.getElementById('btnExportIndividualTimesheetCsv');
+    if (btnExport) {
+      btnExport.addEventListener('click', () => {
+        if (currentTimesheetEmpId) {
+          exportPersonTimesheetCsv(currentTimesheetEmpId);
+        }
+      });
+    }
+
+    const searchInput = document.getElementById('tsSearchInput');
+    if (searchInput) {
+      searchInput.addEventListener('input', () => {
+        applyTimesheetSearchFilter();
+      });
+    }
+  }
+
+  // Populate Employee Select Dropdown
+  try {
+    const res = await adminFetch(`/api/employees?employer_id=${currentEmployerSession.employer_id}`);
+    const data = await res.json();
+    if (data.success && Array.isArray(data.employees)) {
+      const currentVal = preselectedEmpId || empSelect.value;
+      empSelect.innerHTML = '<option value="">-- Choose Field Worker / Employee --</option>' +
+        data.employees.map(e => `
+          <option value="${escapeHtml(e.id)}" ${e.id === currentVal ? 'selected' : ''}>
+            ${escapeHtml(e.name)} (${escapeHtml(e.id)}) · ${escapeHtml(e.department || 'CDER')}
+          </option>
+        `).join('');
+
+      if (preselectedEmpId) {
+        empSelect.value = preselectedEmpId;
+        await loadEmployeeTimesheet(preselectedEmpId);
+      } else if (empSelect.value) {
+        await loadEmployeeTimesheet(empSelect.value);
+      }
+    }
+  } catch (err) {
+    console.error('Error loading employees for timesheet:', err);
+  }
+}
+
+window.loadTimesheetsView = loadTimesheetsView;
+
+window.openPersonTimesheet = function(empId) {
+  if (!empId) return;
+  switchView('viewTimesheets');
+  loadTimesheetsView(empId);
+};
+
+async function loadEmployeeTimesheet(empId) {
+  if (!empId) return;
+  currentTimesheetEmpId = empId;
+
+  const contentArea = document.getElementById('timesheetContentArea');
+  const emptyPlaceholder = document.getElementById('timesheetEmptyPlaceholder');
+  const btnExport = document.getElementById('btnExportIndividualTimesheetCsv');
+  const btnPrint = document.getElementById('btnPrintTimesheet');
+  const tableBody = document.getElementById('tsTableBody');
+
+  if (tableBody) {
+    tableBody.innerHTML = '<tr><td colspan="13" style="text-align: center; color: var(--color-text-muted); padding: 32px;">Loading cumulative records for this worker...</td></tr>';
+  }
+
+  const startDate = document.getElementById('timesheetStartDate')?.value || '';
+  const endDate = document.getElementById('timesheetEndDate')?.value || '';
+  const status = document.getElementById('timesheetStatusFilter')?.value || 'ALL';
+
+  let url = `/api/admin/employees/${encodeURIComponent(empId)}/timesheet?status=${encodeURIComponent(status)}`;
+  if (startDate) url += `&start_date=${encodeURIComponent(startDate)}`;
+  if (endDate) url += `&end_date=${encodeURIComponent(endDate)}`;
+
+  try {
+    const res = await adminFetch(url);
+    const data = await res.json();
+
+    if (!data.success) {
+      alert(`Could not load timesheet: ${data.error || 'Server error'}`);
+      return;
+    }
+
+    cachedTimesheetData = data;
+    const { employee, summary, records } = data;
+
+    // Show content container
+    if (contentArea) contentArea.style.display = 'block';
+    if (emptyPlaceholder) emptyPlaceholder.style.display = 'none';
+    if (btnExport) btnExport.disabled = false;
+    if (btnPrint) btnPrint.disabled = false;
+
+    // Populate Employee Profile Header
+    document.getElementById('tsEmployeeName').textContent = employee.name || 'Unnamed Employee';
+    document.getElementById('tsEmployeeId').textContent = employee.id || empId;
+    document.getElementById('tsDepartment').textContent = employee.department || 'CDER';
+    document.getElementById('tsDesignation').textContent = employee.designation || 'Field Research Staff';
+    document.getElementById('tsTeam').textContent = employee.team_name || 'Direct Assignment';
+    document.getElementById('tsTerritory').textContent = (employee.district ? `${employee.district}, ` : '') + (employee.state || 'AIIMS HQ');
+    document.getElementById('tsEmail').textContent = employee.email || 'N/A';
+    document.getElementById('tsAvatar').textContent = employee.name ? employee.name.charAt(0).toUpperCase() : '?';
+
+    // Populate 6 Cumulative KPI Metric Cards
+    document.getElementById('tsStatTotalShifts').textContent = summary.totalRecords || 0;
+    document.getElementById('tsStatCompletedShifts').textContent = `${summary.completedRecords || 0} completed · ${summary.inProgressRecords || 0} active`;
+
+    document.getElementById('tsStatTotalHours').textContent = summary.totalNetWorkingHours != null ? summary.totalNetWorkingHours.toFixed(2) : '0.00';
+    document.getElementById('tsStatNetFormatted').textContent = `Net time: ${summary.totalNetWorkingFormatted || '0h 00m'}`;
+
+    document.getElementById('tsStatAvgHours').textContent = summary.avgWorkingHoursPerShift != null ? summary.avgWorkingHoursPerShift.toFixed(2) : '0.00';
+    document.getElementById('tsStatAvgFormatted').textContent = `Avg shift length: ${summary.avgWorkingFormatted || '0h 00m'}`;
+
+    document.getElementById('tsStatTotalBreaks').textContent = summary.totalBreakMinutes || 0;
+    document.getElementById('tsStatBreakHours').textContent = `${summary.totalBreakHours || '0.00'} cumulative break hours`;
+
+    document.getElementById('tsStatOvertimeHours').textContent = summary.totalOvertimeHours != null ? summary.totalOvertimeHours.toFixed(2) : '0.00';
+    document.getElementById('tsStatOvertimeFormatted').textContent = `Total overtime: ${summary.totalOvertimeFormatted || '0h 00m'}`;
+
+    document.getElementById('tsStatCompletionRate').textContent = `${summary.completionRate || 0}%`;
+    const dateRangeStr = (summary.firstRecordDate && summary.lastRecordDate) 
+      ? `${summary.firstRecordDate} to ${summary.lastRecordDate}` 
+      : 'All historical sessions';
+    document.getElementById('tsStatDateRange').textContent = dateRangeStr;
+
+    // Render Detailed Table
+    renderTimesheetSessions(records);
+
+  } catch (err) {
+    console.error('Error fetching individual timesheet:', err);
+    alert(`Failed to load cumulative timesheet: ${err.message}`);
+  }
+}
+
+function renderTimesheetSessions(records) {
+  const tableBody = document.getElementById('tsTableBody');
+  if (!tableBody) return;
+
+  if (!records || records.length === 0) {
+    tableBody.innerHTML = '<tr><td colspan="13" style="text-align: center; color: var(--color-text-muted); padding: 32px;">No attendance sessions found for the selected period.</td></tr>';
+    return;
+  }
+
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  tableBody.innerHTML = records.map(r => {
+    const dIn = r.checkin_server_timestamp ? new Date(r.checkin_server_timestamp) : null;
+    const dateStr = dIn ? dIn.toISOString().split('T')[0] : 'N/A';
+    const dayStr = dIn ? days[dIn.getUTCDay()] : '';
+    const checkinTime = dIn ? dIn.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'N/A';
+
+    const dOut = r.checkout_server_timestamp ? new Date(r.checkout_server_timestamp) : null;
+    const checkoutTime = dOut 
+      ? dOut.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) 
+      : '<span class="badge badge-warning" style="font-size: 10px;">In Progress</span>';
+
+    const netHours = r.net_working_seconds != null ? (r.net_working_seconds / 3600).toFixed(2) + 'h' : '0.00h';
+    const grossHours = r.gross_working_seconds != null ? (r.gross_working_seconds / 3600).toFixed(2) + 'h' : '0.00h';
+    const breakMins = r.break_seconds != null ? Math.round(r.break_seconds / 60) + 'm' : '0m';
+    const overtime = (r.overtime_seconds && r.overtime_seconds > 0) ? `+${(r.overtime_seconds / 3600).toFixed(2)}h` : '0h';
+
+    // Photos
+    const checkinPhoto = r.checkin_photo 
+      ? `<img src="${r.checkin_photo}" class="timesheet-photo-thumb" onclick="openPhotoLightbox('${r.checkin_photo}', 'Check-in: ${escapeHtml(r.employee_name || '')} (${dateStr})')" title="View check-in photo" alt="Checkin">`
+      : '<span style="color: var(--color-text-muted); font-size: 11px;">--</span>';
+
+    const checkoutPhoto = r.checkout_photo 
+      ? `<img src="${r.checkout_photo}" class="timesheet-photo-thumb" onclick="openPhotoLightbox('${r.checkout_photo}', 'Checkout: ${escapeHtml(r.employee_name || '')} (${dateStr})')" title="View checkout photo" alt="Checkout">`
+      : '<span style="color: var(--color-text-muted); font-size: 11px;">--</span>';
+
+    // Location coordinates
+    const checkinLoc = `
+      <div style="font-size: 11px; font-weight: 500; color: var(--color-text-primary); line-height: 1.3;">
+        ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Premises'))}
+      </div>
+      <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">
+        ${r.checkin_accuracy != null ? `±${Math.round(r.checkin_accuracy)}m accuracy` : ''}
+      </div>
+    `;
+
+    const checkoutLoc = r.checkout_server_timestamp ? `
+      <div style="font-size: 11px; font-weight: 500; color: var(--color-text-primary); line-height: 1.3;">
+        ${escapeHtml(r.checkout_address || (r.checkout_lat != null ? `${Number(r.checkout_lat).toFixed(4)}°, ${Number(r.checkout_lng).toFixed(4)}°` : 'Premises'))}
+      </div>
+      <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">
+        ${r.checkout_accuracy != null ? `±${Math.round(r.checkout_accuracy)}m accuracy` : ''}
+      </div>
+    ` : '<span style="color: var(--color-text-muted); font-size: 11px;">--</span>';
+
+    // Status badge
+    let statusBadge = '<span class="badge badge-neutral">UNKNOWN</span>';
+    if (r.attendance_status === 'PRESENT') statusBadge = '<span class="badge badge-success"><span class="badge-dot"></span>Present</span>';
+    else if (r.attendance_status === 'HALF_DAY') statusBadge = '<span class="badge badge-warning">Half Day</span>';
+    else if (r.attendance_status === 'OVERTIME') statusBadge = '<span class="badge" style="background: #f5f3ff; color: #7c3aed; border: 1px solid #ddd6fe;">Overtime</span>';
+    else if (r.attendance_status === 'CHECKED_IN') statusBadge = '<span class="badge badge-primary">Active Shift</span>';
+
+    return `
+      <tr id="ts-row-${r.id}">
+        <td>
+          <div style="font-weight: 600; font-size: 12px; color: var(--color-text-primary);">${dateStr}</div>
+          <div style="font-size: 11px; color: var(--color-text-tertiary);">${dayStr}</div>
+        </td>
+        <td style="font-family: var(--font-mono); font-size: 12px;">${checkinTime}</td>
+        <td style="max-width: 170px;">${checkinLoc}</td>
+        <td style="font-family: var(--font-mono); font-size: 12px;">${checkoutTime}</td>
+        <td style="max-width: 170px;">${checkoutLoc}</td>
+        <td style="font-family: var(--font-mono); font-weight: 700; color: var(--color-primary);">${netHours}</td>
+        <td style="font-family: var(--font-mono); font-size: 12px; color: var(--color-text-secondary);">${grossHours}</td>
+        <td style="font-size: 12px;">${breakMins}</td>
+        <td style="font-size: 12px; font-weight: 600; color: #7c3aed;">${overtime}</td>
+        <td style="max-width: 160px; font-size: 11px; color: var(--color-text-secondary); line-height: 1.3;">
+          ${escapeHtml(r.field_site_notes || 'Routine Field Work')}
+        </td>
+        <td>
+          <div style="display: flex; gap: 4px; align-items: center;">
+            ${checkinPhoto}
+            ${checkoutPhoto}
+          </div>
+        </td>
+        <td>${statusBadge}</td>
+        <td style="text-align: right; white-space: nowrap;">
+          <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="openAttendanceDrawer('${r.id}')">
+            <span>Inspect</span>
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function applyTimesheetSearchFilter() {
+  if (!cachedTimesheetData || !cachedTimesheetData.records) return;
+  const q = (document.getElementById('tsSearchInput')?.value || '').toLowerCase().trim();
+  if (!q) {
+    renderTimesheetSessions(cachedTimesheetData.records);
+    return;
+  }
+  const filtered = cachedTimesheetData.records.filter(r => {
+    return (
+      (r.id && r.id.toLowerCase().includes(q)) ||
+      (r.checkin_server_timestamp && r.checkin_server_timestamp.toLowerCase().includes(q)) ||
+      (r.field_site_notes && r.field_site_notes.toLowerCase().includes(q)) ||
+      (r.checkin_address && r.checkin_address.toLowerCase().includes(q)) ||
+      (r.checkout_address && r.checkout_address.toLowerCase().includes(q)) ||
+      (r.attendance_status && r.attendance_status.toLowerCase().includes(q))
+    );
+  });
+  renderTimesheetSessions(filtered);
+}
+
+function exportPersonTimesheetCsv(empId) {
+  if (!empId) return;
+  const startDate = document.getElementById('timesheetStartDate')?.value || '';
+  const endDate = document.getElementById('timesheetEndDate')?.value || '';
+  const status = document.getElementById('timesheetStatusFilter')?.value || 'ALL';
+
+  let url = `/api/admin/employees/${encodeURIComponent(empId)}/timesheet/export.csv?status=${encodeURIComponent(status)}`;
+  if (startDate) url += `&start_date=${encodeURIComponent(startDate)}`;
+  if (endDate) url += `&end_date=${encodeURIComponent(endDate)}`;
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `timesheet_${empId}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+window.exportPersonTimesheetCsv = exportPersonTimesheetCsv;
