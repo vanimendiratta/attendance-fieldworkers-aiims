@@ -794,10 +794,10 @@ function renderDailyAttendanceTables(records) {
       filterNote = `No matching attendance records found for date ${selectedHistoricalDate}.`;
     }
   } else if (currentAttendanceDateWindow === 'ALL') {
-    displayedDates = allDates;
+    displayedDates = allDates.slice().sort((a, b) => a.localeCompare(b));
   } else {
-    // Default: RECENT_WEEK
-    displayedDates = recentDatesList;
+    // Default: RECENT_WEEK in chronological order (earlier day first: Tuesday = Table 1, Wednesday = Table 2)
+    displayedDates = recentDatesList.slice().sort((a, b) => a.localeCompare(b));
   }
 
   if (displayedDates.length === 0) {
@@ -821,15 +821,6 @@ function renderDailyAttendanceTables(records) {
     const totalHrs = totalSec / 3600;
     const avgHrs = completedRecords.length > 0 ? (totalHrs / completedRecords.length) : 0;
 
-    let greenCount = 0;
-    let yellowCount = 0;
-    let redCount = 0;
-    for (const r of dayRecords) {
-      const meta = computeWorkingHoursMeta(r);
-      if (meta.category === 'GREEN') greenCount++;
-      else if (meta.category === 'YELLOW') yellowCount++;
-      else if (meta.category === 'RED') redCount++;
-    }
 
     // Check if this date was an official holiday or Sunday
     const holidayRecord = dayRecords.find(r => r.is_holiday_work);
@@ -1032,17 +1023,6 @@ function renderDailyAttendanceTables(records) {
               Avg: <strong>${avgHrs.toFixed(2)}h / shift</strong>
             </span>
 
-            <span class="badge-hours-green" style="font-size: 11px; padding: 2px 7px;" title="Workers with &ge; 8 hours">
-              ${greenCount} &ge; 8h
-            </span>
-            <span class="badge-hours-yellow" style="font-size: 11px; padding: 2px 7px;" title="Workers with 6-8 hours">
-              ${yellowCount} 6-8h
-            </span>
-            ${redCount > 0 ? `
-              <span class="badge-hours-red" style="font-size: 11px; padding: 2px 7px;" title="Workers with &lt; 6 hours">
-                ${redCount} &lt; 6h
-              </span>
-            ` : ''}
           </div>
         </div>
 
