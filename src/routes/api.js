@@ -691,7 +691,7 @@ router.post('/attendance/check-in', requireAuthenticatedEmployee, async (req, re
     const result = await attendanceService.processCheckIn({
       employee, photoData: photo, latitude, longitude, accuracy,
       clientTimestamp: client_timestamp, idempotencyKey: idempotency_key,
-      workMode: work_mode || 'OFFICE', fieldSiteNotes: field_site_notes || null,
+      workMode: work_mode || 'FIELD_WORK', fieldSiteNotes: field_site_notes || null,
       teamId: team_id || null, state: state || null, district: district || null,
       clientIp, userAgent
     });

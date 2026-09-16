@@ -20,8 +20,8 @@ const state = {
   flowMode: 'CHECK_IN', // 'CHECK_IN' or 'CHECK_OUT'
   alreadyCompletedToday: false,
 
-  // Field Work & Duty Mode
-  workMode: 'OFFICE', // 'OFFICE' or 'FIELD_WORK'
+  // Field Work Attendance (Exclusively configured for field duties)
+  workMode: 'FIELD_WORK',
   fieldSiteNotes: '',
   resolvedAddress: null,
   isResolvingAddress: false,
@@ -349,87 +349,31 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 }
 
 /**
- * Update live distance and office / field duty display
+ * Update live distance and field duty location display
  */
 function updateDistanceDisplay() {
   if (!state.currentGps.latitude) return;
 
-  if (state.workMode === 'FIELD_WORK') {
-    if (DOM.iconWorkplaceType) DOM.iconWorkplaceType.innerHTML = window.Icons ? window.Icons.raw('car') : '';
-    if (DOM.labelWorkplaceType) DOM.labelWorkplaceType.textContent = 'Duty Mode';
-    if (DOM.textOfficeLocationLabel) DOM.textOfficeLocationLabel.textContent = 'Multi-Location Field Duty';
-    if (DOM.btnSyncOfficeToCurrent) DOM.btnSyncOfficeToCurrent.style.display = 'none';
+  if (DOM.rowRegisteredOffice) DOM.rowRegisteredOffice.style.display = 'none';
+  if (DOM.iconWorkplaceType) DOM.iconWorkplaceType.innerHTML = window.Icons ? window.Icons.raw('car') : '';
+  if (DOM.labelWorkplaceType) DOM.labelWorkplaceType.textContent = 'Duty Mode';
+  if (DOM.textOfficeLocationLabel) DOM.textOfficeLocationLabel.textContent = 'Field Work / On-Site';
+  if (DOM.btnSyncOfficeToCurrent) DOM.btnSyncOfficeToCurrent.style.display = 'none';
 
-    if (DOM.iconDistanceOrAddress) DOM.iconDistanceOrAddress.innerHTML = window.Icons ? window.Icons.raw('mapPin') : '';
-    if (DOM.labelDistanceOrAddress) DOM.labelDistanceOrAddress.textContent = 'Field Site Location';
-
-    if (DOM.textLiveDistance) {
-      DOM.textLiveDistance.textContent = state.resolvedAddress
-        ? state.resolvedAddress
-        : `Field Site (${state.currentGps.latitude.toFixed(5)}°, ${state.currentGps.longitude.toFixed(5)}°)`;
-      DOM.textLiveDistance.style.color = 'var(--color-success)';
-    }
-    return;
-  }
-
-  // Office Mode
-  if (!state.orgConfig) return;
-
-  if (DOM.iconWorkplaceType) DOM.iconWorkplaceType.innerHTML = window.Icons ? window.Icons.raw('building') : '';
-  if (DOM.labelWorkplaceType) DOM.labelWorkplaceType.textContent = 'Registered Office';
-  if (DOM.textOfficeLocationLabel) {
-    DOM.textOfficeLocationLabel.textContent = `${state.orgConfig.office_name} (${state.orgConfig.office_lat.toFixed(4)}°, ${state.orgConfig.office_lng.toFixed(4)}°)`;
-  }
-  if (DOM.btnSyncOfficeToCurrent) DOM.btnSyncOfficeToCurrent.style.display = 'inline-flex';
-
-  if (DOM.iconDistanceOrAddress) DOM.iconDistanceOrAddress.innerHTML = window.Icons ? window.Icons.raw('ruler') : '';
-  if (DOM.labelDistanceOrAddress) DOM.labelDistanceOrAddress.textContent = 'Distance to Office';
-
-  const distMeters = calculateDistance(
-    state.currentGps.latitude,
-    state.currentGps.longitude,
-    state.orgConfig.office_lat,
-    state.orgConfig.office_lng
-  );
-
-  const radius = state.orgConfig.geofence_radius_m || 500;
-  const isInside = distMeters <= radius;
+  if (DOM.iconDistanceOrAddress) DOM.iconDistanceOrAddress.innerHTML = window.Icons ? window.Icons.raw('mapPin') : '';
+  if (DOM.labelDistanceOrAddress) DOM.labelDistanceOrAddress.textContent = 'Field Site Location';
 
   if (DOM.textLiveDistance) {
-    if (distMeters >= 1000) {
-      DOM.textLiveDistance.textContent = `${(distMeters / 1000).toFixed(1)} km away (${isInside ? 'In Radius' : 'Outside Geofence'})`;
-      DOM.textLiveDistance.style.color = isInside ? 'var(--color-success)' : 'var(--color-warning)';
-    } else {
-      DOM.textLiveDistance.textContent = `${distMeters}m (${isInside ? 'Inside Geofence' : 'Outside Geofence'})`;
-      DOM.textLiveDistance.style.color = isInside ? 'var(--color-success)' : 'var(--color-warning)';
-    }
+    DOM.textLiveDistance.textContent = state.resolvedAddress
+      ? state.resolvedAddress
+      : `Field Site (${state.currentGps.latitude.toFixed(5)}°, ${state.currentGps.longitude.toFixed(5)}°)`;
+    DOM.textLiveDistance.style.color = 'var(--color-success)';
   }
 }
 
-// Duty Mode Toggle Buttons
-if (DOM.btnModeOffice) {
-  DOM.btnModeOffice.addEventListener('click', () => {
-    state.workMode = 'OFFICE';
-    DOM.btnModeOffice.classList.add('active');
-    if (DOM.btnModeField) DOM.btnModeField.classList.remove('active');
-    if (DOM.fieldWorkNotesContainer) DOM.fieldWorkNotesContainer.style.display = 'none';
-    updateDistanceDisplay();
-  });
-}
-
-if (DOM.btnModeField) {
-  DOM.btnModeField.addEventListener('click', () => {
-    state.workMode = 'FIELD_WORK';
-    DOM.btnModeField.classList.add('active');
-    if (DOM.btnModeOffice) DOM.btnModeOffice.classList.remove('active');
-    if (DOM.fieldWorkNotesContainer) DOM.fieldWorkNotesContainer.style.display = 'block';
-
-    const empState = state.currentEmployee?.state || '';
-    const empDist = state.currentEmployee?.district || '';
-    if (typeof initFieldWorkDropdowns === 'function') initFieldWorkDropdowns(empState, empDist);
-
-    updateDistanceDisplay();
-  });
+// Ensure field work notes and dynamic dropdowns are populated
+if (DOM.fieldWorkNotesContainer) {
+  DOM.fieldWorkNotesContainer.style.display = 'block';
 }
 
 // Quick sync office to user location
@@ -2035,8 +1979,8 @@ DOM.btnConfirmSubmission.addEventListener('click', async () => {
       accuracy: state.currentGps.accuracy || 35.0,
       client_timestamp: new Date().toISOString(),
       idempotency_key: idempotencyKey,
-      work_mode: state.workMode,
-      field_site_notes: state.workMode === 'FIELD_WORK' && DOM.inputFieldSiteNotes ? DOM.inputFieldSiteNotes.value.trim() : null,
+      work_mode: 'FIELD_WORK',
+      field_site_notes: DOM.inputFieldSiteNotes ? DOM.inputFieldSiteNotes.value.trim() : null,
       state: activeState,
       district: activeDistrict,
       team_id: activeTeamId
