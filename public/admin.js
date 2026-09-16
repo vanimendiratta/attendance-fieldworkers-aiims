@@ -54,7 +54,7 @@ function initSidebarNav() {
   });
 }
 
-function switchView(viewId) {
+function switchView(viewId, targetParam) {
   document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
   const activeLink = document.querySelector(`.nav-link[data-view="${viewId}"]`);
   if (activeLink) activeLink.classList.add('active');
@@ -91,7 +91,7 @@ function switchView(viewId) {
   if (viewId === 'viewTeams') loadTeamsView();
   if (viewId === 'viewEmployees') loadEmployees();
   if (viewId === 'viewAttendance') loadAttendanceRecords();
-  if (viewId === 'viewTimesheets') loadTimesheetsView();
+  if (viewId === 'viewTimesheets') loadTimesheetsView(targetParam);
   if (viewId === 'viewHotelStays') loadHotelStaysPageView();
   if (viewId === 'viewAudit') loadAuditLogs();
   if (viewId === 'viewRedcap') loadRedcapData();
@@ -100,7 +100,16 @@ function switchView(viewId) {
 window.switchView = switchView;
 
 function handleHashRoute() {
-  const hash = (window.location.hash || '').replace('#', '').toLowerCase();
+  const rawHash = (window.location.hash || '').replace('#', '').trim();
+  if (rawHash.toLowerCase().startsWith('timesheet/') || rawHash.toLowerCase().startsWith('timesheets/')) {
+    const parts = rawHash.split('/');
+    if (parts[1]) {
+      openPersonTimesheet(parts[1]);
+      return;
+    }
+  }
+
+  const hash = rawHash.toLowerCase();
   const hashMap = {
     dashboard: 'viewDashboard',
     teams: 'viewTeams',
@@ -2175,19 +2184,17 @@ async function loadTimesheetsView(preselectedEmpId) {
     const res = await adminFetch(`/api/employees?employer_id=${currentEmployerSession.employer_id}`);
     const data = await res.json();
     if (data.success && Array.isArray(data.employees)) {
-      const currentVal = preselectedEmpId || empSelect.value;
+      const activeId = preselectedEmpId || currentTimesheetEmpId || empSelect.value;
       empSelect.innerHTML = '<option value="">-- Choose Field Worker / Employee --</option>' +
         data.employees.map(e => `
-          <option value="${escapeHtml(e.id)}" ${e.id === currentVal ? 'selected' : ''}>
+          <option value="${escapeHtml(e.id)}" ${e.id === activeId ? 'selected' : ''}>
             ${escapeHtml(e.name)} (${escapeHtml(e.id)}) · ${escapeHtml(e.department || 'CDER')}
           </option>
         `).join('');
 
-      if (preselectedEmpId) {
-        empSelect.value = preselectedEmpId;
-        await loadEmployeeTimesheet(preselectedEmpId);
-      } else if (empSelect.value) {
-        await loadEmployeeTimesheet(empSelect.value);
+      if (activeId) {
+        empSelect.value = activeId;
+        await loadEmployeeTimesheet(activeId);
       }
     }
   } catch (err) {
@@ -2199,8 +2206,22 @@ window.loadTimesheetsView = loadTimesheetsView;
 
 window.openPersonTimesheet = function(empId) {
   if (!empId) return;
-  switchView('viewTimesheets');
-  loadTimesheetsView(empId);
+  currentTimesheetEmpId = empId;
+  switchView('viewTimesheets', empId);
+
+  const empSelect = document.getElementById('timesheetEmployeeSelect');
+  if (empSelect) {
+    empSelect.value = empId;
+  }
+
+  // Load and display this employee's timesheet immediately
+  loadEmployeeTimesheet(empId);
+
+  // Scroll smoothly to top of the timesheet section
+  const timesheetPanel = document.getElementById('viewTimesheets');
+  if (timesheetPanel) {
+    timesheetPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 };
 
 async function loadEmployeeTimesheet(empId) {
@@ -2212,6 +2233,15 @@ async function loadEmployeeTimesheet(empId) {
   const btnExport = document.getElementById('btnExportIndividualTimesheetCsv');
   const btnPrint = document.getElementById('btnPrintTimesheet');
   const tableBody = document.getElementById('tsTableBody');
+  const empSelect = document.getElementById('timesheetEmployeeSelect');
+
+  if (empSelect && empSelect.value !== empId) {
+    empSelect.value = empId;
+  }
+
+  // Immediately reveal timesheet content area and hide empty placeholder
+  if (contentArea) contentArea.style.display = 'block';
+  if (emptyPlaceholder) emptyPlaceholder.style.display = 'none';
 
   if (tableBody) {
     tableBody.innerHTML = '<tr><td colspan="13" style="text-align: center; color: var(--color-text-muted); padding: 32px;">Loading cumulative records for this worker...</td></tr>';
