@@ -103,7 +103,7 @@ function generateAttendanceCsv(records) {
     rows.push([
       r.id, r.employee_id, r.employee_name, r.department, r.designation, r.email,
       r.employer_name, r.team_name || 'Direct Assignment', r.state, r.district,
-      r.work_mode === 'FIELD_WORK' ? 'Field Work' : 'Office Duty', r.attendance_status,
+      r.work_mode === 'TRAVEL' ? 'Official Travel' : (r.work_mode === 'FIELD_WORK' ? 'Field Work' : 'Office Duty'), r.attendance_status,
       checkinDate, checkinTime, r.checkin_server_timestamp || '',
       r.checkin_lat   != null ? Number(r.checkin_lat).toFixed(6)   : '',
       r.checkin_lng   != null ? Number(r.checkin_lng).toFixed(6)   : '',
@@ -187,7 +187,8 @@ async function sendDailyAttendanceBackup(options = {}) {
   const onBreakCount = records.filter(r => r.attendance_status === 'ON_BREAK').length;
   const workingCount = records.filter(r => r.attendance_status === 'CHECKED_IN').length;
   const fieldCount = records.filter(r => r.work_mode === 'FIELD_WORK').length;
-  const officeCount = totalRecords - fieldCount;
+  const travelCount = records.filter(r => r.work_mode === 'TRAVEL').length;
+  const officeCount = totalRecords - (fieldCount + travelCount);
 
   const totalNetHours = (records.reduce((acc, r) => acc + (Number(r.net_working_seconds) || 0), 0) / 3600).toFixed(2);
 
@@ -204,32 +205,32 @@ async function sendDailyAttendanceBackup(options = {}) {
     <!DOCTYPE html>
     <html lang="en">
     <head>
-      <meta charset="utf-8">
-      <title>${subject}</title>
+      <meta charset="UTF-8">
+      <title>Daily Attendance Backup</title>
       <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #1e293b; }
-        .card { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 24px; }
+        .card { background: #ffffff; border-radius: 8px; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; overflow: hidden; }
         .header { background: #0f172a; color: #ffffff; padding: 24px; text-align: left; }
-        .header h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
-        .header p { margin: 4px 0 0; font-size: 13px; color: #94a3b8; }
+        .header h1 { margin: 0 0 6px 0; font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
+        .header p { margin: 0; color: #94a3b8; font-size: 13px; }
         .content { padding: 24px; }
-        .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 20px 0; }
-        .metric-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; text-align: center; }
+        .summary-grid { display: flex; gap: 12px; margin: 20px 0; }
+        .metric-box { flex: 1; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; text-align: center; }
         .metric-number { font-size: 20px; font-weight: 700; color: #0f172a; }
         .metric-label { font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 600; margin-top: 4px; }
-        .details-table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 13px; }
+        .details-table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
         .details-table td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; }
-        .details-table td:first-child { color: #64748b; font-weight: 500; }
-        .details-table td:last-child { text-align: right; font-weight: 600; color: #0f172a; }
-        .attachment-banner { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 14px 18px; margin: 20px 0; font-size: 13px; color: #166534; display: flex; align-items: center; justify-content: space-between; }
-        .footer { background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 24px; font-size: 12px; color: #94a3b8; text-align: center; }
+        .details-table td:first-child { color: #64748b; font-weight: 500; width: 40%; }
+        .details-table td:last-child { color: #0f172a; font-weight: 600; }
+        .attachment-banner { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 12px 16px; margin: 18px 0; font-size: 13px; color: #166534; display: flex; align-items: center; justify-content: space-between; }
+        .footer { background: #f8fafc; padding: 16px 24px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; }
       </style>
     </head>
     <body>
       <div class="card">
         <div class="header">
           <h1>${org.name} Attendance Backup</h1>
-          <p>Automated Daily Report & Database Snapshot &middot; ${dateStr}</p>
+          <p>Automated Daily Report &middot; Database Snapshot &middot; ${dateStr}</p>
         </div>
         <div class="content">
           <p style="font-size: 14px; line-height: 1.5; margin-top: 0;">
@@ -264,7 +265,7 @@ async function sendDailyAttendanceBackup(options = {}) {
             </tr>
             <tr>
               <td>Work Mode Distribution</td>
-              <td>${officeCount} Office Duty &middot; ${fieldCount} Field Work</td>
+              <td>${travelCount} Official Travel &middot; ${fieldCount} Field Work &middot; ${officeCount} Office Duty</td>
             </tr>
             <tr>
               <td>Backup File Name</td>

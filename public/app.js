@@ -60,8 +60,16 @@ const DOM = {
   displayEmployeeTerritory: document.getElementById('displayEmployeeTerritory'),
 
   // Duty Mode Selector
-  btnModeOffice: document.getElementById('btnModeOffice'),
   btnModeField: document.getElementById('btnModeField'),
+  btnModeTravel: document.getElementById('btnModeTravel'),
+  dutyModeIcon: document.getElementById('dutyModeIcon'),
+  dutyModeTitle: document.getElementById('dutyModeTitle'),
+  dutyModeBadge: document.getElementById('dutyModeBadge'),
+  dutyModeBadgeDot: document.getElementById('dutyModeBadgeDot'),
+  dutyModeBadgeText: document.getElementById('dutyModeBadgeText'),
+  lblDutyState: document.getElementById('lblDutyState'),
+  lblDutyDistrict: document.getElementById('lblDutyDistrict'),
+  lblDutyNotes: document.getElementById('lblDutyNotes'),
   fieldWorkNotesContainer: document.getElementById('fieldWorkNotesContainer'),
   selectFieldState: document.getElementById('selectFieldState'),
   selectFieldDistrict: document.getElementById('selectFieldDistrict'),
@@ -1493,9 +1501,63 @@ async function refreshAttendanceStatus() {
 /**
  * State View Renderers
  */
+function setDutyMode(mode) {
+  state.workMode = mode;
+  const isTravel = mode === 'TRAVEL';
+
+  if (DOM.btnModeField) DOM.btnModeField.classList.toggle('active', !isTravel);
+  if (DOM.btnModeTravel) DOM.btnModeTravel.classList.toggle('active', isTravel);
+
+  if (isTravel) {
+    if (DOM.dutyModeIcon) {
+      DOM.dutyModeIcon.style.color = '#be185d';
+      DOM.dutyModeIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>';
+    }
+    if (DOM.dutyModeTitle) DOM.dutyModeTitle.textContent = 'Official Travel / Transit Duty';
+    if (DOM.dutyModeBadge) {
+      DOM.dutyModeBadge.style.background = '#fdf2f8';
+      DOM.dutyModeBadge.style.color = '#be185d';
+      DOM.dutyModeBadge.style.borderColor = '#fbcfe8';
+    }
+    if (DOM.dutyModeBadgeDot) DOM.dutyModeBadgeDot.style.background = '#be185d';
+    if (DOM.dutyModeBadgeText) DOM.dutyModeBadgeText.textContent = 'Travel Time Counted';
+    if (DOM.lblDutyState) DOM.lblDutyState.textContent = 'Destination / Transit State';
+    if (DOM.lblDutyDistrict) DOM.lblDutyDistrict.textContent = 'Destination / Transit District';
+    if (DOM.lblDutyNotes) DOM.lblDutyNotes.textContent = 'Travel Purpose / Transit Route Details';
+    if (DOM.inputFieldSiteNotes) DOM.inputFieldSiteNotes.placeholder = 'e.g. Travel to Kashmir / Flight to Srinagar / Field Survey Transit';
+  } else {
+    if (DOM.dutyModeIcon) {
+      DOM.dutyModeIcon.style.color = '#0284c7';
+      DOM.dutyModeIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.5 2.8C2.1 11 2 11.5 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>';
+    }
+    if (DOM.dutyModeTitle) DOM.dutyModeTitle.textContent = 'Field Work Attendance';
+    if (DOM.dutyModeBadge) {
+      DOM.dutyModeBadge.style.background = '#e0f2fe';
+      DOM.dutyModeBadge.style.color = '#0369a1';
+      DOM.dutyModeBadge.style.borderColor = '#bae6fd';
+    }
+    if (DOM.dutyModeBadgeDot) DOM.dutyModeBadgeDot.style.background = '#0284c7';
+    if (DOM.dutyModeBadgeText) DOM.dutyModeBadgeText.textContent = 'On-Site Verified';
+    if (DOM.lblDutyState) DOM.lblDutyState.textContent = 'Duty State / UT';
+    if (DOM.lblDutyDistrict) DOM.lblDutyDistrict.textContent = 'Duty District';
+    if (DOM.lblDutyNotes) DOM.lblDutyNotes.textContent = 'Field Site / Client Name / Visit Purpose';
+    if (DOM.inputFieldSiteNotes) DOM.inputFieldSiteNotes.placeholder = 'e.g. AIIMS Trauma Center - On-site Inspection';
+  }
+}
+
+if (DOM.btnModeField) {
+  DOM.btnModeField.addEventListener('click', () => setDutyMode('FIELD_WORK'));
+}
+if (DOM.btnModeTravel) {
+  DOM.btnModeTravel.addEventListener('click', () => setDutyMode('TRAVEL'));
+}
+
 function renderReadyToCheckInState() {
   state.alreadyCompletedToday = false;
   state.currentStatus = 'NOT_CHECKED_IN';
+
+  if (DOM.btnModeField) DOM.btnModeField.disabled = false;
+  if (DOM.btnModeTravel) DOM.btnModeTravel.disabled = false;
 
   DOM.empStatusBadge.className = 'badge badge-neutral';
   DOM.empStatusText.textContent = 'Ready to Check In';
@@ -1543,11 +1605,20 @@ function renderWorkingState() {
 
   // Timeline
   DOM.tlTimeCheckin.textContent = timeStr;
+  const isTravel = state.activeSession.work_mode === 'TRAVEL';
   const isField = state.activeSession.work_mode === 'FIELD_WORK';
-  if (isField) {
-    state.workMode = 'FIELD_WORK';
-    if (DOM.btnModeField) DOM.btnModeField.classList.add('active');
-    if (DOM.btnModeOffice) DOM.btnModeOffice.classList.remove('active');
+  if (isTravel) {
+    setDutyMode('TRAVEL');
+    if (DOM.btnModeField) DOM.btnModeField.disabled = true;
+    if (DOM.btnModeTravel) DOM.btnModeTravel.disabled = true;
+    if (DOM.fieldWorkNotesContainer) DOM.fieldWorkNotesContainer.style.display = 'block';
+    if (DOM.inputFieldSiteNotes) DOM.inputFieldSiteNotes.value = state.activeSession.field_site_notes || '';
+    DOM.tlDescCheckin.textContent = `Official Travel Check-in (${state.activeSession.field_site_notes || 'Transit Duty'})`;
+    DOM.tlBadgeCheckin.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg> <span>Travel Duty · ${state.activeSession.checkin_address || 'Transit Point Verified'}</span>`;
+  } else if (isField) {
+    setDutyMode('FIELD_WORK');
+    if (DOM.btnModeField) DOM.btnModeField.disabled = true;
+    if (DOM.btnModeTravel) DOM.btnModeTravel.disabled = true;
     if (DOM.fieldWorkNotesContainer) DOM.fieldWorkNotesContainer.style.display = 'block';
     if (DOM.inputFieldSiteNotes) DOM.inputFieldSiteNotes.value = state.activeSession.field_site_notes || '';
     DOM.tlDescCheckin.textContent = `Field Work Check-in (${state.activeSession.field_site_notes || 'On-Site Visit'})`;
@@ -1633,17 +1704,20 @@ function renderShiftCompletedState(record, isCompletedToday = false) {
   DOM.valBreakDeducted.textContent = `${Math.round((record.break_seconds || 0) / 60)}m`;
   DOM.valOvertimeAccumulated.textContent = formatShortDuration(record.overtime_seconds || 0);
 
+  const isTravel = record.work_mode === 'TRAVEL';
   const isField = record.work_mode === 'FIELD_WORK';
   DOM.tlTimeCheckin.textContent = inTime;
-  DOM.tlDescCheckin.textContent = isField
-    ? `Field Work Check-in (${record.field_site_notes || 'On-Site Visit'})`
-    : 'Office Check-in recorded';
-  DOM.tlBadgeCheckin.innerHTML = isField
-    ? `${window.Icons ? window.Icons.render('car', { size: 11 }) : ''} <span>Field Duty · ${record.checkin_address || 'Location Verified'}</span>`
-    : `GPS: ±${record.checkin_accuracy}m · Server verified`;
+  DOM.tlDescCheckin.textContent = isTravel
+    ? `Official Travel Check-in (${record.field_site_notes || 'Transit Duty'})`
+    : (isField ? `Field Work Check-in (${record.field_site_notes || 'On-Site Visit'})` : 'Office Check-in recorded');
+  DOM.tlBadgeCheckin.innerHTML = isTravel
+    ? `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg> <span>Travel Duty · ${record.checkin_address || 'Transit Point Verified'}</span>`
+    : (isField ? `${window.Icons ? window.Icons.render('car', { size: 11 }) : ''} <span>Field Duty · ${record.checkin_address || 'Location Verified'}</span>` : `GPS: ±${record.checkin_accuracy}m · Server verified`);
 
   DOM.tlTimeCheckout.textContent = outTime;
-  DOM.tlDescCheckout.textContent = isField ? 'Field Work Check-out recorded' : 'Office Check-out recorded';
+  DOM.tlDescCheckout.textContent = isTravel
+    ? 'Official Travel Check-out recorded'
+    : (isField ? 'Field Work Check-out recorded' : 'Office Check-out recorded');
 }
 
 /**
@@ -1910,7 +1984,9 @@ DOM.btnShutterCapture.addEventListener('click', () => {
   ctx.fillRect(16, h - 56, w - 32, 44);
   ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 12px sans-serif';
-  const modeLabel = state.workMode === 'FIELD_WORK' ? 'FIELD WORK · ON-SITE' : 'OFFICE DUTY';
+  const modeLabel = state.workMode === 'TRAVEL'
+    ? 'OFFICIAL TRAVEL · TRANSIT'
+    : (state.workMode === 'FIELD_WORK' ? 'FIELD WORK · ON-SITE' : 'OFFICE DUTY');
   const teamLabel = state.currentEmployee?.team_name ? ` · Team: ${state.currentEmployee.team_name}` : '';
   const selState = DOM.selectFieldState?.value || state.currentEmployee?.state || '';
   const selDist = DOM.selectFieldDistrict?.value || state.currentEmployee?.district || '';
@@ -1979,7 +2055,7 @@ DOM.btnConfirmSubmission.addEventListener('click', async () => {
       accuracy: state.currentGps.accuracy || 35.0,
       client_timestamp: new Date().toISOString(),
       idempotency_key: idempotencyKey,
-      work_mode: 'FIELD_WORK',
+      work_mode: state.workMode || 'FIELD_WORK',
       field_site_notes: DOM.inputFieldSiteNotes ? DOM.inputFieldSiteNotes.value.trim() : null,
       state: activeState,
       district: activeDistrict,

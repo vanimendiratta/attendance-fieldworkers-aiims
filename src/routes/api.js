@@ -869,7 +869,7 @@ function generateAttendanceCsv(records) {
     rows.push([
       r.id, r.employee_id, r.employee_name, r.department, r.designation, r.email,
       r.employer_name, r.team_name || 'Direct Assignment', r.state, r.district,
-      r.work_mode === 'FIELD_WORK' ? 'Field Work' : 'Office Duty', r.attendance_status,
+      r.work_mode === 'TRAVEL' ? 'Official Travel' : (r.work_mode === 'FIELD_WORK' ? 'Field Work' : 'Office Duty'), r.attendance_status,
       checkinDate, checkinTime, r.checkin_server_timestamp || '',
       r.checkin_lat   != null ? Number(r.checkin_lat).toFixed(6)   : '',
       r.checkin_lng   != null ? Number(r.checkin_lng).toFixed(6)   : '',
@@ -1101,7 +1101,7 @@ function generateIndividualTimesheetCsv(employee, summary, records) {
       checkoutCoords,
       r.checkout_accuracy != null ? Number(r.checkout_accuracy).toFixed(1) : '',
       r.attendance_status || '',
-      r.work_mode === 'FIELD_WORK' ? 'Field Work' : 'Office Duty',
+      r.work_mode === 'TRAVEL' ? 'Official Travel' : (r.work_mode === 'FIELD_WORK' ? 'Field Work' : 'Office Duty'),
       formatSecToHhMm(r.net_working_seconds),
       r.net_working_seconds != null ? (r.net_working_seconds / 3600).toFixed(2) : '0.00',
       formatSecToHhMm(r.gross_working_seconds),

@@ -154,7 +154,7 @@ class AttendanceService {
     }
 
     // 6. Geofence
-    const mode           = workMode === 'FIELD_WORK' ? 'FIELD_WORK' : 'OFFICE';
+    const mode           = (workMode === 'TRAVEL' || workMode === 'FIELD_WORK') ? workMode : 'OFFICE';
     const geofenceResult = geoService.evaluateGeofence(
       lat, lng, org.office_lat, org.office_lng, org.geofence_radius_m, org.geofence_policy, mode
     );

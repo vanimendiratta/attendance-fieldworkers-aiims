@@ -74,6 +74,18 @@ function evaluateGeofence(empLat, empLng, officeLat, officeLng, radiusMeters = 1
     };
   }
 
+  // Official Travel / Transit Mode: transit travel duty (e.g. travel to Kashmir, flights, trains, road transit)
+  if (workMode === 'TRAVEL') {
+    return {
+      distance,
+      radiusMeters,
+      isInside: true,
+      status: 'TRAVEL_DUTY_VERIFIED',
+      allowed: true,
+      reason: `Official travel / transit duty authenticated (${Math.round(distance)}m from registered workplace).`
+    };
+  }
+
   const isInside = distance <= radiusMeters;
 
   let status = 'WITHIN_GEOFENCE';

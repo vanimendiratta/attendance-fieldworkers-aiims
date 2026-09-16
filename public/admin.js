@@ -345,7 +345,12 @@ function renderCurrentlyWorkingTable(records) {
         <td style="font-family: var(--font-mono); font-weight: 500;">${checkinTime}</td>
         <td style="font-family: var(--font-mono); font-weight: 600; color: var(--color-primary);">${durationStr}</td>
         <td>
-          ${r.work_mode === 'FIELD_WORK' ? `
+          ${r.work_mode === 'TRAVEL' ? `
+            <span class="badge" style="background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; font-size: 10px; display: inline-flex; align-items: center; gap: 4px;">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+              <span>Official Travel</span>
+            </span>
+          ` : (r.work_mode === 'FIELD_WORK' ? `
             <span class="badge" style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; font-size: 10px; display: inline-flex; align-items: center; gap: 4px;">
               ${window.Icons ? window.Icons.render('car', { size: 11 }) : ''}
               <span>Field Work</span>
@@ -356,7 +361,7 @@ function renderCurrentlyWorkingTable(records) {
                 ? `${window.Icons ? window.Icons.render('building', { size: 11 }) : ''} <span>In Office</span>` 
                 : `${window.Icons ? window.Icons.render('alertTriangle', { size: 11 }) : ''} <span>${Math.round(r.checkin_geofence_distance || 0)}m</span>`}
             </span>
-          `}
+          `)}
         </td>
       </tr>
     `;
@@ -373,15 +378,28 @@ function renderActivityFeed(records) {
   feed.innerHTML = records.slice(0, 6).map(r => {
     const time = new Date(r.checkin_server_timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const isCompleted = Boolean(r.checkout_server_timestamp);
+    const isTravel = r.work_mode === 'TRAVEL';
     const isField = r.work_mode === 'FIELD_WORK';
+
+    const dutyText = isCompleted
+      ? (isTravel ? 'completed transit duty' : 'completed shift')
+      : (isTravel
+        ? `checked in on Official Travel (${r.field_site_notes || 'Transit Duty'})`
+        : (isField ? `checked in on Field Work (${r.field_site_notes || 'On-Site'})` : 'checked in at Office'));
+
+    const dutySub = isTravel
+      ? `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg> Travel Duty · ${r.checkin_address || 'Transit Point Verified'}`
+      : (isField
+        ? `${window.Icons ? window.Icons.render('car', { size: 11 }) : ''} Field Duty · ${r.checkin_address || 'Verified'}`
+        : (r.checkin_geofence_status === 'WITHIN_GEOFENCE' ? 'Verified In Geofence' : 'Outside Geofence Flagged'));
 
     return `
       <li class="activity-feed-item" onclick="openAttendanceDrawer('${r.id}')" style="cursor: pointer;">
         <span class="activity-time">${time}</span>
         <span class="activity-dot ${isCompleted ? 'dot-checkout' : 'dot-checkin'}"></span>
         <div class="activity-content">
-          <strong>${r.employee_name}</strong> ${isCompleted ? 'completed shift' : (isField ? `checked in on Field Work (${r.field_site_notes || 'On-Site'})` : 'checked in at Office')}
-          <div class="activity-sub">GPS: ±${r.checkin_accuracy}m · ${isField ? `${window.Icons ? window.Icons.render('car', { size: 11 }) : ''} Field Duty · ${r.checkin_address || 'Verified'}` : (r.checkin_geofence_status === 'WITHIN_GEOFENCE' ? 'Verified In Geofence' : 'Outside Geofence Flagged')}</div>
+          <strong>${r.employee_name}</strong> ${dutyText}
+          <div class="activity-sub">GPS: ±${r.checkin_accuracy}m · ${dutySub}</div>
         </div>
       </li>
     `;
@@ -715,6 +733,7 @@ function renderIndividualAttendanceTables(records) {
         ? `<img src="${r.checkout_photo}" class="table-photo-thumb" alt="Checkout" onclick="event.stopPropagation(); openPhotoLightbox('${r.checkout_photo}')" title="Click to view full photo">`
         : '<span style="color: var(--color-text-muted);">--</span>';
 
+      const isTravel = r.work_mode === 'TRAVEL';
       const isField = r.work_mode === 'FIELD_WORK';
       const dateStr = r.checkin_server_timestamp ? new Date(r.checkin_server_timestamp).toISOString().split('T')[0] : '';
 
@@ -724,7 +743,16 @@ function renderIndividualAttendanceTables(records) {
           <td style="font-family: var(--font-mono); font-size: 12px; white-space: nowrap;">${checkinTime}</td>
           <td>${checkinPhoto}</td>
           <td>
-            ${isField ? `
+            ${isTravel ? `
+              <span class="badge" style="background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; font-size: 10px; margin-bottom: 2px; display: inline-flex; align-items: center; gap: 4px;">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+                <span>Travel / Transit ${r.field_site_notes ? '· ' + escapeHtml(r.field_site_notes) : ''}</span>
+              </span>
+              <div style="font-size: 11px; color: var(--color-text-primary); max-width: 220px; line-height: 1.3;">
+                ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Transit Origin'))}
+              </div>
+              <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">Official Transit Duty</div>
+            ` : (isField ? `
               <span class="badge" style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; font-size: 10px; margin-bottom: 2px; display: inline-flex; align-items: center; gap: 4px;">
                 ${window.Icons ? window.Icons.render('car', { size: 10 }) : ''}
                 <span>Field ${r.field_site_notes ? '· ' + escapeHtml(r.field_site_notes) : ''}</span>
@@ -736,7 +764,7 @@ function renderIndividualAttendanceTables(records) {
             ` : `
               <span class="badge badge-neutral" style="font-size: 10px; margin-bottom: 2px;">Office Premises</span>
               <div style="font-size: 11px; color: var(--color-text-secondary); max-width: 200px;">${escapeHtml(r.checkin_address || 'Office Premises')}</div>
-            `}
+            `)}
           </td>
           <td style="font-family: var(--font-mono); font-size: 12px; white-space: nowrap;">${checkoutTime}</td>
           <td>${checkoutPhoto}</td>
@@ -877,6 +905,7 @@ function renderAttendanceTable(records) {
       ? `<img src="${r.checkout_photo}" class="table-photo-thumb" alt="Checkout" onclick="event.stopPropagation(); openPhotoLightbox('${r.checkout_photo}')" title="Click to view full photo">`
       : '<span style="color: var(--color-text-muted);">--</span>';
 
+    const isTravel = r.work_mode === 'TRAVEL';
     const isField = r.work_mode === 'FIELD_WORK';
 
     return `
@@ -901,10 +930,19 @@ function renderAttendanceTable(records) {
         <td style="font-family: var(--font-mono);">${checkinTime}</td>
         <td>${checkinPhoto}</td>
         <td>
-          ${isField ? `
+          ${isTravel ? `
+            <span class="badge" style="background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; font-size: 10px; margin-bottom: 3px; display: inline-flex; align-items: center; gap: 4px;">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+              <span>Travel / Transit ${r.field_site_notes ? '· ' + escapeHtml(r.field_site_notes) : ''}</span>
+            </span>
+            <div style="font-size: 11px; color: var(--color-text-primary); font-weight: 500; max-width: 210px; white-space: normal; line-height: 1.3;">
+              ${r.checkin_address || `${r.checkin_lat.toFixed(4)}°, ${r.checkin_lng.toFixed(4)}°`}
+            </div>
+            <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">Official Transit Duty</div>
+          ` : (isField ? `
             <span class="badge" style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; font-size: 10px; margin-bottom: 3px; display: inline-flex; align-items: center; gap: 4px;">
               ${window.Icons ? window.Icons.render('car', { size: 11 }) : ''}
-              <span>Field Work ${r.field_site_notes ? '· ' + r.field_site_notes : ''}</span>
+              <span>Field Work ${r.field_site_notes ? '· ' + escapeHtml(r.field_site_notes) : ''}</span>
             </span>
             <div style="font-size: 11px; color: var(--color-text-primary); font-weight: 500; max-width: 210px; white-space: normal; line-height: 1.3;">
               ${r.checkin_address || `${r.checkin_lat.toFixed(4)}°, ${r.checkin_lng.toFixed(4)}°`}
@@ -920,7 +958,7 @@ function renderAttendanceTable(records) {
               ${r.checkin_address || 'Office Premises'}
             </div>
             <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">±${r.checkin_accuracy}m accuracy</div>
-          `}
+          `)}
         </td>
         <td style="font-family: var(--font-mono);">${checkoutTime}</td>
         <td>${checkoutPhoto}</td>
@@ -1024,16 +1062,29 @@ async function openAttendanceDrawer(recordId) {
     }
 
     // Geofence & Map
+    const isTravel = record.work_mode === 'TRAVEL';
     const isField = record.work_mode === 'FIELD_WORK';
     const geoBadge = document.getElementById('drwGeofenceBadge');
-    if (isField) {
+    if (isTravel) {
+      geoBadge.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg> <span>Official Travel / Transit (${record.field_site_notes || 'Transit Verified'})</span>`;
+      geoBadge.className = 'badge';
+      geoBadge.style.background = '#fdf2f8';
+      geoBadge.style.color = '#be185d';
+      geoBadge.style.border = '1px solid #fbcfe8';
+    } else if (isField) {
       geoBadge.innerHTML = `${window.Icons ? window.Icons.render('car', { size: 11 }) : ''} <span>Field Duty (${record.field_site_notes || 'On-Site Verified'})</span>`;
       geoBadge.className = 'badge badge-success';
+      geoBadge.style.background = '';
+      geoBadge.style.color = '';
+      geoBadge.style.border = '';
     } else {
       geoBadge.innerHTML = record.checkin_geofence_status === 'WITHIN_GEOFENCE' 
         ? `${window.Icons ? window.Icons.render('check', { size: 11 }) : ''} <span>Within Geofence</span>` 
         : `${window.Icons ? window.Icons.render('alertTriangle', { size: 11 }) : ''} <span>Outside Geofence (${Math.round(record.checkin_geofence_distance || 0)}m)</span>`;
       geoBadge.className = `badge ${record.checkin_geofence_status === 'WITHIN_GEOFENCE' ? 'badge-success' : 'badge-warning'}`;
+      geoBadge.style.background = '';
+      geoBadge.style.color = '';
+      geoBadge.style.border = '';
     }
     document.getElementById('drwAddressText').textContent = record.checkin_address || `Coordinates: ${record.checkin_lat.toFixed(5)}° N, ${record.checkin_lng.toFixed(5)}° E`;
 
@@ -1107,10 +1158,13 @@ function renderDrawerMap(record) {
   }
 
   // Checkin Pin
+  const isTravel = record.work_mode === 'TRAVEL';
   const isField = record.work_mode === 'FIELD_WORK';
-  const popupHtml = isField
-    ? `<b>${record.employee_name}</b><br><span style="color:#0284c7;font-weight:600;display:inline-flex;align-items:center;gap:4px;">${window.Icons ? window.Icons.render('car', { size: 11 }) : ''} <span>Field Work</span></span>${record.field_site_notes ? ': ' + record.field_site_notes : ''}<br><small>${record.checkin_address || ''}</small><br>Accuracy: ±${record.checkin_accuracy}m`
-    : `<b>${record.employee_name}</b><br>${record.checkin_address || 'Office'}<br>Accuracy: ±${record.checkin_accuracy}m`;
+  const popupHtml = isTravel
+    ? `<b>${record.employee_name}</b><br><span style="color:#be185d;font-weight:600;display:inline-flex;align-items:center;gap:4px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg> <span>Official Travel / Transit</span></span>${record.field_site_notes ? ': ' + escapeHtml(record.field_site_notes) : ''}<br><small>${record.checkin_address || ''}</small><br>Accuracy: ±${record.checkin_accuracy}m`
+    : (isField
+      ? `<b>${record.employee_name}</b><br><span style="color:#0284c7;font-weight:600;display:inline-flex;align-items:center;gap:4px;">${window.Icons ? window.Icons.render('car', { size: 11 }) : ''} <span>Field Work</span></span>${record.field_site_notes ? ': ' + escapeHtml(record.field_site_notes) : ''}<br><small>${record.checkin_address || ''}</small><br>Accuracy: ±${record.checkin_accuracy}m`
+      : `<b>${record.employee_name}</b><br>${record.checkin_address || 'Office'}<br>Accuracy: ±${record.checkin_accuracy}m`);
 
   L.marker([record.checkin_lat, record.checkin_lng]).addTo(drawerMapInstance)
     .bindPopup(popupHtml).openPopup();
@@ -2006,7 +2060,12 @@ function renderTimesheetSessions(records) {
         <td style="font-size: 12px;">${breakMins}</td>
         <td style="font-size: 12px; font-weight: 600; color: #7c3aed;">${overtime}</td>
         <td style="max-width: 160px; font-size: 11px; color: var(--color-text-secondary); line-height: 1.3;">
-          ${escapeHtml(r.field_site_notes || 'Routine Field Work')}
+          ${r.work_mode === 'TRAVEL' ? `
+            <span class="badge" style="background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; font-size: 10px; margin-bottom: 2px; display: inline-flex; align-items: center; gap: 4px;">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+              <span>Transit / Travel</span>
+            </span><br>` : ''}
+          ${escapeHtml(r.field_site_notes || (r.work_mode === 'TRAVEL' ? 'Official Travel / Transit' : 'Routine Field Work'))}
         </td>
         <td>
           <div style="display: flex; gap: 4px; align-items: center;">
@@ -2035,6 +2094,7 @@ function applyTimesheetSearchFilter() {
   const filtered = cachedTimesheetData.records.filter(r => {
     return (
       (r.id && r.id.toLowerCase().includes(q)) ||
+      (r.work_mode && r.work_mode.toLowerCase().includes(q)) ||
       (r.checkin_server_timestamp && r.checkin_server_timestamp.toLowerCase().includes(q)) ||
       (r.field_site_notes && r.field_site_notes.toLowerCase().includes(q)) ||
       (r.checkin_address && r.checkin_address.toLowerCase().includes(q)) ||
