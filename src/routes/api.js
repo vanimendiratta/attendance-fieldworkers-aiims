@@ -758,6 +758,29 @@ router.post('/attendance/check-out', requireAuthenticatedEmployee, async (req, r
 });
 
 // ---------------------------------------------------------------------------
+// Organization Holidays helper
+// ---------------------------------------------------------------------------
+async function getOrganizationHolidaysMap(employerId) {
+  try {
+    const res = await query(
+      'SELECT id, holiday_date, name, holiday_type FROM organization_holidays WHERE employer_id = $1 ORDER BY holiday_date ASC',
+      [employerId]
+    );
+    const map = new Map();
+    for (const h of res.rows) {
+      const dStr = typeof h.holiday_date === 'string'
+        ? h.holiday_date.split('T')[0]
+        : new Date(h.holiday_date).toISOString().split('T')[0];
+      map.set(dStr, h);
+    }
+    return map;
+  } catch (err) {
+    console.error('Error fetching organization holidays map:', err.message);
+    return new Map();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Attendance record helper (for admin routes)
 // ---------------------------------------------------------------------------
 async function getFilteredAttendanceRecords({ employerId, employee_id, work_mode, status, state, district, team_id, search }) {
@@ -783,7 +806,7 @@ async function getFilteredAttendanceRecords({ employerId, employee_id, work_mode
     params.push(work_mode);
     sql += ` AND a.work_mode = $${params.length}`;
   }
-  if (status && status !== 'ALL') {
+  if (status && status !== 'ALL' && status !== 'HOLIDAY_DUTY') {
     params.push(status);
     sql += ` AND a.attendance_status = $${params.length}`;
   }
@@ -830,6 +853,30 @@ async function getFilteredAttendanceRecords({ employerId, employee_id, work_mode
     }
   }
 
+  const holidaysMap = await getOrganizationHolidaysMap(employerId);
+  const orgRes = await query('SELECT shift_hours FROM organizations WHERE id = $1', [employerId]);
+  const shiftTargetHours = (orgRes.rows.length > 0 && orgRes.rows[0].shift_hours) ? parseFloat(orgRes.rows[0].shift_hours) : 8.0;
+
+  for (const r of rows) {
+    const dIn = r.checkin_server_timestamp ? new Date(r.checkin_server_timestamp) : (r.created_at ? new Date(r.created_at) : null);
+    const dStr = dIn ? dIn.toISOString().split('T')[0] : '';
+    const isSunday = dIn ? dIn.getUTCDay() === 0 : false;
+    const hInfo = holidaysMap.get(dStr);
+
+    r.is_holiday_work = Boolean(isSunday || hInfo);
+    r.holiday_name = hInfo ? hInfo.name : (isSunday ? 'Sunday / Weekly Off' : null);
+    r.holiday_type = hInfo ? hInfo.holiday_type : (isSunday ? 'WEEKLY_OFF' : null);
+    r.compoff_earned = r.is_holiday_work ? 1 : 0;
+
+    const netH = r.net_working_seconds != null ? (r.net_working_seconds / 3600) : 0;
+    r.shift_variance_hours = Number((netH - shiftTargetHours).toFixed(2));
+    r.shift_target_hours = shiftTargetHours;
+  }
+
+  if (status === 'HOLIDAY_DUTY') {
+    return rows.filter(r => r.is_holiday_work);
+  }
+
   return rows;
 }
 
@@ -850,6 +897,7 @@ function generateAttendanceCsv(records) {
   const headers = [
     'Attendance ID','Employee ID','Employee Name','Department','Designation','Email',
     'Organization','Team Name','State / UT','District','Work Mode','Attendance Status',
+    'Holiday / Sunday Duty','Holiday Name','Comp-Off Credit',
     'Check-In Date','Check-In Time','Check-In Server Timestamp (UTC)',
     'Check-In Latitude','Check-In Longitude','Check-In GPS Accuracy (m)',
     'Check-In Geofence Distance (m)','Check-In Geofence Status','Check-In Address',
@@ -857,7 +905,7 @@ function generateAttendanceCsv(records) {
     'Checkout Latitude','Checkout Longitude','Checkout GPS Accuracy (m)',
     'Checkout Geofence Distance (m)','Checkout Geofence Status','Checkout Address',
     'Gross Working Hours','Break Minutes','Net Working Hours','Overtime Hours',
-    'Field Site Notes','DB Sync Status','Created At'
+    'Shift Variance vs Target (Dec)','Field Site Notes','DB Sync Status','Created At'
   ];
 
   const rows = [headers.map(escapeCsvCell).join(',')];
@@ -870,6 +918,9 @@ function generateAttendanceCsv(records) {
       r.id, r.employee_id, r.employee_name, r.department, r.designation, r.email,
       r.employer_name, r.team_name || 'Direct Assignment', r.state, r.district,
       r.work_mode === 'TRAVEL' ? 'Official Travel' : (r.work_mode === 'FIELD_WORK' ? 'Field Work' : 'Office Duty'), r.attendance_status,
+      r.is_holiday_work ? 'Yes' : 'No',
+      r.holiday_name || '',
+      r.compoff_earned ? '1 Comp-Off' : '0',
       checkinDate, checkinTime, r.checkin_server_timestamp || '',
       r.checkin_lat   != null ? Number(r.checkin_lat).toFixed(6)   : '',
       r.checkin_lng   != null ? Number(r.checkin_lng).toFixed(6)   : '',
@@ -886,6 +937,7 @@ function generateAttendanceCsv(records) {
       r.break_seconds != null ? Math.round(r.break_seconds / 60) : '0',
       r.net_working_seconds  != null ? (r.net_working_seconds  / 3600).toFixed(2) : '0.00',
       r.overtime_seconds     != null ? (r.overtime_seconds     / 3600).toFixed(2) : '0.00',
+      r.shift_variance_hours != null ? (r.shift_variance_hours >= 0 ? `+${r.shift_variance_hours.toFixed(2)}` : r.shift_variance_hours.toFixed(2)) : '0.00',
       r.field_site_notes || '', r.redcap_sync_status || 'PENDING', r.created_at || ''
     ].map(escapeCsvCell).join(','));
   }
@@ -1053,6 +1105,8 @@ function generateIndividualTimesheetCsv(employee, summary, records) {
   lines.push(['Active / In-Progress Shifts', summary.inProgressRecords, 'Shift Completion Rate', summary.completionRate + '%'].map(escapeCsvCell).join(','));
   lines.push(['Total Net Working Hours (Dec)', Number(summary.totalNetWorkingHours || 0).toFixed(2) + ' hrs', 'Total Net Working Time (HH:MM)', summary.totalNetWorkingFormatted].map(escapeCsvCell).join(','));
   lines.push(['Average Working Hours / Shift', Number(summary.avgWorkingHoursPerShift || 0).toFixed(2) + ' hrs/shift', 'Average Working Time / Shift (HH:MM)', summary.avgWorkingFormatted].map(escapeCsvCell).join(','));
+  lines.push(['Standard Shift Target', `${Number(summary.targetShiftHours || 8.0).toFixed(1)} hrs/shift`, 'Total Expected Hours', `${Number(summary.totalExpectedHours || 0).toFixed(2)} hrs`].map(escapeCsvCell).join(','));
+  lines.push(['Cumulative Hours Balance', `${Number(summary.hoursBalance || 0) >= 0 ? '+' : ''}${Number(summary.hoursBalance || 0).toFixed(2)} hrs (${summary.hoursBalanceStatus || 'BALANCED'})`, 'Comp-Off Credits Earned', `${summary.totalCompOffEarned || 0} Days`].map(escapeCsvCell).join(','));
   lines.push(['Total Gross Working Hours (Dec)', Number(summary.totalGrossWorkingHours || 0).toFixed(2) + ' hrs', 'Total Gross Working Time (HH:MM)', summary.totalGrossWorkingFormatted].map(escapeCsvCell).join(','));
   lines.push(['Total Break Duration (Minutes)', summary.totalBreakMinutes + ' mins', 'Total Break Duration (Hours)', Number(summary.totalBreakHours || 0).toFixed(2) + ' hrs'].map(escapeCsvCell).join(','));
   lines.push(['Total Overtime Hours (Dec)', Number(summary.totalOvertimeHours || 0).toFixed(2) + ' hrs', 'Total Overtime Time (HH:MM)', summary.totalOvertimeFormatted].map(escapeCsvCell).join(','));
@@ -1065,8 +1119,8 @@ function generateIndividualTimesheetCsv(employee, summary, records) {
     'Shift ID', 'Date', 'Day of Week',
     'Check-In Time', 'Check-In Server Timestamp (UTC)', 'Check-In Address', 'Check-In Coordinates', 'Check-In Accuracy (m)',
     'Check-Out Time', 'Check-Out Server Timestamp (UTC)', 'Check-Out Address', 'Check-Out Coordinates', 'Check-Out Accuracy (m)',
-    'Attendance Status', 'Work Mode',
-    'Net Working Time (HH:MM)', 'Net Working Hours (Dec)', 'Gross Working Time (HH:MM)', 'Gross Working Hours (Dec)',
+    'Attendance Status', 'Work Mode', 'Holiday / Sunday Duty', 'Holiday Name', 'Comp-Off Credit (+1)',
+    'Net Working Time (HH:MM)', 'Net Working Hours (Dec)', 'Shift Variance vs Target (Dec)', 'Gross Working Time (HH:MM)', 'Gross Working Hours (Dec)',
     'Break Duration (Mins)', 'Overtime (HH:MM)', 'Overtime Hours (Dec)',
     'Field Site Notes', 'Check-In Photo URL', 'Check-Out Photo URL'
   ];
@@ -1102,8 +1156,12 @@ function generateIndividualTimesheetCsv(employee, summary, records) {
       r.checkout_accuracy != null ? Number(r.checkout_accuracy).toFixed(1) : '',
       r.attendance_status || '',
       r.work_mode === 'TRAVEL' ? 'Official Travel' : (r.work_mode === 'FIELD_WORK' ? 'Field Work' : 'Office Duty'),
+      r.is_holiday_work ? 'Yes' : 'No',
+      r.holiday_name || '',
+      r.compoff_earned ? '1 Comp-Off' : '0',
       formatSecToHhMm(r.net_working_seconds),
       r.net_working_seconds != null ? (r.net_working_seconds / 3600).toFixed(2) : '0.00',
+      r.shift_variance_hours != null ? (r.shift_variance_hours >= 0 ? `+${r.shift_variance_hours.toFixed(2)}` : r.shift_variance_hours.toFixed(2)) : '0.00',
       formatSecToHhMm(r.gross_working_seconds),
       r.gross_working_seconds != null ? (r.gross_working_seconds / 3600).toFixed(2) : '0.00',
       r.break_seconds != null ? Math.round(r.break_seconds / 60) : '0',
@@ -1184,6 +1242,28 @@ router.get('/admin/employees/:id/timesheet', requireAuthenticatedAdmin, async (r
       }
     }
 
+    const holidaysMap = await getOrganizationHolidaysMap(employerId);
+    const orgRes = await query('SELECT shift_hours FROM organizations WHERE id = $1', [employerId]);
+    const shiftTargetHours = (orgRes.rows.length > 0 && orgRes.rows[0].shift_hours) ? parseFloat(orgRes.rows[0].shift_hours) : 8.0;
+
+    let totalCompOffEarned = 0;
+    for (const r of rows) {
+      const dIn = r.checkin_server_timestamp ? new Date(r.checkin_server_timestamp) : (r.created_at ? new Date(r.created_at) : null);
+      const dStr = dIn ? dIn.toISOString().split('T')[0] : '';
+      const isSunday = dIn ? dIn.getUTCDay() === 0 : false;
+      const hInfo = holidaysMap.get(dStr);
+
+      r.is_holiday_work = Boolean(isSunday || hInfo);
+      r.holiday_name = hInfo ? hInfo.name : (isSunday ? 'Sunday / Weekly Off' : null);
+      r.holiday_type = hInfo ? hInfo.holiday_type : (isSunday ? 'WEEKLY_OFF' : null);
+      r.compoff_earned = r.is_holiday_work ? 1 : 0;
+      if (r.compoff_earned > 0) totalCompOffEarned++;
+
+      const netH = r.net_working_seconds != null ? (r.net_working_seconds / 3600) : 0;
+      r.shift_variance_hours = Number((netH - shiftTargetHours).toFixed(2));
+      r.shift_target_hours = shiftTargetHours;
+    }
+
     const totalRecords = rows.length;
     const completedRecords = rows.filter(r => r.checkout_server_timestamp != null).length;
     const inProgressRecords = totalRecords - completedRecords;
@@ -1203,6 +1283,12 @@ router.get('/admin/employees/:id/timesheet', requireAuthenticatedAdmin, async (r
     const avgWorkingSecondsPerShift = Math.round(totalNetWorkingSeconds / avgDenominator);
     const avgWorkingHoursPerShift = Number((totalNetWorkingSeconds / avgDenominator / 3600).toFixed(2));
 
+    const totalExpectedHours = Number((completedRecords * shiftTargetHours).toFixed(2));
+    const hoursBalance = Number((totalNetWorkingHours - totalExpectedHours).toFixed(2));
+    let hoursBalanceStatus = 'BALANCED';
+    if (hoursBalance > 0.1) hoursBalanceStatus = 'SURPLUS';
+    else if (hoursBalance < -0.1) hoursBalanceStatus = 'DEFICIT';
+
     const completionRate = totalRecords > 0 ? Math.round((completedRecords / totalRecords) * 100) : 0;
 
     const summary = {
@@ -1215,6 +1301,11 @@ router.get('/admin/employees/:id/timesheet', requireAuthenticatedAdmin, async (r
       avgWorkingSecondsPerShift,
       avgWorkingHoursPerShift,
       avgWorkingFormatted: formatSecToHhMm(avgWorkingSecondsPerShift),
+      targetShiftHours,
+      totalExpectedHours,
+      hoursBalance,
+      hoursBalanceStatus,
+      totalCompOffEarned,
       totalGrossWorkingSeconds,
       totalGrossWorkingHours,
       totalGrossWorkingFormatted: formatSecToHhMm(totalGrossWorkingSeconds),
@@ -1307,6 +1398,28 @@ router.get('/admin/employees/:id/timesheet/export.csv', requireAuthenticatedAdmi
       }
     }
 
+    const holidaysMap = await getOrganizationHolidaysMap(employerId);
+    const orgRes = await query('SELECT shift_hours FROM organizations WHERE id = $1', [employerId]);
+    const shiftTargetHours = (orgRes.rows.length > 0 && orgRes.rows[0].shift_hours) ? parseFloat(orgRes.rows[0].shift_hours) : 8.0;
+
+    let totalCompOffEarned = 0;
+    for (const r of rows) {
+      const dIn = r.checkin_server_timestamp ? new Date(r.checkin_server_timestamp) : (r.created_at ? new Date(r.created_at) : null);
+      const dStr = dIn ? dIn.toISOString().split('T')[0] : '';
+      const isSunday = dIn ? dIn.getUTCDay() === 0 : false;
+      const hInfo = holidaysMap.get(dStr);
+
+      r.is_holiday_work = Boolean(isSunday || hInfo);
+      r.holiday_name = hInfo ? hInfo.name : (isSunday ? 'Sunday / Weekly Off' : null);
+      r.holiday_type = hInfo ? hInfo.holiday_type : (isSunday ? 'WEEKLY_OFF' : null);
+      r.compoff_earned = r.is_holiday_work ? 1 : 0;
+      if (r.compoff_earned > 0) totalCompOffEarned++;
+
+      const netH = r.net_working_seconds != null ? (r.net_working_seconds / 3600) : 0;
+      r.shift_variance_hours = Number((netH - shiftTargetHours).toFixed(2));
+      r.shift_target_hours = shiftTargetHours;
+    }
+
     const totalRecords = rows.length;
     const completedRecords = rows.filter(r => r.checkout_server_timestamp != null).length;
     const inProgressRecords = totalRecords - completedRecords;
@@ -1325,20 +1438,38 @@ router.get('/admin/employees/:id/timesheet/export.csv', requireAuthenticatedAdmi
     const avgDenominator = completedRecords > 0 ? completedRecords : (totalRecords > 0 ? totalRecords : 1);
     const avgWorkingSecondsPerShift = Math.round(totalNetWorkingSeconds / avgDenominator);
     const avgWorkingHoursPerShift = Number((totalNetWorkingSeconds / avgDenominator / 3600).toFixed(2));
+
+    const totalExpectedHours = Number((completedRecords * shiftTargetHours).toFixed(2));
+    const hoursBalance = Number((totalNetWorkingHours - totalExpectedHours).toFixed(2));
+    let hoursBalanceStatus = 'BALANCED';
+    if (hoursBalance > 0.1) hoursBalanceStatus = 'SURPLUS';
+    else if (hoursBalance < -0.1) hoursBalanceStatus = 'DEFICIT';
+
     const completionRate = totalRecords > 0 ? Math.round((completedRecords / totalRecords) * 100) : 0;
 
     const summary = {
       totalRecords,
       completedRecords,
       inProgressRecords,
+      totalNetWorkingSeconds,
       totalNetWorkingHours,
       totalNetWorkingFormatted: formatSecToHhMm(totalNetWorkingSeconds),
+      avgWorkingSecondsPerShift,
       avgWorkingHoursPerShift,
       avgWorkingFormatted: formatSecToHhMm(avgWorkingSecondsPerShift),
+      targetShiftHours,
+      totalExpectedHours,
+      hoursBalance,
+      hoursBalanceStatus,
+      totalCompOffEarned,
+      totalGrossWorkingSeconds,
       totalGrossWorkingHours,
       totalGrossWorkingFormatted: formatSecToHhMm(totalGrossWorkingSeconds),
+      totalBreakSeconds,
       totalBreakMinutes,
       totalBreakHours,
+      totalBreakFormatted: formatSecToHhMm(totalBreakSeconds),
+      totalOvertimeSeconds,
       totalOvertimeHours,
       totalOvertimeFormatted: formatSecToHhMm(totalOvertimeSeconds),
       completionRate,
@@ -1360,6 +1491,101 @@ router.get('/admin/employees/:id/timesheet/export.csv', requireAuthenticatedAdmi
   }
 });
 
+// ---------------------------------------------------------------------------
+// 12g. Admin: Organization Holidays Management
+// ---------------------------------------------------------------------------
+router.get('/admin/holidays', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const employerId = req.employerId;
+    const result = await query(
+      `SELECT id, employer_id, holiday_date, name, holiday_type, created_at
+       FROM organization_holidays
+       WHERE employer_id = $1
+       ORDER BY holiday_date ASC`,
+      [employerId]
+    );
+
+    if (result.rows.length === 0) {
+      const defaultHolidays = [
+        { date: '2026-01-26', name: 'Republic Day', type: 'NATIONAL' },
+        { date: '2026-03-04', name: 'Holi', type: 'GAZETTED' },
+        { date: '2026-03-21', name: 'Id-ul-Fitr', type: 'GAZETTED' },
+        { date: '2026-04-03', name: 'Good Friday', type: 'GAZETTED' },
+        { date: '2026-04-14', name: 'Dr. B.R. Ambedkar Jayanti', type: 'GAZETTED' },
+        { date: '2026-05-27', name: 'Id-ul-Zuha (Bakrid)', type: 'GAZETTED' },
+        { date: '2026-08-15', name: 'Independence Day', type: 'NATIONAL' },
+        { date: '2026-10-02', name: 'Mahatma Gandhi Jayanti', type: 'NATIONAL' },
+        { date: '2026-10-20', name: 'Dussehra (Vijay Dashami)', type: 'GAZETTED' },
+        { date: '2026-11-08', name: 'Diwali (Deepavali)', type: 'GAZETTED' },
+        { date: '2026-12-25', name: 'Christmas Day', type: 'GAZETTED' }
+      ];
+      for (const h of defaultHolidays) {
+        const hId = `HOL-${employerId}-${h.date}`;
+        await query(
+          `INSERT INTO organization_holidays (id, employer_id, holiday_date, name, holiday_type)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (employer_id, holiday_date) DO NOTHING`,
+          [hId, employerId, h.date, h.name, h.type]
+        );
+      }
+      const refetched = await query(
+        `SELECT id, employer_id, holiday_date, name, holiday_type, created_at
+         FROM organization_holidays
+         WHERE employer_id = $1
+         ORDER BY holiday_date ASC`,
+        [employerId]
+      );
+      return res.json({ success: true, holidays: refetched.rows });
+    }
+
+    res.json({ success: true, holidays: result.rows });
+  } catch (err) {
+    return handleApiError(res, req, err);
+  }
+});
+
+router.post('/admin/holidays', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const employerId = req.employerId;
+    const { holiday_date, name, holiday_type } = req.body;
+
+    if (!holiday_date || !name) {
+      return res.status(400).json({ success: false, error: 'Holiday date and name are required.' });
+    }
+
+    const dStr = String(holiday_date).trim().split('T')[0];
+    const hId = `HOL-${employerId}-${dStr}-${Date.now().toString(36)}`;
+    const hType = holiday_type || 'GAZETTED';
+
+    await query(
+      `INSERT INTO organization_holidays (id, employer_id, holiday_date, name, holiday_type)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (employer_id, holiday_date) DO UPDATE
+       SET name = EXCLUDED.name, holiday_type = EXCLUDED.holiday_type`,
+      [hId, employerId, dStr, String(name).trim(), hType]
+    );
+
+    res.json({ success: true, message: 'Holiday saved successfully.' });
+  } catch (err) {
+    return handleApiError(res, req, err);
+  }
+});
+
+router.delete('/admin/holidays/:id', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const employerId = req.employerId;
+    const hId = req.params.id;
+
+    await query(
+      'DELETE FROM organization_holidays WHERE id = $1 AND employer_id = $2',
+      [hId, employerId]
+    );
+
+    res.json({ success: true, message: 'Holiday deleted successfully.' });
+  } catch (err) {
+    return handleApiError(res, req, err);
+  }
+});
 
 // ---------------------------------------------------------------------------
 // 13. Admin: Attendance Matrix
@@ -1662,5 +1888,9 @@ router.get('/admin/redcap/data-dictionary.csv', requireAuthenticatedAdmin, async
     res.send(csv);
   } catch (err) { res.status(500).json({ success: false, error: isProductionEnvironment() ? 'Internal server error' : err.message }); }
 });
+
+router.getOrganizationHolidaysMap = getOrganizationHolidaysMap;
+router.generateAttendanceCsv = generateAttendanceCsv;
+router.generateIndividualTimesheetCsv = generateIndividualTimesheetCsv;
 
 module.exports = router;

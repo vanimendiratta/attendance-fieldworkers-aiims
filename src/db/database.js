@@ -160,7 +160,45 @@ async function initSeed() {
     [orgId]
   );
 
-  console.log('[DB] Seed complete.');
+  // Ensure organization_holidays table exists
+  await query(`
+    CREATE TABLE IF NOT EXISTS organization_holidays (
+      id TEXT PRIMARY KEY,
+      employer_id TEXT NOT NULL,
+      holiday_date DATE NOT NULL,
+      name TEXT NOT NULL,
+      holiday_type TEXT DEFAULT 'GAZETTED',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(employer_id, holiday_date)
+    )
+  `);
+
+  // Seed standard gazetted / national holidays for ORG-001
+  const defaultHolidays = [
+    { date: '2026-01-26', name: 'Republic Day', type: 'NATIONAL' },
+    { date: '2026-03-04', name: 'Holi', type: 'GAZETTED' },
+    { date: '2026-03-21', name: 'Id-ul-Fitr', type: 'GAZETTED' },
+    { date: '2026-04-03', name: 'Good Friday', type: 'GAZETTED' },
+    { date: '2026-04-14', name: 'Dr. B.R. Ambedkar Jayanti', type: 'GAZETTED' },
+    { date: '2026-05-27', name: 'Id-ul-Zuha (Bakrid)', type: 'GAZETTED' },
+    { date: '2026-08-15', name: 'Independence Day', type: 'NATIONAL' },
+    { date: '2026-10-02', name: 'Mahatma Gandhi Jayanti', type: 'NATIONAL' },
+    { date: '2026-10-20', name: 'Dussehra (Vijay Dashami)', type: 'GAZETTED' },
+    { date: '2026-11-08', name: 'Diwali (Deepavali)', type: 'GAZETTED' },
+    { date: '2026-12-25', name: 'Christmas Day', type: 'GAZETTED' }
+  ];
+
+  for (const h of defaultHolidays) {
+    const hId = `HOL-${orgId}-${h.date}`;
+    await query(
+      `INSERT INTO organization_holidays (id, employer_id, holiday_date, name, holiday_type)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (employer_id, holiday_date) DO NOTHING`,
+      [hId, orgId, h.date, h.name, h.type]
+    );
+  }
+
+  console.log('[DB] Seed complete with official holidays.');
 }
 
 // ---------------------------------------------------------------------------

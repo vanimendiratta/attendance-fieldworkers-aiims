@@ -10,3 +10,4 @@ uploads/*
 !uploads/.gitkeep
 !uploads/checkins/.gitkeep
 !uploads/checkouts/.gitkeep
+scratch/

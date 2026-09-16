@@ -35,6 +35,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnExportCsv) btnExportCsv.addEventListener('click', handleExportAttendanceCsv);
   const btnEmailBackup = document.getElementById('btnEmailAttendanceBackup');
   if (btnEmailBackup) btnEmailBackup.addEventListener('click', handleEmailAttendanceBackup);
+  const btnOpenHolidays = document.getElementById('btnOpenHolidaysModal');
+  if (btnOpenHolidays) btnOpenHolidays.addEventListener('click', openHolidaysModal);
 });
 
 /**
@@ -575,13 +577,24 @@ function computeWorkingHoursMeta(r) {
       hoursStr: 'In Progress',
       badgeHtml: '<span class="badge-hours-progress">In Progress</span>',
       rowClass: 'att-row-progress',
-      category: 'IN_PROGRESS'
+      category: 'IN_PROGRESS',
+      variance: null,
+      variancePill: ''
     };
   }
 
   const sec = Number(r.net_working_seconds) || 0;
   const hrs = sec / 3600;
   const formatted = `${hrs.toFixed(2)}h`;
+  const variance = Number((hrs - 8.0).toFixed(2));
+  let variancePill = '';
+  if (variance > 0.05) {
+    variancePill = `<span class="variance-pill-pos" title="+${variance.toFixed(2)}h above standard 8.0h shift target">+${variance.toFixed(1)}h</span>`;
+  } else if (variance < -0.05) {
+    variancePill = `<span class="variance-pill-neg" title="${variance.toFixed(2)}h below standard 8.0h shift target">${variance.toFixed(1)}h</span>`;
+  } else {
+    variancePill = `<span class="variance-pill-pos" style="background: #f1f5f9; color: #475569; border-color: #cbd5e1;" title="Standard 8.0h target met">&plusmn;0.0h</span>`;
+  }
 
   if (hrs >= 8) {
     // 8 or more hours: GREEN
@@ -590,7 +603,9 @@ function computeWorkingHoursMeta(r) {
       hoursStr: formatted,
       badgeHtml: `<span class="badge-hours-green" title="Full Shift: ${formatted} (&ge; 8 hrs)">${formatted}</span>`,
       rowClass: 'att-row-green',
-      category: 'GREEN'
+      category: 'GREEN',
+      variance,
+      variancePill
     };
   } else if (hrs >= 6) {
     // between 6 and 8 hours: YELLOW
@@ -599,7 +614,9 @@ function computeWorkingHoursMeta(r) {
       hoursStr: formatted,
       badgeHtml: `<span class="badge-hours-yellow" title="Partial Shift: ${formatted} (6-8 hrs)">${formatted}</span>`,
       rowClass: 'att-row-yellow',
-      category: 'YELLOW'
+      category: 'YELLOW',
+      variance,
+      variancePill
     };
   } else {
     // less than 6 hours: RED
@@ -608,7 +625,9 @@ function computeWorkingHoursMeta(r) {
       hoursStr: formatted,
       badgeHtml: `<span class="badge-hours-red" title="Short / Under Hours: ${formatted} (&lt; 6 hrs)">${formatted}</span>`,
       rowClass: 'att-row-red',
-      category: 'RED'
+      category: 'RED',
+      variance,
+      variancePill
     };
   }
 }
@@ -697,6 +716,30 @@ function renderIndividualAttendanceTables(records) {
     const totalSec = completed.reduce((acc, r) => acc + (Number(r.net_working_seconds) || 0), 0);
     const totalHrs = totalSec / 3600;
     const avgHrs = completed.length > 0 ? (totalHrs / completed.length) : 0;
+    const expectedHrs = completed.length * 8.0;
+    const balanceHrs = totalHrs - expectedHrs;
+    const compOffDays = emp.records.filter(r => r.is_holiday_work || (Number(r.compoff_earned) > 0)).length;
+
+    let balanceBadge = '';
+    if (completed.length > 0) {
+      if (balanceHrs > 0.05) {
+        balanceBadge = `<span class="badge-balance-surplus" title="Surplus banked hours across ${completed.length} shift(s) vs 8.0h shift target">+${balanceHrs.toFixed(1)}h Surplus</span>`;
+      } else if (balanceHrs < -0.05) {
+        balanceBadge = `<span class="badge-balance-deficit" title="Deficit hours across ${completed.length} shift(s) vs 8.0h shift target">${balanceHrs.toFixed(1)}h Deficit</span>`;
+      } else {
+        balanceBadge = `<span class="badge-balance-equal" title="Cumulative hours exactly match 8.0h standard target">Balanced (&plusmn;0.0h)</span>`;
+      }
+    }
+
+    let compOffBadge = '';
+    if (compOffDays > 0) {
+      compOffBadge = `
+        <span class="badge-compoff" style="font-size: 11px; padding: 2px 8px;" title="${compOffDays} Compensatory Off Day(s) earned for working on Official Holidays/Sundays">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <span>${compOffDays} Comp-Off Earned</span>
+        </span>
+      `;
+    }
 
     let greenCount = 0;
     let yellowCount = 0;
@@ -735,11 +778,22 @@ function renderIndividualAttendanceTables(records) {
 
       const isTravel = r.work_mode === 'TRAVEL';
       const isField = r.work_mode === 'FIELD_WORK';
+      const isHoliday = Boolean(r.is_holiday_work);
       const dateStr = r.checkin_server_timestamp ? new Date(r.checkin_server_timestamp).toISOString().split('T')[0] : '';
 
       return `
         <tr id="att-row-${r.id}" class="${hoursMeta.rowClass}" onclick="openAttendanceDrawer('${r.id}')" style="cursor: pointer;">
-          <td style="font-weight: 600; font-size: 12px; white-space: nowrap;">${dateStr}</td>
+          <td style="font-weight: 600; font-size: 12px; white-space: nowrap;">
+            <div>${dateStr}</div>
+            ${isHoliday ? `
+              <div style="margin-top: 3px;">
+                <span class="badge-compoff" title="Compensatory Off Day Earned: ${escapeHtml(r.holiday_name || 'Holiday Duty')}">
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                  <span>Comp-Off (${escapeHtml(r.holiday_name || 'Holiday')})</span>
+                </span>
+              </div>
+            ` : ''}
+          </td>
           <td style="font-family: var(--font-mono); font-size: 12px; white-space: nowrap;">${checkinTime}</td>
           <td>${checkinPhoto}</td>
           <td>
@@ -768,7 +822,12 @@ function renderIndividualAttendanceTables(records) {
           </td>
           <td style="font-family: var(--font-mono); font-size: 12px; white-space: nowrap;">${checkoutTime}</td>
           <td>${checkoutPhoto}</td>
-          <td style="white-space: nowrap;">${hoursMeta.badgeHtml}</td>
+          <td style="white-space: nowrap;">
+            <div style="display: inline-flex; align-items: center; gap: 4px;">
+              ${hoursMeta.badgeHtml}
+              ${hoursMeta.variancePill || ''}
+            </div>
+          </td>
           <td>${statusBadge}</td>
           <td style="white-space: nowrap; text-align: right;">
             <div style="display: inline-flex; align-items: center; gap: 4px;">
@@ -812,6 +871,8 @@ function renderIndividualAttendanceTables(records) {
             <span class="emp-attendance-pill" title="Average Hours per Shift">
               Avg: <strong>${avgHrs.toFixed(2)}h/shift</strong>
             </span>
+            ${balanceBadge}
+            ${compOffBadge}
             <span class="badge-hours-green" style="font-size: 11px; padding: 2px 7px;" title="Shifts with &ge; 8 hours">
               ${greenCount} &ge; 8h
             </span>
@@ -916,6 +977,14 @@ function renderAttendanceTable(records) {
             <div>
               <div style="font-weight: 600;">${r.employee_name}</div>
               <div style="font-size: 11px; color: var(--color-text-muted);">${r.employee_id}</div>
+              ${r.is_holiday_work ? `
+                <div style="margin-top: 3px;">
+                  <span class="badge-compoff" title="Compensatory Off Day Earned: ${escapeHtml(r.holiday_name || 'Holiday Duty')}">
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                    <span>Comp-Off (${escapeHtml(r.holiday_name || 'Holiday')})</span>
+                  </span>
+                </div>
+              ` : ''}
             </div>
           </div>
         </td>
@@ -962,7 +1031,12 @@ function renderAttendanceTable(records) {
         </td>
         <td style="font-family: var(--font-mono);">${checkoutTime}</td>
         <td>${checkoutPhoto}</td>
-        <td style="white-space: nowrap;">${hoursMeta.badgeHtml}</td>
+        <td style="white-space: nowrap;">
+          <div style="display: inline-flex; align-items: center; gap: 4px;">
+            ${hoursMeta.badgeHtml}
+            ${hoursMeta.variancePill || ''}
+          </div>
+        </td>
         <td>${statusBadge}</td>
         <td style="white-space: nowrap;">
           <div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px;">
@@ -1972,6 +2046,32 @@ async function loadEmployeeTimesheet(empId) {
       : 'All historical sessions';
     document.getElementById('tsStatDateRange').textContent = dateRangeStr;
 
+    // Populate Hours Balance Bank & Comp-Off KPI Cards
+    const balEl = document.getElementById('tsStatHoursBalance');
+    const balDescEl = document.getElementById('tsStatHoursBalanceDesc');
+    if (balEl && balDescEl) {
+      const bal = summary.hoursBalance != null ? summary.hoursBalance : 0;
+      balEl.textContent = (bal > 0 ? '+' : '') + bal.toFixed(2);
+      if (bal > 0.05) {
+        balEl.style.color = '#059669';
+        balDescEl.textContent = `Surplus banked vs ${summary.targetShiftHours || 8}h shift target`;
+      } else if (bal < -0.05) {
+        balEl.style.color = '#dc2626';
+        balDescEl.textContent = `Deficit hours vs ${summary.targetShiftHours || 8}h shift target`;
+      } else {
+        balEl.style.color = '#2563eb';
+        balDescEl.textContent = `Balanced shifts vs ${summary.targetShiftHours || 8}h target`;
+      }
+    }
+
+    const compOffEl = document.getElementById('tsStatCompOffDays');
+    const compOffDescEl = document.getElementById('tsStatCompOffDesc');
+    if (compOffEl && compOffDescEl) {
+      const cDays = summary.totalCompOffEarned != null ? summary.totalCompOffEarned : 0;
+      compOffEl.textContent = cDays;
+      compOffDescEl.textContent = `${cDays} day${cDays === 1 ? '' : 's'} earned for holiday duty`;
+    }
+
     // Render Detailed Table
     renderTimesheetSessions(records);
 
@@ -2050,12 +2150,25 @@ function renderTimesheetSessions(records) {
         <td>
           <div style="font-weight: 600; font-size: 12px; color: var(--color-text-primary);">${dateStr}</div>
           <div style="font-size: 11px; color: var(--color-text-tertiary);">${dayStr}</div>
+          ${r.is_holiday_work ? `
+            <div style="margin-top: 3px;">
+              <span class="badge-compoff" title="Compensatory Off Day Earned: ${escapeHtml(r.holiday_name || 'Holiday Duty')}">
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <span>Comp-Off (${escapeHtml(r.holiday_name || 'Holiday Duty')})</span>
+              </span>
+            </div>
+          ` : ''}
         </td>
         <td style="font-family: var(--font-mono); font-size: 12px;">${checkinTime}</td>
         <td style="max-width: 170px;">${checkinLoc}</td>
         <td style="font-family: var(--font-mono); font-size: 12px;">${checkoutTime}</td>
         <td style="max-width: 170px;">${checkoutLoc}</td>
-        <td style="white-space: nowrap;">${hoursMeta.badgeHtml}</td>
+        <td style="white-space: nowrap;">
+          <div style="display: inline-flex; align-items: center; gap: 4px;">
+            ${hoursMeta.badgeHtml}
+            ${hoursMeta.variancePill || ''}
+          </div>
+        </td>
         <td style="font-family: var(--font-mono); font-size: 12px; color: var(--color-text-secondary);">${grossHours}</td>
         <td style="font-size: 12px;">${breakMins}</td>
         <td style="font-size: 12px; font-weight: 600; color: #7c3aed;">${overtime}</td>
@@ -2124,3 +2237,140 @@ function exportPersonTimesheetCsv(empId) {
 }
 
 window.exportPersonTimesheetCsv = exportPersonTimesheetCsv;
+
+/**
+ * Official Organization Holidays & Comp-Off Modal Management
+ */
+async function openHolidaysModal() {
+  const modal = document.getElementById('modalManageHolidays');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  modal.classList.add('active');
+
+  const dateInput = document.getElementById('inputHolidayDate');
+  if (dateInput && !dateInput.value) {
+    dateInput.value = new Date().toISOString().split('T')[0];
+  }
+
+  await loadHolidaysList();
+}
+
+function closeHolidaysModal() {
+  const modal = document.getElementById('modalManageHolidays');
+  if (!modal) return;
+  modal.style.display = 'none';
+  modal.classList.remove('active');
+}
+
+window.openHolidaysModal = openHolidaysModal;
+window.closeHolidaysModal = closeHolidaysModal;
+
+async function loadHolidaysList() {
+  const container = document.getElementById('holidaysListContainer');
+  if (!container) return;
+  container.innerHTML = '<div style="text-align: center; padding: 24px; color: var(--color-text-muted);">Loading official holidays...</div>';
+
+  try {
+    const res = await authFetch('/api/admin/holidays');
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      container.innerHTML = `<div style="text-align: center; padding: 24px; color: #dc2626;">Failed to load holidays: ${escapeHtml(data.error || 'Unknown error')}</div>`;
+      return;
+    }
+
+    const holidays = data.holidays || [];
+    if (holidays.length === 0) {
+      container.innerHTML = '<div style="text-align: center; padding: 24px; color: var(--color-text-muted);">No official holidays registered yet. Add one above.</div>';
+      return;
+    }
+
+    container.innerHTML = `
+      <div style="display: flex; flex-direction: column;">
+        ${holidays.map(h => `
+          <div class="holiday-list-item" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--color-border-subtle);">
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-weight: 700; font-size: 13px; color: var(--color-text-primary);">${escapeHtml(h.name)}</span>
+                <span class="badge badge-neutral" style="font-size: 10px; text-transform: uppercase;">${escapeHtml(h.holiday_type || 'OFFICIAL')}</span>
+              </div>
+              <div style="font-size: 11px; color: var(--color-text-muted); font-family: var(--font-mono); margin-top: 2px;">
+                ${h.holiday_date} &middot; Automatic Comp-Off active
+              </div>
+            </div>
+            <button class="btn btn-danger" style="padding: 3px 8px; font-size: 11px;" onclick="handleDeleteHoliday('${escapeHtml(h.id)}', '${escapeHtml(h.name)}')" title="Delete this holiday">
+              Delete
+            </button>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  } catch (err) {
+    console.error('Error fetching holidays:', err);
+    container.innerHTML = `<div style="text-align: center; padding: 24px; color: #dc2626;">Network error: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+async function handleAddHoliday() {
+  const dateInput = document.getElementById('inputHolidayDate');
+  const nameInput = document.getElementById('inputHolidayName');
+  const typeSelect = document.getElementById('selectHolidayType');
+
+  if (!dateInput || !nameInput) return;
+  const holidayDate = dateInput.value;
+  const name = nameInput.value.trim();
+  const holidayType = typeSelect ? typeSelect.value : 'NATIONAL';
+
+  if (!holidayDate || !name) {
+    alert('Please enter both holiday date and title.');
+    return;
+  }
+
+  try {
+    const res = await authFetch('/api/admin/holidays', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ holiday_date: holidayDate, name, holiday_type: holidayType })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      alert(`Error saving holiday: ${data.error || 'Server error'}`);
+      return;
+    }
+
+    nameInput.value = '';
+    await loadHolidaysList();
+    if (document.getElementById('viewAttendance') && document.getElementById('viewAttendance').style.display !== 'none') {
+      loadAttendanceRecords();
+    }
+  } catch (err) {
+    console.error('Error creating holiday:', err);
+    alert(`Failed to add holiday: ${err.message}`);
+  }
+}
+
+async function handleDeleteHoliday(id, name) {
+  if (!confirm(`Are you sure you want to remove "${name}" from the official holidays calendar?`)) return;
+
+  try {
+    const res = await authFetch(`/api/admin/holidays/${encodeURIComponent(id)}`, {
+      method: 'DELETE'
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      alert(`Failed to delete holiday: ${data.error || 'Server error'}`);
+      return;
+    }
+
+    await loadHolidaysList();
+    if (document.getElementById('viewAttendance') && document.getElementById('viewAttendance').style.display !== 'none') {
+      loadAttendanceRecords();
+    }
+  } catch (err) {
+    console.error('Error deleting holiday:', err);
+    alert(`Failed to delete holiday: ${err.message}`);
+  }
+}
+
+window.handleAddHoliday = handleAddHoliday;
+window.handleDeleteHoliday = handleDeleteHoliday;
+
