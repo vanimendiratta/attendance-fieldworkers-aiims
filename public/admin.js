@@ -634,31 +634,33 @@ function computeWorkingHoursMeta(r) {
   }
 }
 
-let attendanceViewMode = 'INDIVIDUAL';
+let attendanceViewMode = 'DAILY';
 let viewModeToggleInitialized = false;
+let currentAttendanceDateWindow = 'RECENT_WEEK'; // 'RECENT_WEEK' | 'TODAY' | 'ALL' | 'SPECIFIC_DATE'
+let selectedHistoricalDate = null;
 
 function initAttendanceViewModeToggle() {
   if (viewModeToggleInitialized) return;
-  const btnIndiv = document.getElementById('btnViewModeIndividual');
+  const btnDaily = document.getElementById('btnViewModeDaily');
   const btnUnified = document.getElementById('btnViewModeUnified');
-  if (!btnIndiv || !btnUnified) return;
+  if (!btnDaily || !btnUnified) return;
   viewModeToggleInitialized = true;
 
-  btnIndiv.onclick = () => {
-    attendanceViewMode = 'INDIVIDUAL';
-    btnIndiv.style.background = '#fff';
-    btnIndiv.style.color = 'var(--color-text-primary)';
-    btnIndiv.style.fontWeight = '600';
-    btnIndiv.style.boxShadow = '0 1px 2px rgba(0,0,0,0.08)';
+  btnDaily.onclick = () => {
+    attendanceViewMode = 'DAILY';
+    btnDaily.style.background = '#fff';
+    btnDaily.style.color = 'var(--color-text-primary)';
+    btnDaily.style.fontWeight = '600';
+    btnDaily.style.boxShadow = '0 1px 2px rgba(0,0,0,0.08)';
 
     btnUnified.style.background = 'transparent';
     btnUnified.style.color = 'var(--color-text-secondary)';
     btnUnified.style.fontWeight = '500';
     btnUnified.style.boxShadow = 'none';
 
-    const indivContainer = document.getElementById('attendanceIndividualTablesContainer');
+    const dailyWrap = document.getElementById('attendanceDailyTablesWrap');
     const unifiedWrap = document.getElementById('attendanceUnifiedTableWrap');
-    if (indivContainer) indivContainer.style.display = 'block';
+    if (dailyWrap) dailyWrap.style.display = 'block';
     if (unifiedWrap) unifiedWrap.style.display = 'none';
   };
 
@@ -669,23 +671,58 @@ function initAttendanceViewModeToggle() {
     btnUnified.style.fontWeight = '600';
     btnUnified.style.boxShadow = '0 1px 2px rgba(0,0,0,0.08)';
 
-    btnIndiv.style.background = 'transparent';
-    btnIndiv.style.color = 'var(--color-text-secondary)';
-    btnIndiv.style.fontWeight = '500';
-    btnIndiv.style.boxShadow = 'none';
+    btnDaily.style.background = 'transparent';
+    btnDaily.style.color = 'var(--color-text-secondary)';
+    btnDaily.style.fontWeight = '500';
+    btnDaily.style.boxShadow = 'none';
 
-    const indivContainer = document.getElementById('attendanceIndividualTablesContainer');
+    const dailyWrap = document.getElementById('attendanceDailyTablesWrap');
     const unifiedWrap = document.getElementById('attendanceUnifiedTableWrap');
-    if (indivContainer) indivContainer.style.display = 'none';
+    if (dailyWrap) dailyWrap.style.display = 'none';
     if (unifiedWrap) unifiedWrap.style.display = 'block';
   };
 }
 
+function setAttendanceDateWindow(mode) {
+  currentAttendanceDateWindow = mode;
+  selectedHistoricalDate = null;
+
+  document.querySelectorAll('.date-window-btn').forEach(btn => btn.classList.remove('active'));
+  if (mode === 'RECENT_WEEK') document.getElementById('btnDateFilterRecentWeek')?.classList.add('active');
+  else if (mode === 'TODAY') document.getElementById('btnDateFilterToday')?.classList.add('active');
+  else if (mode === 'ALL') document.getElementById('btnDateFilterAll')?.classList.add('active');
+
+  const olderSelect = document.getElementById('selectOlderDate');
+  if (olderSelect) olderSelect.value = '';
+
+  if (typeof cachedAttendanceRecords !== 'undefined' && cachedAttendanceRecords.length > 0) {
+    applyAttendanceFilters();
+  }
+}
+
+function handleSelectOlderDate(dateVal) {
+  if (!dateVal) {
+    setAttendanceDateWindow('RECENT_WEEK');
+    return;
+  }
+  currentAttendanceDateWindow = 'SPECIFIC_DATE';
+  selectedHistoricalDate = dateVal;
+
+  document.querySelectorAll('.date-window-btn').forEach(btn => btn.classList.remove('active'));
+
+  if (typeof cachedAttendanceRecords !== 'undefined' && cachedAttendanceRecords.length > 0) {
+    applyAttendanceFilters();
+  }
+}
+
+window.setAttendanceDateWindow = setAttendanceDateWindow;
+window.handleSelectOlderDate = handleSelectOlderDate;
+
 /**
- * Render Individual Attendance Tables for Each Person
+ * Render Day-by-Day Attendance Tables (Table 1: 16 Sept, Table 2: 17 Sept, etc.)
  */
-function renderIndividualAttendanceTables(records) {
-  const container = document.getElementById('attendanceIndividualTablesContainer');
+function renderDailyAttendanceTables(records) {
+  const container = document.getElementById('attendanceDailyTablesContainer');
   if (!container) return;
 
   if (!records || records.length === 0) {
@@ -693,70 +730,121 @@ function renderIndividualAttendanceTables(records) {
     return;
   }
 
-  // Group records by employee
-  const employeeMap = new Map();
+  // 1. Group records by check-in date (YYYY-MM-DD)
+  const dateMap = new Map();
   for (const r of records) {
-    const empId = r.employee_id || 'UNKNOWN';
-    if (!employeeMap.has(empId)) {
-      employeeMap.set(empId, {
-        id: empId,
-        name: r.employee_name || 'Unknown Employee',
-        department: r.department || 'CDER',
-        designation: r.designation || 'Staff',
-        team: r.team_name || 'Direct Assignment',
-        state: r.state || '',
-        district: r.district || '',
-        records: []
-      });
-    }
-    employeeMap.get(empId).records.push(r);
-  }
-
-  const cardsHtml = Array.from(employeeMap.values()).map(emp => {
-    const totalRecords = emp.records.length;
-    const completed = emp.records.filter(r => r.checkout_server_timestamp || r.attendance_status === 'COMPLETED');
-    const totalSec = completed.reduce((acc, r) => acc + (Number(r.net_working_seconds) || 0), 0);
-    const totalHrs = totalSec / 3600;
-    const avgHrs = completed.length > 0 ? (totalHrs / completed.length) : 0;
-    const expectedHrs = completed.length * 8.0;
-    const balanceHrs = totalHrs - expectedHrs;
-    const compOffDays = emp.records.filter(r => r.is_holiday_work || (Number(r.compoff_earned) > 0)).length;
-
-    let balanceBadge = '';
-    if (completed.length > 0) {
-      if (balanceHrs > 0.05) {
-        balanceBadge = `<span class="badge-balance-surplus" title="Surplus banked hours across ${completed.length} shift(s) vs 8.0h shift target">+${balanceHrs.toFixed(1)}h Surplus</span>`;
-      } else if (balanceHrs < -0.05) {
-        balanceBadge = `<span class="badge-balance-deficit" title="Deficit hours across ${completed.length} shift(s) vs 8.0h shift target">${balanceHrs.toFixed(1)}h Deficit</span>`;
-      } else {
-        balanceBadge = `<span class="badge-balance-equal" title="Cumulative hours exactly match 8.0h standard target">Balanced (&plusmn;0.0h)</span>`;
+    let dateStr = 'UNKNOWN';
+    if (r.checkin_server_timestamp) {
+      try {
+        dateStr = new Date(r.checkin_server_timestamp).toISOString().split('T')[0];
+      } catch (e) {
+        dateStr = 'UNKNOWN';
       }
     }
-
-    let compOffBadge = '';
-    if (compOffDays > 0) {
-      compOffBadge = `
-        <span class="badge-compoff" style="font-size: 11px; padding: 2px 8px;" title="${compOffDays} Compensatory Off Day(s) earned for working on Official Holidays/Sundays">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-          <span>${compOffDays} Comp-Off Earned</span>
-        </span>
-      `;
+    if (!dateMap.has(dateStr)) {
+      dateMap.set(dateStr, []);
     }
+    dateMap.get(dateStr).push(r);
+  }
+
+  // 2. Sort dates in descending order (most recent date first)
+  const allDates = Array.from(dateMap.keys()).sort((a, b) => b.localeCompare(a));
+
+  // 3. Define Recent Week window (last 7 active dates / past 7 days)
+  const todayMs = Date.now();
+  const sevenDaysAgoStr = new Date(todayMs - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const recentDatesList = allDates.filter((d, i) => d >= sevenDaysAgoStr || i < 7);
+  const recentDatesSet = new Set(recentDatesList);
+  const olderDatesList = allDates.filter(d => !recentDatesSet.has(d));
+
+  // 4. Update the Older Dates Dropdown Selector
+  const olderSelect = document.getElementById('selectOlderDate');
+  if (olderSelect) {
+    const currentVal = selectedHistoricalDate || '';
+    let optionsHtml = '<option value="">-- Browse Older Dates --</option>';
+    for (const d of olderDatesList) {
+      const count = dateMap.get(d).length;
+      let label = d;
+      try {
+        const dObj = new Date(d + 'T00:00:00Z');
+        label = dObj.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+      } catch (e) {}
+      optionsHtml += `<option value="${d}" ${d === currentVal ? 'selected' : ''}>${label} (${count} record${count === 1 ? '' : 's'})</option>`;
+    }
+    olderSelect.innerHTML = optionsHtml;
+  }
+
+  // 5. Determine which dates to display in this window
+  let displayedDates = [];
+  let filterNote = '';
+
+  if (currentAttendanceDateWindow === 'TODAY') {
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (dateMap.has(todayStr)) {
+      displayedDates = [todayStr];
+    } else {
+      displayedDates = [];
+      filterNote = 'No attendance records logged for today yet.';
+    }
+  } else if (currentAttendanceDateWindow === 'SPECIFIC_DATE' && selectedHistoricalDate) {
+    if (dateMap.has(selectedHistoricalDate)) {
+      displayedDates = [selectedHistoricalDate];
+    } else {
+      displayedDates = [];
+      filterNote = `No matching attendance records found for date ${selectedHistoricalDate}.`;
+    }
+  } else if (currentAttendanceDateWindow === 'ALL') {
+    displayedDates = allDates;
+  } else {
+    // Default: RECENT_WEEK
+    displayedDates = recentDatesList;
+  }
+
+  if (displayedDates.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; color: var(--color-text-muted); padding: 48px; background: #fff; border: 1px dashed var(--color-border-default); border-radius: 8px;">
+        <div style="font-weight: 600; font-size: 14px; margin-bottom: 6px;">${escapeHtml(filterNote || 'No records in the selected date window.')}</div>
+        <div style="font-size: 12px; color: var(--color-text-secondary); margin-bottom: 12px;">You can view older records or switch back to All Recorded Days.</div>
+        <button type="button" class="btn btn-secondary" onclick="setAttendanceDateWindow('ALL')" style="font-size: 12px;">View All Days</button>
+      </div>
+    `;
+    return;
+  }
+
+  // 6. Render Day-by-Day Tables (Table 1: 16 Sept, Table 2: 17 Sept, etc.)
+  const tablesHtml = displayedDates.map((dateStr, index) => {
+    const dayRecords = dateMap.get(dateStr) || [];
+    const totalWorkers = dayRecords.length;
+    const completedRecords = dayRecords.filter(r => r.checkout_server_timestamp || r.attendance_status === 'COMPLETED');
+    const activeWorking = dayRecords.filter(r => r.attendance_status === 'CHECKED_IN' || r.attendance_status === 'ON_BREAK');
+    const totalSec = completedRecords.reduce((acc, r) => acc + (Number(r.net_working_seconds) || 0), 0);
+    const totalHrs = totalSec / 3600;
+    const avgHrs = completedRecords.length > 0 ? (totalHrs / completedRecords.length) : 0;
 
     let greenCount = 0;
     let yellowCount = 0;
     let redCount = 0;
-    let progressCount = 0;
-
-    for (const r of emp.records) {
+    for (const r of dayRecords) {
       const meta = computeWorkingHoursMeta(r);
       if (meta.category === 'GREEN') greenCount++;
       else if (meta.category === 'YELLOW') yellowCount++;
       else if (meta.category === 'RED') redCount++;
-      else progressCount++;
     }
 
-    const rowsHtml = emp.records.map(r => {
+    // Check if this date was an official holiday or Sunday
+    const holidayRecord = dayRecords.find(r => r.is_holiday_work);
+    const isHolidayDay = Boolean(holidayRecord);
+    const holidayName = holidayRecord ? (holidayRecord.holiday_name || 'Holiday / Sunday Duty') : '';
+
+    let formattedDate = dateStr;
+    let weekdayStr = '';
+    try {
+      const dObj = new Date(dateStr + 'T00:00:00Z');
+      formattedDate = dObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+      weekdayStr = dObj.toLocaleDateString('en-GB', { weekday: 'long' });
+    } catch (e) {}
+
+    const rowsHtml = dayRecords.map(r => {
       const checkinTime = new Date(r.checkin_server_timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const checkoutTime = r.checkout_server_timestamp
         ? new Date(r.checkout_server_timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -780,85 +868,92 @@ function renderIndividualAttendanceTables(records) {
 
       const isTravel = r.work_mode === 'TRAVEL';
       const isField = r.work_mode === 'FIELD_WORK';
-      const isHoliday = Boolean(r.is_holiday_work);
-      const dateStr = r.checkin_server_timestamp ? new Date(r.checkin_server_timestamp).toISOString().split('T')[0] : '';
+      const isHotel = (r.punch_location_type === 'HOTEL_STAY') || Boolean(r.hotel_name);
+
+      const mapPinUrl = r.exact_coordinates_url || (r.checkin_lat != null && r.checkin_lng != null ? `https://www.google.com/maps?q=${Number(r.checkin_lat).toFixed(6)},${Number(r.checkin_lng).toFixed(6)}&t=k` : '');
+      const mapPinHtml = mapPinUrl ? `
+        <div style="margin-top: 3px;">
+          <a href="${mapPinUrl}" target="_blank" rel="noopener noreferrer" class="exact-map-pin-link" onclick="event.stopPropagation();" title="View exact GPS pin in Google Maps Satellite view">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+            <span>${Number(r.checkin_lat).toFixed(5)}°, ${Number(r.checkin_lng).toFixed(5)}°</span>
+          </a>
+        </div>
+      ` : '';
+
+      let locationHtml = '';
+      if (isHotel) {
+        locationHtml = `
+          <span class="badge-location-hotel" style="margin-bottom: 2px;">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M9 9h1m4 0h1M9 13h1m4 0h1M9 17h1m4 0h1"/></svg>
+            <span>Hotel: ${escapeHtml(r.hotel_name || 'Hotel Stay')} ${r.hotel_room ? '(Rm ' + escapeHtml(r.hotel_room) + ')' : ''}</span>
+          </span>
+          <div style="font-size: 11px; color: var(--color-text-primary); max-width: 220px; line-height: 1.3;">
+            ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Hotel Lodging'))}
+          </div>
+          ${r.hotel_phone ? `<div style="font-size: 10px; color: #4338ca; margin-top: 1px;">Reception: ${escapeHtml(r.hotel_phone)}</div>` : ''}
+          ${mapPinHtml}
+        `;
+      } else if (isTravel) {
+        locationHtml = `
+          <span class="badge" style="background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; font-size: 10px; margin-bottom: 2px; display: inline-flex; align-items: center; gap: 4px;">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+            <span>Travel / Transit ${r.field_site_notes ? '· ' + escapeHtml(r.field_site_notes) : ''}</span>
+          </span>
+          <div style="font-size: 11px; color: var(--color-text-primary); max-width: 220px; line-height: 1.3;">
+            ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Transit Origin'))}
+          </div>
+          <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">Official Transit Duty</div>
+          ${mapPinHtml}
+        `;
+      } else if (isField) {
+        locationHtml = `
+          <span class="badge-location-field" style="margin-bottom: 2px;">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+            <span>Field Site ${r.field_site_notes ? '· ' + escapeHtml(r.field_site_notes) : ''}</span>
+          </span>
+          <div style="font-size: 11px; color: var(--color-text-primary); max-width: 220px; line-height: 1.3;">
+            ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Premises'))}
+          </div>
+          <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">±${r.checkin_accuracy}m accuracy</div>
+          ${mapPinHtml}
+        `;
+      } else {
+        locationHtml = `
+          <span class="badge badge-neutral" style="font-size: 10px; margin-bottom: 2px;">Office Premises</span>
+          <div style="font-size: 11px; color: var(--color-text-secondary); max-width: 200px;">${escapeHtml(r.checkin_address || 'Office Premises')}</div>
+          ${mapPinHtml}
+        `;
+      }
 
       return `
         <tr id="att-row-${r.id}" class="${hoursMeta.rowClass}" onclick="openAttendanceDrawer('${r.id}')" style="cursor: pointer;">
-          <td style="font-weight: 600; font-size: 12px; white-space: nowrap;">
-            <div>${dateStr}</div>
-            ${isHoliday ? `
-              <div style="margin-top: 3px;">
-                <span class="badge-compoff" title="Compensatory Off Day Earned: ${escapeHtml(r.holiday_name || 'Holiday Duty')}">
-                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                  <span>Comp-Off (${escapeHtml(r.holiday_name || 'Holiday')})</span>
-                </span>
+          <td>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div class="table-emp-avatar">${escapeHtml((r.employee_name || 'E').charAt(0))}</div>
+              <div>
+                <div style="font-weight: 600; color: var(--color-text-primary);">${escapeHtml(r.employee_name || 'Staff')}</div>
+                <div style="font-size: 11px; color: var(--color-text-muted); font-family: var(--font-mono);">${escapeHtml(r.employee_id || '')} · ${escapeHtml(r.department || 'CDER')}</div>
+                ${r.is_holiday_work ? `
+                  <div style="margin-top: 3px;">
+                    <span class="badge-compoff" style="font-size: 10px; padding: 1px 6px;" title="Comp-Off Earned: ${escapeHtml(r.holiday_name || 'Holiday Duty')}">
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                      <span>Comp-Off Credit</span>
+                    </span>
+                  </div>
+                ` : ''}
               </div>
-            ` : ''}
+            </div>
+          </td>
+          <td>
+            <div style="font-weight: 600; font-size: 12px; color: var(--color-text-primary);">${escapeHtml(r.team_name || 'Direct Assignment')}</div>
+            <span class="team-chip-tag" style="margin-top: 3px; display: inline-flex; align-items: center; gap: 4px;">
+              ${window.Icons ? window.Icons.render('mapPin', { size: 10 }) : ''}
+              <span>${r.district ? `${escapeHtml(r.district)}, ${escapeHtml(r.state || '')}` : (escapeHtml(r.state) || 'Territory Unspecified')}</span>
+            </span>
           </td>
           <td style="font-family: var(--font-mono); font-size: 12px; white-space: nowrap;">${checkinTime}</td>
           <td>${checkinPhoto}</td>
-          <td>
-            ${(() => {
-              const mapPinUrl = r.exact_coordinates_url || (r.checkin_lat != null && r.checkin_lng != null ? `https://www.google.com/maps?q=${Number(r.checkin_lat).toFixed(6)},${Number(r.checkin_lng).toFixed(6)}&t=k` : '');
-              const mapPinHtml = mapPinUrl ? `
-                <div style="margin-top: 3px;">
-                  <a href="${mapPinUrl}" target="_blank" rel="noopener noreferrer" class="exact-map-pin-link" onclick="event.stopPropagation();" title="View exact GPS pin in Google Maps Satellite view">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-                    <span>${Number(r.checkin_lat).toFixed(5)}°, ${Number(r.checkin_lng).toFixed(5)}°</span>
-                  </a>
-                </div>
-              ` : '';
-
-              if (r.punch_location_type === 'HOTEL_STAY' || r.hotel_name) {
-                return `
-                  <span class="badge-location-hotel" style="margin-bottom: 2px;">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M9 9h1m4 0h1M9 13h1m4 0h1M9 17h1m4 0h1"/></svg>
-                    <span>Hotel: ${escapeHtml(r.hotel_name || 'Hotel Stay')} ${r.hotel_room ? '(Rm ' + escapeHtml(r.hotel_room) + ')' : ''}</span>
-                  </span>
-                  <div style="font-size: 11px; color: var(--color-text-primary); max-width: 220px; line-height: 1.3;">
-                    ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Hotel Lodging'))}
-                  </div>
-                  ${r.hotel_phone ? `<div style="font-size: 10px; color: #4338ca; margin-top: 1px;">Reception: ${escapeHtml(r.hotel_phone)}</div>` : ''}
-                  ${mapPinHtml}
-                `;
-              }
-
-              if (isTravel) {
-                return `
-                  <span class="badge" style="background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; font-size: 10px; margin-bottom: 2px; display: inline-flex; align-items: center; gap: 4px;">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
-                    <span>Travel / Transit ${r.field_site_notes ? '· ' + escapeHtml(r.field_site_notes) : ''}</span>
-                  </span>
-                  <div style="font-size: 11px; color: var(--color-text-primary); max-width: 220px; line-height: 1.3;">
-                    ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Transit Origin'))}
-                  </div>
-                  <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">Official Transit Duty</div>
-                  ${mapPinHtml}
-                `;
-              }
-
-              if (isField) {
-                return `
-                  <span class="badge-location-field" style="margin-bottom: 2px;">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
-                    <span>Field Site ${r.field_site_notes ? '· ' + escapeHtml(r.field_site_notes) : ''}</span>
-                  </span>
-                  <div style="font-size: 11px; color: var(--color-text-primary); max-width: 220px; line-height: 1.3;">
-                    ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Premises'))}
-                  </div>
-                  <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">±${r.checkin_accuracy}m accuracy</div>
-                  ${mapPinHtml}
-                `;
-              }
-
-              return `
-                <span class="badge badge-neutral" style="font-size: 10px; margin-bottom: 2px;">Office Premises</span>
-                <div style="font-size: 11px; color: var(--color-text-secondary); max-width: 200px;">${escapeHtml(r.checkin_address || 'Office Premises')}</div>
-                ${mapPinHtml}
-              `;
-            })()}
-          </td>
+          <td>${locationHtml}</td>
           <td style="font-family: var(--font-mono); font-size: 12px; white-space: nowrap;">${checkoutTime}</td>
           <td>${checkoutPhoto}</td>
           <td style="white-space: nowrap;">
@@ -870,7 +965,12 @@ function renderIndividualAttendanceTables(records) {
           <td>${statusBadge}</td>
           <td style="white-space: nowrap; text-align: right;">
             <div style="display: inline-flex; align-items: center; gap: 4px;">
-              <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="event.stopPropagation(); openAttendanceDrawer('${r.id}')">View</button>
+              <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="event.stopPropagation(); openAttendanceDrawer('${r.id}')" title="Inspect full audit drawer">
+                View
+              </button>
+              <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="event.stopPropagation(); openPersonTimesheet('${escapeHtml(r.employee_id)}')" title="View cumulative timesheet for this employee">
+                Timesheet
+              </button>
               <button class="btn btn-danger" style="padding: 3px 8px; font-size: 11px;" onclick="event.stopPropagation(); handleDeleteAttendance('${r.id}', '${escapeHtml(r.employee_name)}')" title="Delete attendance record">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
               </button>
@@ -881,55 +981,68 @@ function renderIndividualAttendanceTables(records) {
     }).join('');
 
     return `
-      <div class="emp-attendance-card" id="emp-card-${escapeHtml(emp.id)}">
-        <div class="emp-attendance-header">
-          <div style="display: flex; align-items: center; gap: 12px;">
-            <div class="user-avatar" style="width: 38px; height: 38px; font-size: 15px; font-weight: 700; background: var(--color-brand); color: #fff;">
-              ${escapeHtml(emp.name.charAt(0).toUpperCase())}
+      <div class="day-attendance-card" id="day-card-${escapeHtml(dateStr)}">
+        <div class="day-attendance-header">
+          <!-- Left: Table Identifier & Date Title -->
+          <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <div class="day-card-badge">
+              Table ${index + 1}
             </div>
             <div>
               <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="font-weight: 700; font-size: 14px; color: var(--color-text-primary);">${escapeHtml(emp.name)}</span>
-                <span class="badge badge-neutral" style="font-family: var(--font-mono); font-size: 11px;">${escapeHtml(emp.id)}</span>
-                <span style="font-size: 12px; color: var(--color-text-tertiary);">${escapeHtml(emp.department)}</span>
+                <h3 style="margin: 0; font-size: 15px; font-weight: 700; color: var(--color-text-primary);">
+                  ${escapeHtml(weekdayStr)}, ${escapeHtml(formattedDate)}
+                </h3>
+                <span class="badge badge-neutral" style="font-family: var(--font-mono); font-size: 11px;">
+                  ${escapeHtml(dateStr)}
+                </span>
+                ${isHolidayDay ? `
+                  <span class="badge-compoff" title="Official Holiday Duty: ${escapeHtml(holidayName)}">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                    <span>Comp-Off Day (${escapeHtml(holidayName)})</span>
+                  </span>
+                ` : ''}
               </div>
               <div style="font-size: 11px; color: var(--color-text-muted); margin-top: 2px;">
-                Team: <strong>${escapeHtml(emp.team)}</strong> ${emp.district ? `· ${escapeHtml(emp.district)}, ${escapeHtml(emp.state)}` : ''}
+                Daily field dispatch attendance verification log
               </div>
             </div>
           </div>
 
-          <!-- Cumulative KPIs & Hours Breakdown for this person -->
+          <!-- Right: Daily KPIs Strip -->
           <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-            <span class="emp-attendance-pill" title="Total Recorded Shifts">
-              <strong>${totalRecords}</strong> Shift${totalRecords === 1 ? '' : 's'}
+            <span class="day-kpi-pill" title="Total Personnel Logged Today">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+              <span><strong>${totalWorkers}</strong> Staff Present</span>
             </span>
-            <span class="emp-attendance-pill" title="Total Productive Hours">
-              Total: <strong>${totalHrs.toFixed(2)}h</strong>
+
+            <span class="day-kpi-pill" title="Completed Shifts">
+              <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></span>
+              <span><strong>${completedRecords.length}</strong> Completed</span>
             </span>
-            <span class="emp-attendance-pill" title="Average Hours per Shift">
-              Avg: <strong>${avgHrs.toFixed(2)}h/shift</strong>
-            </span>
-            ${balanceBadge}
-            ${compOffBadge}
-            <span class="badge-hours-green" style="font-size: 11px; padding: 2px 7px;" title="Shifts with &ge; 8 hours">
-              ${greenCount} &ge; 8h
-            </span>
-            <span class="badge-hours-yellow" style="font-size: 11px; padding: 2px 7px;" title="Shifts with 6-8 hours">
-              ${yellowCount} 6-8h
-            </span>
-            ${redCount > 0 ? `
-              <span class="badge-hours-red" style="font-size: 11px; padding: 2px 7px;" title="Shifts with &lt; 6 hours">
-                ${redCount} &lt; 6h
+
+            ${activeWorking.length > 0 ? `
+              <span class="day-kpi-pill" style="color: #2563eb; border-color: #bfdbfe; background: #eff6ff;" title="Currently working live on the clock">
+                <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #3b82f6;"></span>
+                <span><strong>${activeWorking.length}</strong> On Clock</span>
               </span>
             ` : ''}
 
-            <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px; margin-left: 4px;" onclick="openPersonTimesheet('${escapeHtml(emp.id)}')">
-              Full Timesheet
-            </button>
-            <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;" onclick="exportPersonTimesheetCsv('${escapeHtml(emp.id)}')">
-              Export CSV
-            </button>
+            <span class="day-kpi-pill" title="Average working hours per completed worker today">
+              Avg: <strong>${avgHrs.toFixed(2)}h / shift</strong>
+            </span>
+
+            <span class="badge-hours-green" style="font-size: 11px; padding: 2px 7px;" title="Workers with &ge; 8 hours">
+              ${greenCount} &ge; 8h
+            </span>
+            <span class="badge-hours-yellow" style="font-size: 11px; padding: 2px 7px;" title="Workers with 6-8 hours">
+              ${yellowCount} 6-8h
+            </span>
+            ${redCount > 0 ? `
+              <span class="badge-hours-red" style="font-size: 11px; padding: 2px 7px;" title="Workers with &lt; 6 hours">
+                ${redCount} &lt; 6h
+              </span>
+            ` : ''}
           </div>
         </div>
 
@@ -937,15 +1050,16 @@ function renderIndividualAttendanceTables(records) {
           <table class="data-table">
             <thead>
               <tr>
-                <th>Date</th>
+                <th>Field Worker</th>
+                <th>Team &amp; Territory</th>
                 <th>Check-In</th>
-                <th>Photo</th>
-                <th>Location / Notes</th>
+                <th>Check-In Photo</th>
+                <th>Location / Lodging / Map</th>
                 <th>Checkout</th>
-                <th>Photo</th>
+                <th>Checkout Photo</th>
                 <th>Working Hours</th>
                 <th>Status</th>
-                <th style="text-align: right;">Action</th>
+                <th style="text-align: right;">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -957,7 +1071,24 @@ function renderIndividualAttendanceTables(records) {
     `;
   }).join('');
 
-  container.innerHTML = cardsHtml;
+  // 7. If older dates are available and user is on RECENT_WEEK, append informative archive pill
+  let olderBannerHtml = '';
+  if (olderDatesList.length > 0 && currentAttendanceDateWindow === 'RECENT_WEEK') {
+    olderBannerHtml = `
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; background: #f1f5f9; border: 1px solid var(--color-border-default); border-radius: 8px; flex-wrap: wrap; gap: 10px;">
+        <div style="font-size: 12px; color: var(--color-text-secondary);">
+          <strong>${olderDatesList.length} Older Day Table${olderDatesList.length === 1 ? '' : 's'}</strong> available in historical records.
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button type="button" class="btn btn-secondary" onclick="setAttendanceDateWindow('ALL')" style="font-size: 11px; padding: 5px 12px;">
+            Show All Recorded Days
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  container.innerHTML = tablesHtml + olderBannerHtml;
 }
 
 /**
@@ -971,8 +1102,8 @@ function renderAttendanceTable(records) {
     countLabel.textContent = `Showing ${records.length} record${records.length === 1 ? '' : 's'}`;
   }
 
-  // Render Mode 1: Individual Tables for Each Person
-  renderIndividualAttendanceTables(records);
+  // Render Mode 1: Daily Attendance Tables (By Date)
+  renderDailyAttendanceTables(records);
 
   // Render Mode 2: Unified Consolidated Table
   const tbody = document.getElementById('attendanceMainTableBody');
