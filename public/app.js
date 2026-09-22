@@ -926,6 +926,7 @@ async function startSignupFaceCamera() {
         try {
           await video.play();
         } catch (_) {}
+        updateCameraMirrorState();
         return;
       } catch (camErr) {
         console.warn('Real webcam unavailable for signup, using simulation:', camErr);
@@ -2474,7 +2475,12 @@ DOM.btnConfirmSubmission.addEventListener('click', async () => {
 // ===========================================================================
 // CAMERA INVERSION / MIRROR CONTROLLER
 // ===========================================================================
-let isCameraMirrored = localStorage.getItem('attendance_camera_mirrored') === 'true';
+// Front-facing cameras produce a mirrored feed by default in browsers.
+// Default to true so the live preview feels natural (like a mirror) for all users.
+// The snapshot capture already un-mirrors when saving, so stored photos are correct.
+let isCameraMirrored = localStorage.getItem('attendance_camera_mirrored') !== null
+  ? localStorage.getItem('attendance_camera_mirrored') === 'true'
+  : true;
 
 function updateCameraMirrorState() {
   const elements = [
