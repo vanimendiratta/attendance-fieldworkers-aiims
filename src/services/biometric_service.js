@@ -115,12 +115,6 @@ async function matchFaceToEmployee(candidateDescriptor, employerId = null, thres
       const empDesc = typeof emp.face_descriptor === 'string' ? JSON.parse(emp.face_descriptor) : emp.face_descriptor;
       if (!Array.isArray(empDesc) || empDesc.length < 32) continue;
 
-      // Ensure stored descriptor is calibrated (zero-centered; ignore legacy non-zero-centered vectors)
-      const meanVal = empDesc.reduce((a, b) => a + b, 0) / empDesc.length;
-      if (Math.abs(meanVal) > 0.05) {
-        continue;
-      }
-
       const score = computeCosineSimilarity(candidateDescriptor, empDesc);
       if (score > highestScore) {
         highestScore = score;
