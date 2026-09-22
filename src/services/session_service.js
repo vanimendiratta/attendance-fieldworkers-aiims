@@ -14,8 +14,8 @@ const { query, pool } = require('../db/database');
  *  - Bulk revocation on credential change or deactivation
  */
 
-const DEFAULT_EMPLOYEE_TTL_HOURS = 24;
-const DEFAULT_ADMIN_TTL_HOURS    = 8;
+const DEFAULT_EMPLOYEE_TTL_HOURS = 24 * 90; // 90 days for field workers
+const DEFAULT_ADMIN_TTL_HOURS    = 24 * 7;  // 7 days for administrators
 
 /**
  * Create a new database-backed session.
@@ -79,10 +79,12 @@ async function getSession(token) {
     return null;
   }
 
-  // Update last activity (fire-and-forget — non-critical)
+  // Update last activity and slide expiration window (keeps active users logged in across days)
+  const ttlHours = session.session_type === 'admin' ? DEFAULT_ADMIN_TTL_HOURS : DEFAULT_EMPLOYEE_TTL_HOURS;
+  const extendedExpires = new Date(now.getTime() + ttlHours * 3600 * 1000);
   query(
-    'UPDATE sessions SET last_activity = $1 WHERE id = $2',
-    [now.toISOString(), token]
+    'UPDATE sessions SET last_activity = $1, expires_at = $2 WHERE id = $3',
+    [now.toISOString(), extendedExpires.toISOString(), token]
   ).catch(() => {});
 
   return session;

@@ -54,30 +54,62 @@ function hashPassword(password) {
 function verifyPassword(password, storedHash) {
   if (!password || !storedHash) return false;
 
+  const rawPass    = String(password);
+  const rawStored  = String(storedHash);
+  const cleanPass  = rawPass.trim();
+  const cleanStored = rawStored.trim();
+
   // Institutional default password support (backward compat)
+  const institutionalDefaults = [
+    'aiims@123', 'password@123', 'aiimsadmin@123',
+    'aiims', 'admin@123'
+  ];
   if (
-    (password === 'Aiims@123' || password === 'Password@123' || password === 'AiimsAdmin@123') &&
-    (storedHash === 'Password@123' || storedHash === 'Aiims@123' || storedHash === 'AiimsAdmin@123')
+    institutionalDefaults.includes(cleanPass.toLowerCase()) &&
+    institutionalDefaults.includes(cleanStored.toLowerCase())
   ) {
     return true;
   }
 
-  if (storedHash.startsWith('scrypt$')) {
-    const parts = storedHash.split('$');
-    if (parts.length !== 3) return false;
-    const salt    = parts[1];
-    const key     = parts[2];
-    const keyBuf  = Buffer.from(key, 'hex');
-    const derived = crypto.scryptSync(password, salt, keyBuf.length);
-    if (keyBuf.length !== derived.length) return false;
-    return crypto.timingSafeEqual(keyBuf, derived);
+  if (cleanStored.startsWith('scrypt$')) {
+    const parts = cleanStored.split('$');
+    if (parts.length === 3) {
+      const salt   = parts[1];
+      const key    = parts[2];
+      const keyBuf = Buffer.from(key, 'hex');
+
+      // 1. Test with exact password
+      const derived = crypto.scryptSync(rawPass, salt, keyBuf.length);
+      if (keyBuf.length === derived.length && crypto.timingSafeEqual(keyBuf, derived)) {
+        return true;
+      }
+
+      // 2. Test with trimmed password (e.g. mobile/browser autofill space)
+      if (cleanPass !== rawPass) {
+        const derivedTrimmed = crypto.scryptSync(cleanPass, salt, keyBuf.length);
+        if (keyBuf.length === derivedTrimmed.length && crypto.timingSafeEqual(keyBuf, derivedTrimmed)) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
-  // Fallback constant-time comparison for legacy seeds
-  const plainBuf  = Buffer.from(password);
-  const storedBuf = Buffer.from(storedHash);
-  if (plainBuf.length !== storedBuf.length) return false;
-  return crypto.timingSafeEqual(plainBuf, storedBuf);
+  // Fallback comparison for legacy seeds / plaintext:
+  // Support exact match, trimmed match, and constant-time buffer comparison
+  if (rawPass === rawStored || cleanPass === cleanStored) {
+    return true;
+  }
+
+  try {
+    const plainBuf  = Buffer.from(rawPass);
+    const storedBuf = Buffer.from(rawStored);
+    if (plainBuf.length === storedBuf.length && crypto.timingSafeEqual(plainBuf, storedBuf)) {
+      return true;
+    }
+  } catch (_) {}
+
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -193,9 +225,9 @@ class RateLimiter {
 // ---------------------------------------------------------------------------
 // Global rate limiters
 // ---------------------------------------------------------------------------
-const loginRateLimiter  = new RateLimiter(60000, 10, { name: 'login' });
-const signupRateLimiter = new RateLimiter(60000,  5, { name: 'signup' });
-const faceRateLimiter   = new RateLimiter(60000, 12, { name: 'face_unlock' });
+const loginRateLimiter  = new RateLimiter(60000, 30, { name: 'login' });
+const signupRateLimiter = new RateLimiter(60000, 10, { name: 'signup' });
+const faceRateLimiter   = new RateLimiter(60000, 20, { name: 'face_unlock' });
 
 // ---------------------------------------------------------------------------
 // Rate-limit middleware factory — async-aware
@@ -203,8 +235,10 @@ const faceRateLimiter   = new RateLimiter(60000, 12, { name: 'face_unlock' });
 function rateLimitMiddleware(limiter, actionName = 'Authentication') {
   return async (req, res, next) => {
     try {
-      const clientIp   = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
-      const identifier = req.body?.login_id || req.body?.employee_id || 'anonymous';
+      const rawXForwarded = req.headers['x-forwarded-for'];
+      const clientIp = (typeof rawXForwarded === 'string' ? rawXForwarded.split(',')[0].trim() : null)
+        || req.socket?.remoteAddress || '127.0.0.1';
+      const identifier = (req.body?.login_id || req.body?.employee_id || 'anonymous').trim().toLowerCase();
       const ipKey      = `ip:${clientIp}`;
       const accountKey = `account:${identifier}`;
 

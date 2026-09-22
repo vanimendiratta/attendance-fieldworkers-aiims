@@ -208,43 +208,58 @@ router.put('/employees/:id', requireAuthenticatedAdmin, async (req, res) => {
 // ---------------------------------------------------------------------------
 router.post('/auth/employee/login', authService.rateLimitMiddleware(authService.loginRateLimiter, 'Login'), async (req, res) => {
   try {
-    const { employer_id, login_id, employee_id, password } = req.body;
-    const effectiveLoginId = (login_id || employee_id || '').trim();
-    const clientIp         = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+    const { employer_id, login_id, employee_id, password } = req.body || {};
+    const effectiveLoginId = String(login_id || employee_id || '').trim();
+    const rawXForwarded    = req.headers['x-forwarded-for'];
+    const clientIp         = (typeof rawXForwarded === 'string' ? rawXForwarded.split(',')[0].trim() : null) || req.socket?.remoteAddress || '127.0.0.1';
     const userAgent        = req.headers['user-agent'] || 'Unknown';
 
     if (!employer_id) return res.status(400).json({ success: false, error: 'Employer ID is required.' });
     if (!effectiveLoginId || !password) return res.status(400).json({ success: false, error: 'Both Employee ID/Email and Password are required.' });
 
-    let employerRes = await query('SELECT * FROM organizations WHERE id = $1', [employer_id]);
-    if (employerRes.rows.length === 0 && employer_id === 'ORG-001') {
+    const cleanOrgId = String(employer_id).trim();
+    let employerRes = await query(
+      'SELECT * FROM organizations WHERE UPPER(id) = UPPER($1) OR UPPER(name) = UPPER($1)',
+      [cleanOrgId]
+    );
+    if (employerRes.rows.length === 0 && (cleanOrgId.toUpperCase() === 'ORG-001' || cleanOrgId.toUpperCase() === 'AIIMS')) {
       await initSeed();
-      employerRes = await query('SELECT * FROM organizations WHERE id = $1', [employer_id]);
+      employerRes = await query(
+        'SELECT * FROM organizations WHERE UPPER(id) = UPPER($1) OR UPPER(name) = UPPER($1)',
+        [cleanOrgId]
+      );
     }
-    const employer    = employerRes.rows[0];
+    const employer = employerRes.rows[0];
     if (!employer) {
-      attendanceService.logAudit('AUTH_FAILED_ORG_NOT_FOUND', null, employer_id, 'EMPLOYEE_LOGIN', 'BLOCKED', { login_id: effectiveLoginId }, clientIp, userAgent);
+      attendanceService.logAudit('AUTH_FAILED_ORG_NOT_FOUND', null, cleanOrgId, 'EMPLOYEE_LOGIN', 'BLOCKED', { login_id: effectiveLoginId }, clientIp, userAgent);
       return res.status(401).json({ success: false, error: 'Invalid Employee ID or password.' });
     }
+
+    const digitsOnly = effectiveLoginId.replace(/\D/g, '');
 
     const empRes = await query(
       `SELECT e.*, COALESCE(t.name, 'Unassigned') AS team_name
        FROM employees e
        LEFT JOIN teams t ON e.team_id = t.id
-       WHERE e.employer_id = $1 AND (e.id = $2 OR e.email = $3)`,
-      [employer_id, effectiveLoginId, effectiveLoginId]
+       WHERE e.employer_id = $1 AND (
+         UPPER(TRIM(e.id)) = UPPER($2)
+         OR LOWER(TRIM(e.email)) = LOWER($2)
+         OR TRIM(COALESCE(e.phone, '')) = $2
+         OR ($3 <> '' AND LENGTH($3) >= 10 AND REPLACE(REPLACE(REPLACE(COALESCE(e.phone, ''), ' ', ''), '-', ''), '+91', '') = $3)
+       )`,
+      [employer.id, effectiveLoginId, digitsOnly]
     );
     const employee = empRes.rows[0];
 
     if (!employee) {
-      attendanceService.logAudit('AUTH_FAILED_USER_NOT_FOUND', null, employer_id, 'EMPLOYEE_LOGIN', 'BLOCKED', { login_id: effectiveLoginId }, clientIp, userAgent);
+      attendanceService.logAudit('AUTH_FAILED_USER_NOT_FOUND', null, employer.id, 'EMPLOYEE_LOGIN', 'BLOCKED', { login_id: effectiveLoginId }, clientIp, userAgent);
       return res.status(401).json({ success: false, error: 'Invalid Employee ID or password.' });
     }
 
     const isMatch = authService.verifyPassword(password, employee.password) ||
       (employee.pin && authService.verifyPassword(password, employee.pin));
     if (!isMatch) {
-      attendanceService.logAudit('AUTH_FAILED_INVALID_PASSWORD', employee.id, employer_id, 'EMPLOYEE_LOGIN', 'BLOCKED', { login_id: effectiveLoginId }, clientIp, userAgent);
+      attendanceService.logAudit('AUTH_FAILED_INVALID_PASSWORD', employee.id, employer.id, 'EMPLOYEE_LOGIN', 'BLOCKED', { login_id: effectiveLoginId }, clientIp, userAgent);
       return res.status(401).json({ success: false, error: 'Invalid Employee ID or password.' });
     }
 
@@ -257,11 +272,11 @@ router.post('/auth/employee/login', authService.rateLimitMiddleware(authService.
     }
 
     if (!employee.is_active) {
-      attendanceService.logAudit('AUTH_FAILED_INACTIVE', employee.id, employer_id, 'EMPLOYEE_LOGIN', 'BLOCKED', {}, clientIp, userAgent);
+      attendanceService.logAudit('AUTH_FAILED_INACTIVE', employee.id, employer.id, 'EMPLOYEE_LOGIN', 'BLOCKED', {}, clientIp, userAgent);
       return res.status(403).json({ success: false, error: 'Account is deactivated. Please contact your employer administrator.' });
     }
 
-    attendanceService.logAudit('EMPLOYEE_LOGIN_SUCCESS', employee.id, employer_id, 'EMPLOYEE_LOGIN', 'SUCCESS', {}, clientIp, userAgent);
+    attendanceService.logAudit('EMPLOYEE_LOGIN_SUCCESS', employee.id, employer.id, 'EMPLOYEE_LOGIN', 'SUCCESS', {}, clientIp, userAgent);
 
     const session = await sessionService.createSession({
       sessionType: 'employee', userId: employee.id, employerId: employer.id, clientIp, userAgent
@@ -353,18 +368,18 @@ router.post('/auth/employee/signup', authService.rateLimitMiddleware(authService
       return res.status(400).json({ success: false, error: 'State must be specified when district is provided.' });
     }
 
-    const effectiveOrgId = employer_id || 'ORG-001';
-    let orgRes = await query('SELECT * FROM organizations WHERE id = $1', [effectiveOrgId]);
+    const cleanOrgId = String(employer_id || 'ORG-001').trim();
+    let orgRes = await query('SELECT * FROM organizations WHERE UPPER(id) = UPPER($1) OR UPPER(name) = UPPER($1)', [cleanOrgId]);
     if (orgRes.rows.length === 0) {
       await initSeed();
-      orgRes = await query('SELECT * FROM organizations WHERE id = $1', [effectiveOrgId]);
+      orgRes = await query('SELECT * FROM organizations WHERE UPPER(id) = UPPER($1) OR UPPER(name) = UPPER($1)', [cleanOrgId]);
     }
     const employer = orgRes.rows[0] || (await query('SELECT * FROM organizations WHERE id = $1', ['ORG-001'])).rows[0];
     if (!employer) return res.status(404).json({ success: false, error: 'Employer organization not found.' });
 
-    const newEmpId = manualEmpId || await generateEmployeeId(effectiveOrgId);
+    const newEmpId = manualEmpId ? manualEmpId.toUpperCase() : await generateEmployeeId(employer.id);
 
-    const existingByIdRes = await query('SELECT id, name FROM employees WHERE UPPER(id) = $1', [newEmpId.toUpperCase()]);
+    const existingByIdRes = await query('SELECT id, name FROM employees WHERE UPPER(TRIM(id)) = $1', [newEmpId.toUpperCase()]);
     if (existingByIdRes.rows.length > 0) {
       const ex = existingByIdRes.rows[0];
       return res.status(409).json({ success: false, error: `Employee ID '${ex.id}' is already registered. Please sign in or use a different ID.` });

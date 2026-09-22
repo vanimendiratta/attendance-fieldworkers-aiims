@@ -479,7 +479,12 @@ function checkSession() {
   state.sessionToken = null;
   DOM.loginModal.classList.add('active');
   switchAuthTab('signin');
-  switchSignInMethod('face');
+  const lastMethod = localStorage.getItem('attendance_last_auth_method') || 'face';
+  const lastId = localStorage.getItem('attendance_last_login_id');
+  if (lastId && DOM.loginEmployeeId) {
+    DOM.loginEmployeeId.value = lastId;
+  }
+  switchSignInMethod(lastMethod);
 }
 
 // State for authentication & biometrics
@@ -521,6 +526,7 @@ window.switchAuthTab = function(tab) {
 // Switch between Face Unlock and ID & Password
 window.switchSignInMethod = function(method) {
   currentSignInMethod = method;
+  try { localStorage.setItem('attendance_last_auth_method', method); } catch (_) {}
   DOM.loginErrorBanner.style.display = 'none';
   const btnFace = document.getElementById('btnMethodFace');
   const btnCreds = document.getElementById('btnMethodCreds');
@@ -539,6 +545,12 @@ window.switchSignInMethod = function(method) {
     methodCreds.style.display = 'block';
     methodFace.style.display = 'none';
     stopFaceLoginCamera();
+    try {
+      const lastId = localStorage.getItem('attendance_last_login_id');
+      if (lastId && DOM.loginEmployeeId && !DOM.loginEmployeeId.value) {
+        DOM.loginEmployeeId.value = lastId;
+      }
+    } catch (_) {}
   }
 };
 
@@ -1172,6 +1184,12 @@ DOM.employeeLoginForm.addEventListener('submit', async (e) => {
       employer: data.employer
     };
     localStorage.setItem('apex_employee_session', JSON.stringify(sessionData));
+    try {
+      if (data.employee && data.employee.id) {
+        localStorage.setItem('attendance_last_login_id', data.employee.id);
+      }
+      localStorage.setItem('attendance_last_auth_method', 'creds');
+    } catch (_) {}
 
     submitBtn.disabled = false;
     submitBtn.textContent = 'Sign In';
@@ -1420,6 +1438,9 @@ function setupLoggedInState(sessionData) {
   state.sessionToken = sessionData.token || null;
   state.currentEmployee = sessionData.employee;
   state.currentEmployer = sessionData.employer;
+  if (sessionData.employee && sessionData.employee.id) {
+    try { localStorage.setItem('attendance_last_login_id', sessionData.employee.id); } catch (_) {}
+  }
   if (sessionData.employer) {
     state.orgConfig = sessionData.employer;
     updateDistanceDisplay();
