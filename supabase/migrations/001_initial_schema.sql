@@ -103,6 +103,18 @@ CREATE TABLE IF NOT EXISTS attendance (
     state                       TEXT,
     district                    TEXT,
 
+    punch_location_type         TEXT             DEFAULT 'FIELD_SITE',
+    hotel_stay_id               TEXT,
+    hotel_name                  TEXT,
+    hotel_room                  TEXT,
+    hotel_phone                 TEXT,
+    location_place_name         TEXT,
+    location_place_type         TEXT,
+    exact_coordinates_url       TEXT,
+    is_regularized              INTEGER          DEFAULT 0,
+    regularized_by              TEXT,
+    regularization_notes        TEXT,
+
     idempotency_key             TEXT,
     redcap_sync_status          TEXT             DEFAULT 'PENDING',
     redcap_synced_at            TEXT,
