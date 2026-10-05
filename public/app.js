@@ -109,6 +109,7 @@ const DOM = {
   tlBadgeCheckin: document.getElementById('tlBadgeCheckin'),
   tlTimeCheckout: document.getElementById('tlTimeCheckout'),
   tlDescCheckout: document.getElementById('tlDescCheckout'),
+  tlBadgeCheckout: document.getElementById('tlBadgeCheckout'),
 
   // Office sync elements
   textOfficeLocationLabel: document.getElementById('textOfficeLocationLabel'),
@@ -323,10 +324,18 @@ function initGeolocation() {
   }
 
   const successHandler = (pos) => {
-    // Only update state if this reading is more accurate than what we already have
-    if (pos.coords.accuracy < bestAccuracy) {
-      bestAccuracy = pos.coords.accuracy;
-      applyFix(pos.coords);
+    const coords = pos?.coords;
+    if (!coords) return;
+    const prevLat = state.currentGps.latitude;
+    const prevLng = state.currentGps.longitude;
+    const movedMeters = (prevLat && prevLng) ? calculateDistance(prevLat, prevLng, coords.latitude, coords.longitude) : 9999;
+
+    // Apply fix if first fix, if moved > 30m, if accuracy improved, or if within acceptable accuracy
+    if (movedMeters > 30 || coords.accuracy < bestAccuracy || coords.accuracy <= 100 || !state.currentGps.latitude) {
+      if (coords.accuracy < bestAccuracy || movedMeters > 30) {
+        bestAccuracy = coords.accuracy;
+      }
+      applyFix(coords);
     }
   };
 
@@ -375,6 +384,49 @@ function initGeolocation() {
       maximumAge: 5000
     });
   }, 12000);
+}
+
+/**
+ * Request immediate fresh GPS fix from hardware sensor without using cache
+ */
+function requestFreshGpsFix() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      if (pos && pos.coords) {
+        state.currentGps.latitude = pos.coords.latitude;
+        state.currentGps.longitude = pos.coords.longitude;
+        state.currentGps.accuracy = Math.round(pos.coords.accuracy);
+        state.currentGps.status = 'ACTIVE';
+
+        if (pos.coords.accuracy <= 25) {
+          DOM.chipGpsStatus.className = 'badge badge-success';
+          DOM.textGpsStatus.textContent = `GPS Accurate (±${state.currentGps.accuracy}m)`;
+        } else if (pos.coords.accuracy <= 100) {
+          DOM.chipGpsStatus.className = 'badge badge-warning';
+          DOM.textGpsStatus.textContent = `Acquiring GPS (±${state.currentGps.accuracy}m)`;
+        }
+
+        if (DOM.hudGpsBadge) {
+          DOM.hudGpsBadge.innerHTML = `${
+            window.Icons ? window.Icons.render('check', { size: 12 }) : ''
+          } <span>GPS: ±${state.currentGps.accuracy}m · ${
+            state.currentGps.latitude.toFixed(4)}°, ${state.currentGps.longitude.toFixed(4)}°</span>`;
+        }
+
+        fetchResolvedAddress(pos.coords.latitude, pos.coords.longitude);
+        updateDistanceDisplay();
+      }
+    },
+    (err) => {
+      console.warn('Fresh GPS fix attempt notice:', err?.message);
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 8000,
+      maximumAge: 0
+    }
+  );
 }
 
 
@@ -1939,6 +1991,9 @@ function renderReadyToCheckInState() {
 
   DOM.tlTimeCheckout.textContent = '--:--';
   DOM.tlDescCheckout.textContent = 'Awaiting shift completion';
+  if (DOM.tlBadgeCheckout) {
+    DOM.tlBadgeCheckout.textContent = 'Fresh photo and location required';
+  }
 }
 
 function renderWorkingState() {
@@ -2075,6 +2130,19 @@ function renderShiftCompletedState(record, isCompletedToday = false) {
   DOM.tlDescCheckout.textContent = isTravel
     ? 'Official Travel Check-out recorded'
     : (isField ? 'Field Work Check-out recorded' : 'Office Check-out recorded');
+
+  if (DOM.tlBadgeCheckout) {
+    const checkoutPinUrl = (record.checkout_lat != null && record.checkout_lng != null)
+      ? `https://www.google.com/maps?q=${Number(record.checkout_lat).toFixed(6)},${Number(record.checkout_lng).toFixed(6)}&t=k`
+      : '';
+    const locDisplay = record.checkout_address || (record.checkout_lat != null ? `${Number(record.checkout_lat).toFixed(4)}°, ${Number(record.checkout_lng).toFixed(4)}°` : 'Location Verified');
+    const accDisplay = record.checkout_accuracy ? ` · ±${record.checkout_accuracy}m` : '';
+    const pinLinkHtml = checkoutPinUrl
+      ? `<a href="${checkoutPinUrl}" target="_blank" rel="noopener noreferrer" class="exact-map-pin-link" style="margin-left: 6px; display: inline-flex;" title="View Google Maps Satellite Pin"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg><span>Pin</span></a>`
+      : '';
+
+    DOM.tlBadgeCheckout.innerHTML = `${window.Icons ? window.Icons.render('check', { size: 11 }) : ''} <span>${escapeHtml(locDisplay)}${accDisplay}</span>${pinLinkHtml}`;
+  }
 }
 
 /**
@@ -2147,6 +2215,7 @@ DOM.btnEndBreak.addEventListener('click', async () => {
 async function openCaptureModal(flowMode) {
   state.flowMode = flowMode;
   state.capturedPhotoBase64 = null;
+  requestFreshGpsFix();
 
   if (DOM.modalFeedbackBox) {
     DOM.modalFeedbackBox.style.display = 'none';
@@ -2411,6 +2480,7 @@ DOM.btnConfirmSubmission.addEventListener('click', async () => {
       longitude: state.currentGps.longitude || 77.2136,
       accuracy: state.currentGps.accuracy || 35.0,
       client_timestamp: new Date().toISOString(),
+      address: state.resolvedAddress || null,
       idempotency_key: idempotencyKey,
       work_mode: state.workMode || 'FIELD_WORK',
       field_site_notes: DOM.inputFieldSiteNotes ? DOM.inputFieldSiteNotes.value.trim() : null,

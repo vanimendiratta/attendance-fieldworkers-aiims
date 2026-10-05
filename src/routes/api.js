@@ -941,7 +941,7 @@ router.post('/attendance/break/end', requireAuthenticatedEmployee, async (req, r
 // ---------------------------------------------------------------------------
 router.post('/attendance/check-out', requireAuthenticatedEmployee, async (req, res) => {
   try {
-    const { photo, latitude, longitude, accuracy, client_timestamp } = req.body;
+    const { photo, latitude, longitude, accuracy, client_timestamp, address } = req.body;
     if (!photo) return res.status(400).json({ success: false, error: 'Real-time live camera photo is required for checkout.' });
     if (latitude === undefined || longitude === undefined || accuracy === undefined) {
       return res.status(400).json({ success: false, error: 'Real-time device geolocation (latitude, longitude, accuracy) is required.' });
@@ -951,7 +951,7 @@ router.post('/attendance/check-out', requireAuthenticatedEmployee, async (req, r
 
     const result = await attendanceService.processCheckOut({
       employee: req.employee, photoData: photo, latitude, longitude, accuracy,
-      clientTimestamp: client_timestamp, clientIp, userAgent
+      clientTimestamp: client_timestamp, clientAddress: address, clientIp, userAgent
     });
     res.json({ success: true, ...result });
   } catch (err) { res.status(400).json({ success: false, error: err.message }); }
@@ -1034,7 +1034,8 @@ async function getFilteredAttendanceRecords({ employerId, employee_id, work_mode
       LOWER(COALESCE(a.state, e.state, t.state, '')) LIKE $${n} OR
       LOWER(COALESCE(a.district, e.district, t.district, '')) LIKE $${n} OR
       LOWER(COALESCE(a.field_site_notes, '')) LIKE $${n} OR
-      LOWER(COALESCE(a.checkin_address, '')) LIKE $${n}
+      LOWER(COALESCE(a.checkin_address, '')) LIKE $${n} OR
+      LOWER(COALESCE(a.checkout_address, '')) LIKE $${n}
     )`;
   }
 

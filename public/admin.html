@@ -456,13 +456,14 @@
                     <th>Check-In Location</th>
                     <th>Checkout Time</th>
                     <th>Checkout Photo</th>
+                    <th>Checkout Location</th>
                     <th>Net Working Hours</th>
                     <th>Status</th>
                     <th style="text-align: right;">Actions</th>
                   </tr>
                 </thead>
                 <tbody id="attendanceMainTableBody">
-                  <tr><td colspan="11" style="text-align: center; color: var(--color-text-muted); padding: 32px;">Loading attendance records...</td></tr>
+                  <tr><td colspan="12" style="text-align: center; color: var(--color-text-muted); padding: 32px;">Loading attendance records...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -1254,9 +1255,6 @@
           </div>
 
           <div class="drawer-map-container" id="drawerMap"></div>
-          <div style="font-size: 12px; color: var(--color-text-tertiary); margin-top: 10px;" id="drwAddressText">
-            Coordinates: --
-          </div>
 
           <div id="drwHotelStayDetailsBlock" style="display: none; margin-top: 10px; padding: 10px 12px; background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 6px;">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
@@ -1269,11 +1267,31 @@
             <div style="font-size: 12px; font-weight: 600; color: #1e1b4b;" id="drwHotelName">--</div>
             <div style="font-size: 11px; color: #4338ca; margin-top: 2px;" id="drwHotelPhone">Reception: --</div>
           </div>
-          <div style="margin-top: 8px;">
-            <a id="drwGoogleMapsLink" href="#" target="_blank" rel="noopener noreferrer" class="exact-map-pin-link" style="display: inline-flex;" title="Open in Google Maps Satellite View">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-              <span id="drwCoordsText">Open Google Maps Satellite Pin</span>
-            </a>
+
+          <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px;">
+            <!-- Check-in Location Card -->
+            <div style="background: #f8fafc; border: 1px solid var(--color-border-subtle); border-radius: 8px; padding: 10px 12px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                <div style="font-size: 11px; font-weight: 700; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Check-In Location</div>
+                <a id="drwGoogleMapsLink" href="#" target="_blank" rel="noopener noreferrer" class="exact-map-pin-link" style="display: inline-flex; font-size: 11px;" title="Open in Google Maps Satellite View">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                  <span id="drwCoordsText">Satellite Pin</span>
+                </a>
+              </div>
+              <div style="font-size: 12px; color: var(--color-text-primary); font-weight: 500; line-height: 1.4;" id="drwAddressText">Coordinates: --</div>
+            </div>
+
+            <!-- Check-out Location Card -->
+            <div id="drwCheckoutLocationBlock" style="display: none; background: #f8fafc; border: 1px solid var(--color-border-subtle); border-radius: 8px; padding: 10px 12px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                <div style="font-size: 11px; font-weight: 700; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Check-Out Location</div>
+                <a id="drwCheckoutGoogleMapsLink" href="#" target="_blank" rel="noopener noreferrer" class="exact-map-pin-link" style="display: inline-flex; font-size: 11px;" title="Open in Google Maps Satellite View">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                  <span id="drwCheckoutCoordsText">Satellite Pin</span>
+                </a>
+              </div>
+              <div style="font-size: 12px; color: var(--color-text-primary); font-weight: 500; line-height: 1.4;" id="drwCheckoutAddressText">Coordinates: --</div>
+            </div>
           </div>
         </div>
 

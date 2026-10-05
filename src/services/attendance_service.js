@@ -435,7 +435,7 @@ class AttendanceService {
   // ---------------------------------------------------------------------------
   async processCheckOut({
     employee, photoData, latitude, longitude, accuracy,
-    clientTimestamp, clientIp, userAgent
+    clientTimestamp, clientAddress, clientIp, userAgent
   }) {
     if (!employee || !employee.id) throw new Error('Authentication required.');
 
@@ -495,7 +495,10 @@ class AttendanceService {
     // Anomaly + timestamps
     const anomalyCheck          = geoService.checkLocationAnomalies(session, lat, lng, new Date().toISOString());
     const checkoutServerTimestamp = new Date().toISOString();
-    const reverseAddress          = await geoService.reverseGeocode(lat, lng);
+    let reverseAddress          = await geoService.reverseGeocode(lat, lng);
+    if ((!reverseAddress || reverseAddress.startsWith('Field Coordinates')) && clientAddress && typeof clientAddress === 'string' && clientAddress.trim()) {
+      reverseAddress = clientAddress.trim();
+    }
 
     // Working hours
     const checkinTimeMs      = new Date(session.checkin_server_timestamp).getTime();

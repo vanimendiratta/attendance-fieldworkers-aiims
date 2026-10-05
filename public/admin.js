@@ -970,6 +970,33 @@ function renderDailyAttendanceTables(records) {
           <td>${locationHtml}</td>
           <td style="font-family: var(--font-mono); font-size: 12px; white-space: nowrap;">${checkoutTime}</td>
           <td>${checkoutPhoto}</td>
+          <td>
+            ${(() => {
+              if (!r.checkout_server_timestamp) {
+                return '<span style="color: var(--color-text-muted); font-size: 12px;">--</span>';
+              }
+              const checkoutPinUrl = (r.checkout_lat != null && r.checkout_lng != null)
+                ? `https://www.google.com/maps?q=${Number(r.checkout_lat).toFixed(6)},${Number(r.checkout_lng).toFixed(6)}&t=k`
+                : '';
+              const checkoutPinHtml = checkoutPinUrl ? `
+                <div style="margin-top: 3px;">
+                  <a href="${checkoutPinUrl}" target="_blank" rel="noopener noreferrer" class="exact-map-pin-link" onclick="event.stopPropagation();" title="View exact checkout GPS pin in Google Maps Satellite view">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                    <span>${Number(r.checkout_lat).toFixed(5)}°, ${Number(r.checkout_lng).toFixed(5)}°</span>
+                  </a>
+                </div>
+              ` : '';
+              const addrText = r.checkout_address || (r.checkout_lat != null ? `${Number(r.checkout_lat).toFixed(4)}°, ${Number(r.checkout_lng).toFixed(4)}°` : 'Checkout Recorded');
+              const accText = r.checkout_accuracy ? `±${r.checkout_accuracy}m accuracy` : 'Recorded';
+              return `
+                <div style="font-size: 11px; color: var(--color-text-primary); font-weight: 500; max-width: 210px; white-space: normal; line-height: 1.3;">
+                  ${escapeHtml(addrText)}
+                </div>
+                <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">${escapeHtml(accText)}</div>
+                ${checkoutPinHtml}
+              `;
+            })()}
+          </td>
           <td style="white-space: nowrap;">
             <div style="display: inline-flex; align-items: center; gap: 4px;">
               ${hoursMeta.badgeHtml}
@@ -1063,6 +1090,7 @@ function renderDailyAttendanceTables(records) {
                 <th>Location / Lodging / Map</th>
                 <th>Checkout</th>
                 <th>Checkout Photo</th>
+                <th>Checkout Location</th>
                 <th>Working Hours</th>
                 <th>Status</th>
                 <th style="text-align: right;">Actions</th>
@@ -1116,7 +1144,7 @@ function renderAttendanceTable(records) {
   if (!tbody) return;
 
   if (records.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; color: var(--color-text-muted); padding: 32px;">No matching attendance records found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; color: var(--color-text-muted); padding: 32px;">No matching attendance records found.</td></tr>`;
     return;
   }
 
@@ -1251,6 +1279,35 @@ function renderAttendanceTable(records) {
         </td>
         <td style="font-family: var(--font-mono);">${checkoutTime}</td>
         <td>${checkoutPhoto}</td>
+        <td>
+          ${(() => {
+            if (!r.checkout_server_timestamp) {
+              return '<span style="color: var(--color-text-muted); font-size: 12px;">--</span>';
+            }
+            const checkoutPinUrl = (r.checkout_lat != null && r.checkout_lng != null)
+              ? `https://www.google.com/maps?q=${Number(r.checkout_lat).toFixed(6)},${Number(r.checkout_lng).toFixed(6)}&t=k`
+              : '';
+            const checkoutPinHtml = checkoutPinUrl ? `
+              <div style="margin-top: 3px;">
+                <a href="${checkoutPinUrl}" target="_blank" rel="noopener noreferrer" class="exact-map-pin-link" onclick="event.stopPropagation();" title="View exact checkout GPS pin in Google Maps Satellite view">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                  <span>${Number(r.checkout_lat).toFixed(5)}°, ${Number(r.checkout_lng).toFixed(5)}°</span>
+                </a>
+              </div>
+            ` : '';
+
+            const addrText = r.checkout_address || (r.checkout_lat != null ? `${Number(r.checkout_lat).toFixed(4)}°, ${Number(r.checkout_lng).toFixed(4)}°` : 'Checkout Recorded');
+            const accText = r.checkout_accuracy ? `±${r.checkout_accuracy}m accuracy` : 'Recorded';
+
+            return `
+              <div style="font-size: 11px; color: var(--color-text-primary); font-weight: 500; max-width: 210px; white-space: normal; line-height: 1.3;">
+                ${escapeHtml(addrText)}
+              </div>
+              <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">${escapeHtml(accText)}</div>
+              ${checkoutPinHtml}
+            `;
+          })()}
+        </td>
         <td style="white-space: nowrap;">
           <div style="display: inline-flex; align-items: center; gap: 4px;">
             ${hoursMeta.badgeHtml}
@@ -1422,10 +1479,38 @@ async function openAttendanceDrawer(recordId) {
       mapLinkEl.href = pinUrl;
       mapLinkEl.style.display = 'inline-flex';
       if (coordsTextEl) {
-        coordsTextEl.textContent = `Satellite Map Pin: ${Number(record.checkin_lat).toFixed(5)}°, ${Number(record.checkin_lng).toFixed(5)}°`;
+        coordsTextEl.textContent = `Check-In Pin (${Number(record.checkin_lat).toFixed(4)}°, ${Number(record.checkin_lng).toFixed(4)}°)`;
       }
     } else if (mapLinkEl) {
       mapLinkEl.style.display = 'none';
+    }
+
+    // Checkout Location in Drawer
+    const checkoutLocBlock = document.getElementById('drwCheckoutLocationBlock');
+    const checkoutAddrEl = document.getElementById('drwCheckoutAddressText');
+    const checkoutMapLinkEl = document.getElementById('drwCheckoutGoogleMapsLink');
+    const checkoutCoordsTextEl = document.getElementById('drwCheckoutCoordsText');
+
+    if (checkoutLocBlock) {
+      if (record.checkout_server_timestamp && (record.checkout_address || record.checkout_lat != null)) {
+        checkoutLocBlock.style.display = 'block';
+        if (checkoutAddrEl) {
+          const addr = record.checkout_address || (record.checkout_lat != null ? `Coordinates: ${Number(record.checkout_lat).toFixed(5)}° N, ${Number(record.checkout_lng).toFixed(5)}° E` : 'Coordinates unspecified');
+          const accStr = record.checkout_accuracy ? ` · ±${record.checkout_accuracy}m accuracy` : '';
+          checkoutAddrEl.textContent = `${addr}${accStr}`;
+        }
+        if (checkoutMapLinkEl && record.checkout_lat != null && record.checkout_lng != null) {
+          checkoutMapLinkEl.href = `https://www.google.com/maps?q=${Number(record.checkout_lat).toFixed(6)},${Number(record.checkout_lng).toFixed(6)}&t=k`;
+          checkoutMapLinkEl.style.display = 'inline-flex';
+          if (checkoutCoordsTextEl) {
+            checkoutCoordsTextEl.textContent = `Check-Out Pin (${Number(record.checkout_lat).toFixed(4)}°, ${Number(record.checkout_lng).toFixed(4)}°)`;
+          }
+        } else if (checkoutMapLinkEl) {
+          checkoutMapLinkEl.style.display = 'none';
+        }
+      } else {
+        checkoutLocBlock.style.display = 'none';
+      }
     }
 
     // Breaks list
@@ -1477,9 +1562,17 @@ function renderDrawerMap(record) {
     drawerMapInstance = null;
   }
 
+  const hasCheckin = record.checkin_lat != null && record.checkin_lng != null;
+  const hasCheckout = record.checkout_lat != null && record.checkout_lng != null;
+
+  if (!hasCheckin && !hasCheckout) return;
+
+  const centerLat = hasCheckin ? record.checkin_lat : record.checkout_lat;
+  const centerLng = hasCheckin ? record.checkin_lng : record.checkout_lng;
+
   drawerMapInstance = L.map(mapContainer, {
-    center: [record.checkin_lat, record.checkin_lng],
-    zoom: 16,
+    center: [centerLat, centerLng],
+    zoom: 15,
     zoomControl: false,
     attributionControl: false
   });
@@ -1497,17 +1590,48 @@ function renderDrawerMap(record) {
     }).addTo(drawerMapInstance);
   }
 
-  // Checkin Pin
-  const isTravel = record.work_mode === 'TRAVEL';
-  const isField = record.work_mode === 'FIELD_WORK';
-  const popupHtml = isTravel
-    ? `<b>${record.employee_name}</b><br><span style="color:#be185d;font-weight:600;display:inline-flex;align-items:center;gap:4px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg> <span>Official Travel / Transit</span></span>${record.field_site_notes ? ': ' + escapeHtml(record.field_site_notes) : ''}<br><small>${record.checkin_address || ''}</small><br>Accuracy: ±${record.checkin_accuracy}m`
-    : (isField
-      ? `<b>${record.employee_name}</b><br><span style="color:#0284c7;font-weight:600;display:inline-flex;align-items:center;gap:4px;">${window.Icons ? window.Icons.render('car', { size: 11 }) : ''} <span>Field Work</span></span>${record.field_site_notes ? ': ' + escapeHtml(record.field_site_notes) : ''}<br><small>${record.checkin_address || ''}</small><br>Accuracy: ±${record.checkin_accuracy}m`
-      : `<b>${record.employee_name}</b><br>${record.checkin_address || 'Office'}<br>Accuracy: ±${record.checkin_accuracy}m`);
+  const markers = [];
 
-  L.marker([record.checkin_lat, record.checkin_lng]).addTo(drawerMapInstance)
-    .bindPopup(popupHtml).openPopup();
+  // Check-In Pin
+  if (hasCheckin) {
+    const isTravel = record.work_mode === 'TRAVEL';
+    const isField = record.work_mode === 'FIELD_WORK';
+    const checkinPopup = isTravel
+      ? `<b>Check-In: ${escapeHtml(record.employee_name)}</b><br><span style="color:#be185d;font-weight:600;display:inline-flex;align-items:center;gap:4px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg> <span>Official Travel / Transit</span></span>${record.field_site_notes ? ': ' + escapeHtml(record.field_site_notes) : ''}<br><small>${escapeHtml(record.checkin_address || '')}</small><br>Accuracy: ±${record.checkin_accuracy}m`
+      : (isField
+        ? `<b>Check-In: ${escapeHtml(record.employee_name)}</b><br><span style="color:#0284c7;font-weight:600;display:inline-flex;align-items:center;gap:4px;">${window.Icons ? window.Icons.render('car', { size: 11 }) : ''} <span>Field Work</span></span>${record.field_site_notes ? ': ' + escapeHtml(record.field_site_notes) : ''}<br><small>${escapeHtml(record.checkin_address || '')}</small><br>Accuracy: ±${record.checkin_accuracy}m`
+        : `<b>Check-In: ${escapeHtml(record.employee_name)}</b><br>${escapeHtml(record.checkin_address || 'Office')}<br>Accuracy: ±${record.checkin_accuracy}m`);
+
+    const checkinMarker = L.marker([record.checkin_lat, record.checkin_lng]).addTo(drawerMapInstance)
+      .bindPopup(checkinPopup);
+    markers.push(checkinMarker);
+  }
+
+  // Check-Out Pin
+  if (hasCheckout) {
+    const checkoutPopup = `<b>Check-Out: ${escapeHtml(record.employee_name)}</b><br><small>${escapeHtml(record.checkout_address || 'Checkout Recorded')}</small><br>Accuracy: ±${record.checkout_accuracy || 0}m`;
+    const checkoutMarker = L.marker([record.checkout_lat, record.checkout_lng]).addTo(drawerMapInstance)
+      .bindPopup(checkoutPopup);
+    markers.push(checkoutMarker);
+  }
+
+  // If both checkin and checkout exist, draw connecting dashed route polyline and fit bounds
+  if (hasCheckin && hasCheckout) {
+    const routeLine = L.polyline([
+      [record.checkin_lat, record.checkin_lng],
+      [record.checkout_lat, record.checkout_lng]
+    ], {
+      color: '#4f46e5',
+      weight: 3,
+      dashArray: '6, 6',
+      opacity: 0.85
+    }).addTo(drawerMapInstance);
+
+    const group = L.featureGroup([...markers, routeLine]);
+    drawerMapInstance.fitBounds(group.getBounds().pad(0.25));
+  } else if (markers.length > 0) {
+    markers[0].openPopup();
+  }
 }
 
 function escapeHtml(str) {
