@@ -492,88 +492,10 @@
       </div>
 
       <!-- ========================================================
-           TAB 1: SIGN IN VIEW (Face Recognition or ID & Password)
+           TAB 1: SIGN IN VIEW (ID & Password)
            ======================================================== -->
       <div id="authSignInPanel">
-        <!-- Sign-in Mode Selector -->
-        <div class="signin-method-toggle">
-          <button type="button" class="signin-method-btn active" id="btnMethodFace" onclick="switchSignInMethod('face')">
-            <span class="ui-icon ui-icon-sm" style="margin-right: 6px;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/><path d="M9 9h.01"/><path d="M15 9h.01"/></svg></span>
-            <span>Face Recognition</span>
-          </button>
-          <button type="button" class="signin-method-btn" id="btnMethodCreds" onclick="switchSignInMethod('creds')">
-            <span class="ui-icon ui-icon-sm" style="margin-right: 6px;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg></span>
-            <span>ID & Password</span>
-          </button>
-        </div>
-
-        <!-- 1A: Mobile Screenlock Face Recognition View -->
-        <div id="signInFaceMethod" class="screenlock-container">
-          <!-- Animated Lock Header -->
-          <div class="screenlock-padlock" id="screenlockPadlock">
-            <svg id="screenlockPadlockSvg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-            </svg>
-          </div>
-          <h2 style="font-size: 18px; font-weight: 700; color: var(--color-text-primary); margin-bottom: 2px;">Face Unlock</h2>
-          <p style="font-size: 13px; color: var(--color-text-tertiary); margin-bottom: 10px;">Look directly into the scanner to unlock your workspace</p>
-
-          <!-- Circular Biometric Scanner Viewfinder -->
-          <div class="screenlock-scanner-frame" id="screenlockScannerFrame">
-            <video id="faceLoginVideo" autoplay playsinline muted></video>
-            <canvas id="faceLoginCanvas" width="128" height="128" style="display: none;"></canvas>
-
-            <!-- Sweeping Laser Beam -->
-            <div class="screenlock-laser-beam active" id="screenlockLaser"></div>
-
-            <!-- 4 Corner Biometric Reticles -->
-            <div class="reticle-corner corner-tl"></div>
-            <div class="reticle-corner corner-tr"></div>
-            <div class="reticle-corner corner-bl"></div>
-            <div class="reticle-corner corner-br"></div>
-          </div>
-
-          <!-- Dynamic Status Badge -->
-          <div class="screenlock-status-badge" id="screenlockStatusBadge">
-            <span class="pulse-dot" id="screenlockDot"></span>
-            <span id="screenlockStatusText">Position face in circle...</span>
-          </div>
-
-          <!-- Camera Inversion / Flip Toggle Button -->
-          <button id="btnFlipFaceLoginCamera" type="button" class="screenlock-flip-btn" title="Flip / Invert camera horizontally" aria-label="Flip camera view">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
-            <span>Flip Camera</span>
-          </button>
-
-          <!-- Employer Selection for Scoped Matching -->
-          <div style="width: 100%; margin-bottom: 10px; text-align: left;">
-            <label class="form-label" style="font-size: 11px; margin-bottom: 4px;">Organization</label>
-            <select id="faceLoginOrgSelect" class="form-select" style="font-size: 12px; padding: 6px 10px;">
-              <option value="ORG-001">AIIMS</option>
-            </select>
-          </div>
-
-          <!-- Optional Employee ID for 1:1 Direct Verification -->
-          <div style="width: 100%; margin-bottom: 12px; text-align: left;">
-            <label class="form-label" for="faceLoginEmployeeId" style="font-size: 11px; margin-bottom: 4px;">Employee ID or Corporate Email (Optional)</label>
-            <input type="text" id="faceLoginEmployeeId" class="form-input" placeholder="e.g. EMP-1001 (leave blank for automatic scan)" style="font-size: 12px; padding: 7px 10px;">
-          </div>
-
-          <!-- Action Button -->
-          <div style="display: flex; gap: 8px; width: 100%;">
-            <button type="button" class="btn btn-primary" id="btnTriggerFaceScan" style="flex: 1; padding: 9px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
-              <span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>
-              <span>Scan & Unlock</span>
-            </button>
-            <button type="button" class="btn btn-secondary" onclick="switchSignInMethod('creds')" style="font-size: 12px; padding: 9px 12px;">
-              <span>Use Password</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- 1B: Traditional ID & Password View -->
-        <div id="signInCredsMethod" style="display: none;">
+        <div id="signInCredsMethod">
           <div style="text-align: center; margin-bottom: 20px;">
             <div class="brand-avatar" style="margin: 0 auto 10px; width: 40px; height: 40px; font-size: 18px;">A</div>
             <h2 style="font-size: 17px; font-weight: 700; color: var(--color-text-primary);">Employee Workspace Sign In</h2>
@@ -844,6 +766,6 @@
     };
   </script>
   <script src="./face_biometric_client.js?v=3"></script>
-  <script src="./app.js?v=18"></script>
+  <script src="./app.js?v=19"></script>
 </body>
 </html>

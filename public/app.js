@@ -531,12 +531,11 @@ function checkSession() {
   state.sessionToken = null;
   DOM.loginModal.classList.add('active');
   switchAuthTab('signin');
-  const lastMethod = localStorage.getItem('attendance_last_auth_method') || 'face';
   const lastId = localStorage.getItem('attendance_last_login_id');
   if (lastId && DOM.loginEmployeeId) {
     DOM.loginEmployeeId.value = lastId;
   }
-  switchSignInMethod(lastMethod);
+  switchSignInMethod('creds');
 }
 
 // State for authentication & biometrics
@@ -545,7 +544,7 @@ let faceScanInterval = null;
 let signupCameraStream = null;
 let enrolledSignupFace = { photo: null, descriptor: null };
 let currentAuthTab = 'signin';
-let currentSignInMethod = 'face';
+let currentSignInMethod = 'creds';
 
 // Switch between Sign In and Sign Up tabs
 window.switchAuthTab = function(tab) {
@@ -562,9 +561,7 @@ window.switchAuthTab = function(tab) {
     panelSignIn.style.display = 'block';
     panelSignUp.style.display = 'none';
     stopSignupCamera();
-    if (currentSignInMethod === 'face') {
-      startFaceLoginCamera();
-    }
+    stopFaceLoginCamera();
   } else {
     tabSignUp.classList.add('active');
     tabSignIn.classList.remove('active');
@@ -575,35 +572,20 @@ window.switchAuthTab = function(tab) {
   }
 };
 
-// Switch between Face Unlock and ID & Password
+// Exclusively use ID & Password Sign In
 window.switchSignInMethod = function(method) {
-  currentSignInMethod = method;
-  try { localStorage.setItem('attendance_last_auth_method', method); } catch (_) {}
+  currentSignInMethod = 'creds';
+  try { localStorage.setItem('attendance_last_auth_method', 'creds'); } catch (_) {}
   DOM.loginErrorBanner.style.display = 'none';
-  const btnFace = document.getElementById('btnMethodFace');
-  const btnCreds = document.getElementById('btnMethodCreds');
-  const methodFace = document.getElementById('signInFaceMethod');
+  stopFaceLoginCamera();
   const methodCreds = document.getElementById('signInCredsMethod');
-
-  if (method === 'face') {
-    btnFace.classList.add('active');
-    btnCreds.classList.remove('active');
-    methodFace.style.display = 'flex';
-    methodCreds.style.display = 'none';
-    startFaceLoginCamera();
-  } else {
-    btnCreds.classList.add('active');
-    btnFace.classList.remove('active');
-    methodCreds.style.display = 'block';
-    methodFace.style.display = 'none';
-    stopFaceLoginCamera();
-    try {
-      const lastId = localStorage.getItem('attendance_last_login_id');
-      if (lastId && DOM.loginEmployeeId && !DOM.loginEmployeeId.value) {
-        DOM.loginEmployeeId.value = lastId;
-      }
-    } catch (_) {}
-  }
+  if (methodCreds) methodCreds.style.display = 'block';
+  try {
+    const lastId = localStorage.getItem('attendance_last_login_id');
+    if (lastId && DOM.loginEmployeeId && !DOM.loginEmployeeId.value) {
+      DOM.loginEmployeeId.value = lastId;
+    }
+  } catch (_) {}
 };
 
 // Start Face Recognition Camera for Screenlock Login
@@ -1483,7 +1465,7 @@ DOM.btnLogoutEmployee.addEventListener('click', async () => {
 
   DOM.loginModal.classList.add('active');
   switchAuthTab('signin');
-  switchSignInMethod('face');
+  switchSignInMethod('creds');
 });
 
 function setupLoggedInState(sessionData) {
