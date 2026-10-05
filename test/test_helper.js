@@ -97,10 +97,14 @@ async function applySchema() {
 
   const migrationPath = path.join(__dirname, '../supabase/migrations/001_initial_schema.sql');
   const migrationSql  = fs.readFileSync(migrationPath, 'utf8');
-
-  // Execute migration script
   await pool.query(migrationSql);
-  console.log('✓ Applied 001_initial_schema.sql to test database');
+
+  const migration2Path = path.join(__dirname, '../supabase/migrations/002_leaves_and_regularization.sql');
+  if (fs.existsSync(migration2Path)) {
+    const migration2Sql = fs.readFileSync(migration2Path, 'utf8');
+    await pool.query(migration2Sql);
+  }
+  console.log('✓ Applied schema migrations (001, 002) to test database');
 }
 
 /**

@@ -502,14 +502,150 @@
           </div>
         </section>
 
-        <!-- VIEW 4: LEAVE & SHIFTS PLACEHOLDERS (Clean, Enterprise) -->
+        <!-- VIEW 4: LEAVE & UNMARKED FIELD WORKERS ATTENDANCE REGULARIZATION -->
         <section id="viewLeave" class="admin-view-panel" style="display: none;">
-          <div class="surface-card" style="padding: 32px; text-align: center;">
-            <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 6px;">Leave Management</h3>
-            <p style="font-size: 13px; color: var(--color-text-tertiary); max-width: 480px; margin: 0 auto 20px;">
-              Manage employee annual leave, sick leave requests, and approved absences.
-            </p>
-            <div class="badge badge-neutral">Standard Shift Calendar Active</div>
+          <!-- Top Metric Cards -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px;">
+            <div class="surface-card" style="padding: 16px 20px;">
+              <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-tertiary); margin-bottom: 4px;">Total Field Workforce</div>
+              <div id="metricLeaveTotalStaff" style="font-size: 24px; font-weight: 700; color: var(--color-text-primary);">--</div>
+              <div style="font-size: 11px; color: var(--color-text-secondary); margin-top: 4px;">Active assigned personnel</div>
+            </div>
+            <div class="surface-card" style="padding: 16px 20px;">
+              <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: #047857; margin-bottom: 4px;">Verified Present</div>
+              <div id="metricLeavePresent" style="font-size: 24px; font-weight: 700; color: #059669;">--</div>
+              <div style="font-size: 11px; color: var(--color-text-secondary); margin-top: 4px;">Punched check-in on date</div>
+            </div>
+            <div class="surface-card" style="padding: 16px 20px; border-left: 3px solid #e11d48;">
+              <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: #be123c; margin-bottom: 4px;">Unmarked / Absentees</div>
+              <div id="metricLeaveUnmarked" style="font-size: 24px; font-weight: 700; color: #e11d48;">--</div>
+              <div style="font-size: 11px; color: var(--color-text-secondary); margin-top: 4px;">Missing check-in / check-out</div>
+            </div>
+            <div class="surface-card" style="padding: 16px 20px;">
+              <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: #1d4ed8; margin-bottom: 4px;">Recorded on Leave</div>
+              <div id="metricLeaveOnLeave" style="font-size: 24px; font-weight: 700; color: #2563eb;">--</div>
+              <div style="font-size: 11px; color: var(--color-text-secondary); margin-top: 4px;">Approved &amp; pending leaves</div>
+            </div>
+            <div class="surface-card" style="padding: 16px 20px;">
+              <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: #0f766e; margin-bottom: 4px;">Altered / Regularized</div>
+              <div id="metricLeaveRegularized" style="font-size: 24px; font-weight: 700; color: #0d9488;">--</div>
+              <div style="font-size: 11px; color: var(--color-text-secondary); margin-top: 4px;">Verified via admin override</div>
+            </div>
+          </div>
+
+          <!-- Date Selector, Filters & Actions Bar -->
+          <div class="surface-card" style="margin-bottom: 20px; padding: 18px 24px;">
+            <div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px;">
+              <div style="display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap;">
+                <div>
+                  <label for="leaveDatePicker" style="display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); margin-bottom: 4px;">Roster Date</label>
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <input type="date" id="leaveDatePicker" class="form-input" style="padding: 6px 10px; font-size: 13px;">
+                    <button type="button" class="btn btn-secondary" id="btnLeaveDateToday" style="padding: 6px 10px; font-size: 12px;">Today</button>
+                    <button type="button" class="btn btn-secondary" id="btnLeaveDateYesterday" style="padding: 6px 10px; font-size: 12px;">Yesterday</button>
+                  </div>
+                </div>
+                <div>
+                  <label for="leaveSearchInput" style="display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); margin-bottom: 4px;">Search Staff</label>
+                  <input type="text" id="leaveSearchInput" class="form-input" placeholder="e.g. EMP-1002, Sharma..." style="min-width: 200px; font-size: 13px; padding: 6px 12px;">
+                </div>
+                <div>
+                  <label for="leaveTerritoryFilter" style="display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-secondary); margin-bottom: 4px;">Territory / Team</label>
+                  <select id="leaveTerritoryFilter" class="form-select" style="min-width: 170px; font-size: 13px; padding: 6px 12px;">
+                    <option value="ALL">All Territories</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Action CTAs -->
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <button type="button" id="btnSyncUnmarkedLeaves" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 7px 14px;" title="Automatically add all field workers who have not marked check-in / check-out to the leave roster">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+                  <span>Add All Unmarked to Leave List</span>
+                </button>
+                <button type="button" id="btnOpenRecordLeaveModal" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 7px 14px;" title="Record individual leave for any staff member">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  <span>+ Record Leave</span>
+                </button>
+                <button type="button" id="btnRefreshLeaves" class="btn btn-secondary" style="font-size: 13px; padding: 7px 12px; display: inline-flex; align-items: center; gap: 5px;">
+                  <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg></span>
+                  <span>Refresh</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dual Tab Navigation Segment -->
+          <div style="background: var(--color-bg-subtle); padding: 4px; border-radius: var(--radius-sm); display: inline-flex; gap: 4px; margin-bottom: 16px; border: 1px solid var(--color-border-default);">
+            <button type="button" id="btnTabUnmarkedLeaves" class="leave-tab-btn active">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <span>Unmarked Field Personnel</span>
+              <span id="badgeTabUnmarkedCount" class="badge" style="background: #fee2e2; color: #991b1b; padding: 1px 7px; font-size: 11px; margin-left: 2px;">0</span>
+            </button>
+            <button type="button" id="btnTabRecordedLeaves" class="leave-tab-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <span>Recorded Leaves Roster</span>
+              <span id="badgeTabLeavesCount" class="badge" style="background: #e0f2fe; color: #0369a1; padding: 1px 7px; font-size: 11px; margin-left: 2px;">0</span>
+            </button>
+          </div>
+
+          <!-- TAB PANEL 1: UNMARKED FIELD PERSONNEL -->
+          <div id="panelUnmarkedLeaves" class="surface-card" style="padding: 20px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+              <div>
+                <h3 style="font-size: 15px; font-weight: 600; margin: 0; color: var(--color-text-primary);">Field Personnel Without Marked Attendance</h3>
+                <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 2px;">Active field workers who have not completed check-in / check-out. You can add them to leaves or alter &amp; regularize their attendance directly.</div>
+              </div>
+              <div id="unmarkedTableCountBadge" class="badge badge-neutral" style="font-size: 12px;">Loading...</div>
+            </div>
+
+            <div style="overflow-x: auto;">
+              <table class="data-table" id="tableUnmarkedStaff">
+                <thead>
+                  <tr>
+                    <th>Field Worker</th>
+                    <th>Department &amp; Designation</th>
+                    <th>Assigned Territory / Team</th>
+                    <th>Punch Status</th>
+                    <th>Leave Status</th>
+                    <th style="text-align: right;">Operations</th>
+                  </tr>
+                </thead>
+                <tbody id="bodyUnmarkedStaff">
+                  <tr><td colspan="6" style="text-align: center; color: var(--color-text-muted); padding: 32px;">Loading unmarked personnel...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- TAB PANEL 2: RECORDED LEAVES ROSTER -->
+          <div id="panelRecordedLeaves" class="surface-card" style="padding: 20px; display: none;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+              <div>
+                <h3 style="font-size: 15px; font-weight: 600; margin: 0; color: var(--color-text-primary);">Recorded Field Absences &amp; Leave Roster</h3>
+                <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 2px;">Field personnel on leave or unmarked absence. Use 'Alter Attendance' on any record to convert an absence into verified attendance.</div>
+              </div>
+              <div id="leavesTableCountBadge" class="badge badge-neutral" style="font-size: 12px;">Loading...</div>
+            </div>
+
+            <div style="overflow-x: auto;">
+              <table class="data-table" id="tableRecordedLeaves">
+                <thead>
+                  <tr>
+                    <th>Field Worker</th>
+                    <th>Territory / Team</th>
+                    <th>Leave Date</th>
+                    <th>Leave Type</th>
+                    <th>Approval Status</th>
+                    <th>Reason / Admin Remarks</th>
+                    <th style="text-align: right;">Operations</th>
+                  </tr>
+                </thead>
+                <tbody id="bodyRecordedLeaves">
+                  <tr><td colspan="7" style="text-align: center; color: var(--color-text-muted); padding: 32px;">Loading leaves roster...</td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
 
@@ -1243,6 +1379,158 @@
       <div id="hotelStaysListContainer" style="max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px;">
         <div style="text-align: center; padding: 24px; color: var(--color-text-muted);">Loading hotel stays...</div>
       </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ALTER & REGULARIZE ATTENDANCE -->
+  <div class="auth-modal-backdrop" id="modalAlterAttendance" style="display: none; z-index: 1200;">
+    <div class="auth-modal-dialog" style="max-width: 680px; width: 95%;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; border-bottom: 1px solid var(--color-border-default); padding-bottom: 12px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--color-primary);"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          <h3 style="font-size: 16px; font-weight: 700; margin: 0; color: var(--color-text-primary);">Alter &amp; Regularize Attendance</h3>
+        </div>
+        <button type="button" class="btn btn-secondary" onclick="closeAlterAttendanceModal()" style="padding: 4px 10px; font-size: 12px;">Close</button>
+      </div>
+
+      <div id="alterEmpBanner" style="background: #f8fafc; border: 1px solid var(--color-border-default); border-radius: 6px; padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <div>
+          <div id="alterModalEmpName" style="font-size: 14px; font-weight: 700; color: var(--color-text-primary);">Employee Name</div>
+          <div id="alterModalEmpMeta" style="font-size: 11px; color: var(--color-text-secondary); margin-top: 2px;">EMP-XXXX · Department · Territory</div>
+        </div>
+        <span id="alterModalCurrentStatus" class="badge badge-warning" style="font-size: 11px;">Unmarked Absence</span>
+      </div>
+
+      <form id="formAlterAttendance" onsubmit="event.preventDefault(); handleSaveAlterAttendance();">
+        <input type="hidden" id="alterEmpId">
+        <input type="hidden" id="alterAttendanceId">
+        <input type="hidden" id="alterLeaveId">
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
+          <div>
+            <label for="alterDate" style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">Attendance Date</label>
+            <input type="date" id="alterDate" class="form-input" style="width: 100%; font-size: 13px; padding: 7px 10px;" required>
+          </div>
+          <div>
+            <label for="alterWorkMode" style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">Duty Mode</label>
+            <select id="alterWorkMode" class="form-select" style="width: 100%; font-size: 13px; padding: 7px 10px;">
+              <option value="FIELD_WORK" selected>Field Work (On-Site Assignment)</option>
+              <option value="TRAVEL">Official Transit / Travel</option>
+              <option value="OFFICE">Office Premises</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px;">
+          <div>
+            <label for="alterCheckinTime" style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">Check-In Time</label>
+            <input type="time" id="alterCheckinTime" class="form-input" style="width: 100%; font-size: 13px; padding: 7px 10px;" value="09:00" required onchange="calculateAlterHoursPreview()">
+          </div>
+          <div>
+            <label for="alterCheckoutTime" style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">Check-Out Time</label>
+            <input type="time" id="alterCheckoutTime" class="form-input" style="width: 100%; font-size: 13px; padding: 7px 10px;" value="17:30" required onchange="calculateAlterHoursPreview()">
+          </div>
+        </div>
+
+        <!-- Calculated Live Preview -->
+        <div id="alterHoursPreviewBox" class="hours-live-preview" style="margin-bottom: 14px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #059669;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span style="font-weight: 600; color: var(--color-text-primary);" id="alterShiftDurationLabel">Calculated Shift: 8.50 hours</span>
+          </div>
+          <span id="alterShiftPill" class="badge-hours-green">Full Shift (Target Met)</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
+          <div>
+            <label for="alterState" style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">State / Territory</label>
+            <input type="text" id="alterState" class="form-input" placeholder="e.g. Jammu and Kashmir" style="width: 100%; font-size: 13px; padding: 7px 10px;">
+          </div>
+          <div>
+            <label for="alterDistrict" style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">District</label>
+            <input type="text" id="alterDistrict" class="form-input" placeholder="e.g. Srinagar" style="width: 100%; font-size: 13px; padding: 7px 10px;">
+          </div>
+        </div>
+
+        <div style="margin-bottom: 14px;">
+          <label for="alterSiteNotes" style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">Field Site / Premises Notes</label>
+          <input type="text" id="alterSiteNotes" class="form-input" placeholder="e.g. Remote facility survey camp Baramulla" style="width: 100%; font-size: 13px; padding: 7px 10px;">
+        </div>
+
+        <div style="margin-bottom: 18px;">
+          <label for="alterReason" style="display: block; font-size: 11px; font-weight: 600; color: #be123c; margin-bottom: 4px;">
+            Alteration Reason / Audit Remarks <span style="color: #e11d48;">*</span>
+          </label>
+          <textarea id="alterReason" class="form-input" rows="2" placeholder="e.g. Mobile device connectivity unavailable in field terrain; attendance verified by Supervisor" style="width: 100%; font-size: 13px; padding: 7px 10px; resize: vertical;" required></textarea>
+          <div style="font-size: 11px; color: var(--color-text-muted); margin-top: 3px;">Mandatory for compliance: will be logged in immutable security audit logs and shown on attendance records.</div>
+        </div>
+
+        <div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--color-border-default); padding-top: 14px;">
+          <button type="button" class="btn btn-secondary" onclick="closeAlterAttendanceModal()" style="font-size: 13px; padding: 8px 16px;">Cancel</button>
+          <button type="submit" id="btnSubmitAlterAttendance" class="btn btn-primary" style="font-size: 13px; padding: 8px 20px; display: inline-flex; align-items: center; gap: 6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>Save &amp; Alter Attendance</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: RECORD SINGLE LEAVE -->
+  <div class="auth-modal-backdrop" id="modalRecordLeave" style="display: none; z-index: 1200;">
+    <div class="auth-modal-dialog" style="max-width: 540px; width: 95%;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; border-bottom: 1px solid var(--color-border-default); padding-bottom: 12px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--color-primary);"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <h3 style="font-size: 16px; font-weight: 700; margin: 0; color: var(--color-text-primary);">Record Staff Leave / Absence</h3>
+        </div>
+        <button type="button" class="btn btn-secondary" onclick="closeRecordLeaveModal()" style="padding: 4px 10px; font-size: 12px;">Close</button>
+      </div>
+
+      <form id="formRecordLeave" onsubmit="event.preventDefault(); handleSaveRecordLeave();">
+        <div style="margin-bottom: 14px;">
+          <label for="recordLeaveEmployeeSelect" style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">Field Personnel</label>
+          <select id="recordLeaveEmployeeSelect" class="form-select" style="width: 100%; font-size: 13px; padding: 7px 10px;" required>
+            <option value="">-- Select Employee --</option>
+          </select>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
+          <div>
+            <label for="recordLeaveDate" style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">Leave Date</label>
+            <input type="date" id="recordLeaveDate" class="form-input" style="width: 100%; font-size: 13px; padding: 7px 10px;" required>
+          </div>
+          <div>
+            <label for="recordLeaveType" style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">Leave Classification</label>
+            <select id="recordLeaveType" class="form-select" style="width: 100%; font-size: 13px; padding: 7px 10px;">
+              <option value="UNMARKED_ABSENCE">Field Absence / Unmarked</option>
+              <option value="CASUAL_LEAVE" selected>Casual Leave (CL)</option>
+              <option value="SICK_LEAVE">Medical / Sick Leave (ML)</option>
+              <option value="DUTY_TRANSIT">Special Duty / Outstation Transit</option>
+              <option value="COMP_OFF">Compensatory Off (Comp-Off)</option>
+              <option value="LOP">Leave Without Pay (LWP / LOP)</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 14px;">
+          <label for="recordLeaveStatus" style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">Status</label>
+          <select id="recordLeaveStatus" class="form-select" style="width: 100%; font-size: 13px; padding: 7px 10px;">
+            <option value="APPROVED" selected>Approved</option>
+            <option value="PENDING">Pending Regularization / Review</option>
+          </select>
+        </div>
+
+        <div style="margin-bottom: 18px;">
+          <label for="recordLeaveReason" style="display: block; font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px;">Reason / Notes</label>
+          <textarea id="recordLeaveReason" class="form-input" rows="2" placeholder="e.g. Prior approved personal leave" style="width: 100%; font-size: 13px; padding: 7px 10px; resize: vertical;"></textarea>
+        </div>
+
+        <div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--color-border-default); padding-top: 14px;">
+          <button type="button" class="btn btn-secondary" onclick="closeRecordLeaveModal()" style="font-size: 13px; padding: 8px 16px;">Cancel</button>
+          <button type="submit" id="btnSubmitRecordLeave" class="btn btn-primary" style="font-size: 13px; padding: 8px 20px;">Save Leave Record</button>
+        </div>
+      </form>
     </div>
   </div>
 

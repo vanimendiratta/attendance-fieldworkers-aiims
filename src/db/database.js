@@ -230,9 +230,37 @@ async function initSeed() {
     ALTER TABLE attendance ADD COLUMN IF NOT EXISTS location_place_name TEXT;
     ALTER TABLE attendance ADD COLUMN IF NOT EXISTS location_place_type TEXT;
     ALTER TABLE attendance ADD COLUMN IF NOT EXISTS exact_coordinates_url TEXT;
+    ALTER TABLE attendance ADD COLUMN IF NOT EXISTS is_regularized INTEGER DEFAULT 0;
+    ALTER TABLE attendance ADD COLUMN IF NOT EXISTS regularized_by TEXT;
+    ALTER TABLE attendance ADD COLUMN IF NOT EXISTS regularization_notes TEXT;
   `);
 
-  console.log('[DB] Seed complete with official holidays and hotel stay tracking.');
+  // Ensure employee_leaves table exists for tracking field absentees & leaves
+  await query(`
+    CREATE TABLE IF NOT EXISTS employee_leaves (
+      id TEXT PRIMARY KEY,
+      employer_id TEXT NOT NULL,
+      employee_id TEXT NOT NULL,
+      leave_date DATE NOT NULL,
+      leave_type TEXT NOT NULL DEFAULT 'UNMARKED_ABSENCE',
+      status TEXT NOT NULL DEFAULT 'PENDING',
+      reason TEXT,
+      applied_by TEXT DEFAULT 'SYSTEM_ABSENCE',
+      admin_remarks TEXT,
+      regularized_attendance_id TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(employer_id, employee_id, leave_date)
+    )
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_employee_leaves_emp_date ON employee_leaves(employer_id, leave_date);
+    CREATE INDEX IF NOT EXISTS idx_employee_leaves_emp_id ON employee_leaves(employee_id);
+    CREATE INDEX IF NOT EXISTS idx_employee_leaves_status ON employee_leaves(status);
+  `);
+
+  console.log('[DB] Seed complete with official holidays, hotel stay tracking, and leaves roster.');
 }
 
 // ---------------------------------------------------------------------------

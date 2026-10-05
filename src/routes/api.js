@@ -377,7 +377,8 @@ router.post('/auth/employee/signup', authService.rateLimitMiddleware(authService
     const employer = orgRes.rows[0] || (await query('SELECT * FROM organizations WHERE id = $1', ['ORG-001'])).rows[0];
     if (!employer) return res.status(404).json({ success: false, error: 'Employer organization not found.' });
 
-    const newEmpId = manualEmpId ? manualEmpId.toUpperCase() : await generateEmployeeId(employer.id);
+    const effectiveOrgId = employer.id;
+    const newEmpId = manualEmpId ? manualEmpId.toUpperCase() : await generateEmployeeId(effectiveOrgId);
 
     const existingByIdRes = await query('SELECT id, name FROM employees WHERE UPPER(TRIM(id)) = $1', [newEmpId.toUpperCase()]);
     if (existingByIdRes.rows.length > 0) {
@@ -1789,6 +1790,518 @@ router.delete('/admin/holidays/:id', requireAuthenticatedAdmin, async (req, res)
     );
 
     res.json({ success: true, message: 'Holiday deleted successfully.' });
+  } catch (err) {
+    return handleApiError(res, req, err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 12f. Admin: Leave Management & Unmarked Field Personnel
+// ---------------------------------------------------------------------------
+router.get('/admin/leaves', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const employerId = req.employerId;
+    let targetDate = req.query.date ? String(req.query.date).trim().split('T')[0] : '';
+    if (!targetDate) {
+      targetDate = attendanceService.getLocalDateString(new Date(), 'Asia/Kolkata');
+    }
+
+    // Ensure employee_leaves table exists
+    await query(`
+      CREATE TABLE IF NOT EXISTS employee_leaves (
+        id TEXT PRIMARY KEY,
+        employer_id TEXT NOT NULL,
+        employee_id TEXT NOT NULL,
+        leave_date DATE NOT NULL,
+        leave_type TEXT NOT NULL DEFAULT 'UNMARKED_ABSENCE',
+        status TEXT NOT NULL DEFAULT 'PENDING',
+        reason TEXT,
+        applied_by TEXT DEFAULT 'SYSTEM_ABSENCE',
+        admin_remarks TEXT,
+        regularized_attendance_id TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(employer_id, employee_id, leave_date)
+      )
+    `).catch(() => {});
+
+    // 1. Fetch all active field staff
+    const employeesRes = await query(
+      `SELECT e.id, e.name, e.email, e.phone, e.department, e.designation,
+              e.team_id, e.state, e.district,
+              COALESCE(t.name, 'Direct Assignment') AS team_name
+       FROM employees e
+       LEFT JOIN teams t ON e.team_id = t.id
+       WHERE e.employer_id = $1 AND e.is_active = 1
+       ORDER BY e.name ASC`,
+      [employerId]
+    );
+    const allEmployees = employeesRes.rows;
+
+    // 2. Fetch all attendance records on this date
+    const attendanceRes = await query(
+      `SELECT a.*, e.name AS employee_name
+       FROM attendance a
+       JOIN employees e ON a.employee_id = e.id
+       WHERE a.employer_id = $1
+         AND (
+           (a.checkin_server_timestamp IS NOT NULL AND a.checkin_server_timestamp::text LIKE $2)
+           OR (a.created_at::text LIKE $2)
+         )`,
+      [employerId, `${targetDate}%`]
+    );
+    const attendanceMap = new Map();
+    for (const att of attendanceRes.rows) {
+      attendanceMap.set(att.employee_id, att);
+    }
+
+    // 3. Fetch all recorded leaves on this date
+    const leavesRes = await query(
+      `SELECT l.*, e.name AS employee_name, e.department, e.designation, e.phone,
+              COALESCE(t.name, 'Direct Assignment') AS team_name,
+              COALESCE(e.state, t.state) AS state,
+              COALESCE(e.district, t.district) AS district
+       FROM employee_leaves l
+       JOIN employees e ON l.employee_id = e.id
+       LEFT JOIN teams t ON e.team_id = t.id
+       WHERE l.employer_id = $1 AND (l.leave_date = $2::date OR l.leave_date::text = $2)
+       ORDER BY l.created_at DESC`,
+      [employerId, targetDate]
+    );
+    const leaves = leavesRes.rows;
+    const leaveMap = new Map();
+    for (const lev of leaves) {
+      leaveMap.set(lev.employee_id, lev);
+    }
+
+    // 4. Classify each employee
+    const unmarkedEmployees = [];
+    let presentCount = 0;
+    let regularizedCount = 0;
+
+    for (const emp of allEmployees) {
+      const att = attendanceMap.get(emp.id);
+      const lev = leaveMap.get(emp.id);
+
+      if (att) {
+        if (att.is_regularized) regularizedCount++;
+        else presentCount++;
+      } else {
+        // Person has not marked check-in / check-out
+        unmarkedEmployees.push({
+          ...emp,
+          has_checkin: false,
+          has_checkout: false,
+          attendance_id: null,
+          unmarked_status: 'NO_PUNCH',
+          unmarked_label: 'No Punch Recorded',
+          is_recorded_on_leave: Boolean(lev),
+          leave_id: lev ? lev.id : null,
+          leave_type: lev ? lev.leave_type : null,
+          leave_status: lev ? lev.status : null,
+          leave_reason: lev ? lev.reason : null
+        });
+      }
+    }
+
+    // Also check if any employee checked in but has missing checkout
+    for (const att of attendanceRes.rows) {
+      if (att.attendance_status === 'CHECKED_IN' && !att.checkout_server_timestamp) {
+        const existingUnmarked = unmarkedEmployees.find(u => u.id === att.employee_id);
+        if (!existingUnmarked) {
+          const emp = allEmployees.find(e => e.id === att.employee_id);
+          if (emp) {
+            const lev = leaveMap.get(emp.id);
+            unmarkedEmployees.push({
+              ...emp,
+              has_checkin: true,
+              has_checkout: false,
+              attendance_id: att.id,
+              unmarked_status: 'MISSING_CHECKOUT',
+              unmarked_label: 'Checked In Only (Missing Checkout)',
+              is_recorded_on_leave: Boolean(lev),
+              leave_id: lev ? lev.id : null,
+              leave_type: lev ? lev.leave_type : null,
+              leave_status: lev ? lev.status : null,
+              leave_reason: lev ? lev.reason : null
+            });
+          }
+        }
+      }
+    }
+
+    const metrics = {
+      targetDate,
+      totalFieldEmployees: allEmployees.length,
+      presentCount,
+      unmarkedCount: unmarkedEmployees.length,
+      onLeaveCount: leaves.filter(l => l.status !== 'REGULARIZED').length,
+      regularizedCount
+    };
+
+    res.json({
+      success: true,
+      targetDate,
+      metrics,
+      unmarkedEmployees,
+      leaves
+    });
+  } catch (err) {
+    return handleApiError(res, req, err);
+  }
+});
+
+// Sync / Add all unmarked field workers to the leave list
+router.post('/admin/leaves/sync-unmarked', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const employerId = req.employerId;
+    let targetDate = req.body?.date ? String(req.body.date).trim().split('T')[0] : '';
+    if (!targetDate) {
+      targetDate = attendanceService.getLocalDateString(new Date(), 'Asia/Kolkata');
+    }
+
+    const defaultLeaveType = req.body?.leave_type || 'UNMARKED_ABSENCE';
+    const defaultReason = req.body?.reason || 'Field Duty: Unmarked Check-In/Check-Out';
+
+    // 1. Get active employees
+    const employeesRes = await query(
+      'SELECT id, name FROM employees WHERE employer_id = $1 AND is_active = 1',
+      [employerId]
+    );
+
+    // 2. Get attendance records on this date
+    const attRes = await query(
+      `SELECT employee_id FROM attendance 
+       WHERE employer_id = $1 
+         AND (
+           (checkin_server_timestamp IS NOT NULL AND checkin_server_timestamp::text LIKE $2)
+           OR (created_at::text LIKE $2)
+         )
+         AND attendance_status = 'COMPLETED'`,
+      [employerId, `${targetDate}%`]
+    );
+    const presentEmpIds = new Set(attRes.rows.map(r => r.employee_id));
+
+    // 3. Get existing leaves for this date
+    const levRes = await query(
+      `SELECT employee_id FROM employee_leaves 
+       WHERE employer_id = $1 AND (leave_date = $2::date OR leave_date::text = $2)`,
+      [employerId, targetDate]
+    );
+    const existingLeaveEmpIds = new Set(levRes.rows.map(r => r.employee_id));
+
+    let addedCount = 0;
+    for (const emp of employeesRes.rows) {
+      if (!presentEmpIds.has(emp.id) && !existingLeaveEmpIds.has(emp.id)) {
+        const leaveId = `LEV-${employerId}-${emp.id}-${targetDate.replace(/-/g, '')}-${Date.now().toString(36)}`;
+        await query(
+          `INSERT INTO employee_leaves 
+             (id, employer_id, employee_id, leave_date, leave_type, status, reason, applied_by, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, 'PENDING', $6, 'SYSTEM_ABSENCE', NOW(), NOW())
+           ON CONFLICT (employer_id, employee_id, leave_date) DO NOTHING`,
+          [leaveId, employerId, emp.id, targetDate, defaultLeaveType, defaultReason]
+        );
+        addedCount++;
+      }
+    }
+
+    attendanceService.logAudit(
+      'LEAVES_BATCH_SYNCED_UNMARKED',
+      null,
+      employerId,
+      'BATCH_LEAVE_ADD',
+      'SUCCESS',
+      { date: targetDate, addedCount },
+      req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1',
+      req.headers['user-agent'] || 'Unknown'
+    );
+
+    res.json({
+      success: true,
+      addedCount,
+      targetDate,
+      message: `Successfully added ${addedCount} unmarked field workers to the leave list for ${targetDate}.`
+    });
+  } catch (err) {
+    return handleApiError(res, req, err);
+  }
+});
+
+// Add single leave entry
+router.post('/admin/leaves', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const employerId = req.employerId;
+    const { employee_id, leave_date, leave_type, status, reason, admin_remarks } = req.body;
+
+    if (!employee_id || !leave_date) {
+      return res.status(400).json({ success: false, error: 'Employee ID and leave date are required.' });
+    }
+
+    const dStr = String(leave_date).trim().split('T')[0];
+    const lType = leave_type || 'CASUAL_LEAVE';
+    const lStatus = status || 'APPROVED';
+    const leaveId = `LEV-${employerId}-${employee_id}-${dStr.replace(/-/g, '')}-${Date.now().toString(36)}`;
+
+    await query(
+      `INSERT INTO employee_leaves 
+         (id, employer_id, employee_id, leave_date, leave_type, status, reason, applied_by, admin_remarks, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'ADMIN', $8, NOW(), NOW())
+       ON CONFLICT (employer_id, employee_id, leave_date) DO UPDATE
+       SET leave_type = EXCLUDED.leave_type,
+           status = EXCLUDED.status,
+           reason = COALESCE(EXCLUDED.reason, employee_leaves.reason),
+           admin_remarks = COALESCE(EXCLUDED.admin_remarks, employee_leaves.admin_remarks),
+           updated_at = NOW()`,
+      [leaveId, employerId, employee_id, dStr, lType, lStatus, reason || null, admin_remarks || null]
+    );
+
+    res.json({ success: true, message: 'Leave record recorded successfully.' });
+  } catch (err) {
+    return handleApiError(res, req, err);
+  }
+});
+
+// Update leave entry
+router.put('/admin/leaves/:id', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const employerId = req.employerId;
+    const leaveId = req.params.id;
+    const { leave_type, status, reason, admin_remarks } = req.body;
+
+    await query(
+      `UPDATE employee_leaves
+       SET leave_type = COALESCE($1, leave_type),
+           status = COALESCE($2, status),
+           reason = COALESCE($3, reason),
+           admin_remarks = COALESCE($4, admin_remarks),
+           updated_at = NOW()
+       WHERE id = $5 AND employer_id = $6`,
+      [leave_type || null, status || null, reason || null, admin_remarks || null, leaveId, employerId]
+    );
+
+    res.json({ success: true, message: 'Leave record updated successfully.' });
+  } catch (err) {
+    return handleApiError(res, req, err);
+  }
+});
+
+// Delete leave entry
+router.delete('/admin/leaves/:id', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const employerId = req.employerId;
+    const leaveId = req.params.id;
+
+    await query(
+      'DELETE FROM employee_leaves WHERE id = $1 AND employer_id = $2',
+      [leaveId, employerId]
+    );
+
+    res.json({ success: true, message: 'Leave record removed.' });
+  } catch (err) {
+    return handleApiError(res, req, err);
+  }
+});
+
+// Alter & Regularize Attendance (Core User Feature)
+router.post('/admin/attendance/alter', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const employerId = req.employerId;
+    const {
+      employee_id,
+      date,
+      checkin_time,
+      checkout_time,
+      work_mode,
+      state,
+      district,
+      field_site_notes,
+      alteration_reason,
+      attendance_status,
+      leave_id,
+      attendance_id
+    } = req.body;
+
+    if (!employee_id || !date) {
+      return res.status(400).json({ success: false, error: 'Employee ID and attendance date are required.' });
+    }
+    if (!alteration_reason || !String(alteration_reason).trim()) {
+      return res.status(400).json({ success: false, error: 'Alteration reason is mandatory for audit compliance.' });
+    }
+
+    // Verify employee
+    const empRes = await query('SELECT * FROM employees WHERE id = $1 AND employer_id = $2', [employee_id, employerId]);
+    const employee = empRes.rows[0];
+    if (!employee) {
+      return res.status(404).json({ success: false, error: 'Employee not found.' });
+    }
+
+    // Verify organization
+    const orgRes = await query('SELECT * FROM organizations WHERE id = $1', [employerId]);
+    const org = orgRes.rows[0];
+    const shiftTargetHours = (org && org.shift_hours) ? parseFloat(org.shift_hours) : 8.0;
+
+    const dateStr = String(date).trim().split('T')[0];
+    const inTime = checkin_time || '09:00';
+    const outTime = checkout_time || '17:30';
+
+    // Construct timestamps
+    const checkinIso = `${dateStr}T${inTime.length === 5 ? inTime + ':00' : inTime}.000Z`;
+    const checkoutIso = `${dateStr}T${outTime.length === 5 ? outTime + ':00' : outTime}.000Z`;
+
+    const checkinMs = new Date(checkinIso).getTime();
+    const checkoutMs = new Date(checkoutIso).getTime();
+    let netWorkingSeconds = 0;
+    if (checkoutMs > checkinMs) {
+      netWorkingSeconds = Math.round((checkoutMs - checkinMs) / 1000);
+    } else {
+      netWorkingSeconds = Math.round(shiftTargetHours * 3600);
+    }
+
+    const overtimeSeconds = Math.max(0, netWorkingSeconds - Math.round(shiftTargetHours * 3600));
+    const effectiveStatus = attendance_status || 'COMPLETED';
+    const effectiveMode = (work_mode === 'TRAVEL' || work_mode === 'FIELD_WORK') ? work_mode : 'FIELD_WORK';
+    const finalState = state || employee.state || null;
+    const finalDistrict = district || employee.district || null;
+    const siteNotes = field_site_notes || `Field regularized attendance (${alteration_reason})`;
+    const adminUser = req.adminUsername || 'aiims_admin';
+
+    let targetAttendanceId = attendance_id || null;
+
+    // Check if attendance already exists for this employee on this date
+    if (!targetAttendanceId) {
+      const existingAttRes = await query(
+        `SELECT id FROM attendance 
+         WHERE employer_id = $1 AND employee_id = $2 
+           AND (
+             (checkin_server_timestamp IS NOT NULL AND checkin_server_timestamp::text LIKE $3)
+             OR (created_at::text LIKE $3)
+           )
+         LIMIT 1`,
+        [employerId, employee_id, `${dateStr}%`]
+      );
+      if (existingAttRes.rows.length > 0) {
+        targetAttendanceId = existingAttRes.rows[0].id;
+      }
+    }
+
+    if (targetAttendanceId) {
+      // UPDATE existing attendance record
+      await query(
+        `UPDATE attendance SET
+           attendance_status = $1,
+           checkin_server_timestamp = $2,
+           checkout_server_timestamp = $3,
+           gross_working_seconds = $4,
+           break_seconds = 0,
+           net_working_seconds = $4,
+           overtime_seconds = $5,
+           work_mode = $6,
+           field_site_notes = $7,
+           state = $8,
+           district = $9,
+           location_place_name = 'Admin Altered / Regularized',
+           is_regularized = 1,
+           regularized_by = $10,
+           regularization_notes = $11,
+           updated_at = NOW()
+         WHERE id = $12 AND employer_id = $13`,
+        [
+          effectiveStatus,
+          checkinIso,
+          checkoutIso,
+          netWorkingSeconds,
+          overtimeSeconds,
+          effectiveMode,
+          siteNotes,
+          finalState,
+          finalDistrict,
+          adminUser,
+          alteration_reason,
+          targetAttendanceId,
+          employerId
+        ]
+      );
+    } else {
+      // INSERT new regularized attendance record
+      targetAttendanceId = `ATT-REG-${employee_id}-${dateStr.replace(/-/g, '')}-${Date.now().toString(36)}`;
+      const officeLat = org ? parseFloat(org.office_lat || '28.5672') : 28.5672;
+      const officeLng = org ? parseFloat(org.office_lng || '77.2100') : 77.2100;
+
+      await query(
+        `INSERT INTO attendance (
+           id, employee_id, employer_id, attendance_status,
+           checkin_photo, checkin_lat, checkin_lng, checkin_accuracy,
+           checkin_server_timestamp, checkin_address,
+           checkout_photo, checkout_lat, checkout_lng, checkout_accuracy,
+           checkout_server_timestamp, checkout_address,
+           gross_working_seconds, break_seconds, net_working_seconds, overtime_seconds,
+           work_mode, field_site_notes, state, district, team_id,
+           location_place_name, location_place_type,
+           is_regularized, regularized_by, regularization_notes,
+           created_at, updated_at
+         ) VALUES (
+           $1, $2, $3, $4,
+           $5, $6, $7, 0,
+           $8, $9,
+           $5, $6, $7, 0,
+           $10, $9,
+           $11, 0, $11, $12,
+           $13, $14, $15, $16, $17,
+           'Admin Altered / Regularized', 'FIELD_SITE',
+           1, $18, $19,
+           NOW(), NOW()
+         )`,
+        [
+          targetAttendanceId, employee_id, employerId, effectiveStatus,
+          'ADMIN_REGULARIZED_PUNCH', officeLat, officeLng,
+          checkinIso, `${siteNotes} (Admin Verified)`,
+          checkoutIso,
+          netWorkingSeconds, overtimeSeconds,
+          effectiveMode, siteNotes, finalState, finalDistrict, employee.team_id || null,
+          adminUser, alteration_reason
+        ]
+      );
+    }
+
+    // 3. If there was a corresponding leave record, update it to REGULARIZED
+    await query(
+      `UPDATE employee_leaves SET
+         status = 'REGULARIZED',
+         regularized_attendance_id = $1,
+         admin_remarks = COALESCE(admin_remarks, '') || ' [Attendance Altered & Regularized: ' || $2 || ']',
+         updated_at = NOW()
+       WHERE employer_id = $3 AND employee_id = $4 AND (leave_date = $5::date OR leave_date::text = $5)`,
+      [targetAttendanceId, alteration_reason, employerId, employee_id, dateStr]
+    );
+
+    // 4. Log immutable audit trail
+    attendanceService.logAudit(
+      'ATTENDANCE_ALTERED_BY_ADMIN',
+      employee_id,
+      employerId,
+      'ALTER_ATTENDANCE',
+      'SUCCESS',
+      {
+        attendance_id: targetAttendanceId,
+        date: dateStr,
+        checkin: checkinIso,
+        checkout: checkoutIso,
+        net_working_seconds: netWorkingSeconds,
+        hours: (netWorkingSeconds / 3600).toFixed(2),
+        work_mode: effectiveMode,
+        reason: alteration_reason,
+        regularized_by: adminUser
+      },
+      req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1',
+      req.headers['user-agent'] || 'Unknown'
+    );
+
+    res.json({
+      success: true,
+      attendance_id: targetAttendanceId,
+      net_working_hours: (netWorkingSeconds / 3600).toFixed(2),
+      message: `Attendance for ${employee.name} (${employee_id}) successfully altered and verified for ${dateStr}.`
+    });
   } catch (err) {
     return handleApiError(res, req, err);
   }

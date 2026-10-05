@@ -39,6 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnOpenHolidays) btnOpenHolidays.addEventListener('click', openHolidaysModal);
   const btnOpenHotelStays = document.getElementById('btnOpenHotelStaysModal');
   if (btnOpenHotelStays) btnOpenHotelStays.addEventListener('click', openHotelStaysModal);
+  initLeavesControls();
 });
 
 /**
@@ -92,6 +93,7 @@ function switchView(viewId, targetParam) {
   if (viewId === 'viewEmployees') loadEmployees();
   if (viewId === 'viewAttendance') loadAttendanceRecords();
   if (viewId === 'viewTimesheets') loadTimesheetsView(targetParam);
+  if (viewId === 'viewLeave') loadLeavesView();
   if (viewId === 'viewHotelStays') loadHotelStaysPageView();
   if (viewId === 'viewAudit') loadAuditLogs();
   if (viewId === 'viewRedcap') loadRedcapData();
@@ -287,6 +289,7 @@ async function adminFetch(url, options = {}) {
   }
   return res;
 }
+const authFetch = adminFetch;
 
 /**
  * Load Dashboard Editorial Data
@@ -945,6 +948,13 @@ function renderDailyAttendanceTables(records) {
                     </span>
                   </div>
                 ` : ''}
+                ${r.is_regularized ? `
+                  <div style="margin-top: 3px;">
+                    <span class="badge badge-regularized" style="font-size: 10px; padding: 1px 6px;" title="Regularized by Admin: ${escapeHtml(r.regularization_notes || '')}">
+                      <span>Regularized</span>
+                    </span>
+                  </div>
+                ` : ''}
               </div>
             </div>
           </td>
@@ -971,6 +981,9 @@ function renderDailyAttendanceTables(records) {
             <div style="display: inline-flex; align-items: center; gap: 4px;">
               <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="event.stopPropagation(); openAttendanceDrawer('${r.id}')" title="Inspect full audit drawer">
                 View
+              </button>
+              <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="event.stopPropagation(); openAlterAttendanceModal('${escapeHtml(r.employee_id)}', '${escapeHtml(dateStr)}', '${r.id}')" title="Alter attendance details">
+                Alter
               </button>
               <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="event.stopPropagation(); openPersonTimesheet('${escapeHtml(r.employee_id)}')" title="View cumulative timesheet for this employee">
                 Timesheet
@@ -1148,6 +1161,13 @@ function renderAttendanceTable(records) {
                   </span>
                 </div>
               ` : ''}
+              ${r.is_regularized ? `
+                <div style="margin-top: 3px;">
+                  <span class="badge badge-regularized" style="font-size: 10px; padding: 1px 6px;" title="Regularized by Admin: ${escapeHtml(r.regularization_notes || '')}">
+                    <span>Regularized</span>
+                  </span>
+                </div>
+              ` : ''}
             </div>
           </div>
         </td>
@@ -1240,6 +1260,9 @@ function renderAttendanceTable(records) {
         <td>${statusBadge}</td>
         <td style="white-space: nowrap;">
           <div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px;">
+            <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;" onclick="event.stopPropagation(); openAlterAttendanceModal('${escapeHtml(r.employee_id)}', '${r.checkin_server_timestamp ? r.checkin_server_timestamp.split('T')[0] : ''}', '${r.id}')" title="Alter attendance details">
+              <span>Alter</span>
+            </button>
             <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;" onclick="event.stopPropagation(); openPersonTimesheet('${escapeHtml(r.employee_id)}')" title="View cumulative timesheet for this employee">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
               <span>Timesheet</span>
@@ -1314,8 +1337,13 @@ async function openAttendanceDrawer(recordId) {
     document.getElementById('drwOvertime').textContent = `${((record.overtime_seconds || 0) / 3600).toFixed(2)}h`;
 
     const statusBadge = document.getElementById('drawerStatusBadge');
-    statusBadge.textContent = record.attendance_status === 'COMPLETED' ? 'Completed Shift' : (record.attendance_status === 'ON_BREAK' ? 'On Break' : 'Active Working');
-    statusBadge.className = `badge ${record.attendance_status === 'COMPLETED' ? 'badge-neutral' : 'badge-success'}`;
+    if (record.is_regularized) {
+      statusBadge.textContent = 'Regularized (Admin Altered)';
+      statusBadge.className = 'badge badge-regularized';
+    } else {
+      statusBadge.textContent = record.attendance_status === 'COMPLETED' ? 'Completed Shift' : (record.attendance_status === 'ON_BREAK' ? 'On Break' : 'Active Working');
+      statusBadge.className = `badge ${record.attendance_status === 'COMPLETED' ? 'badge-neutral' : 'badge-success'}`;
+    }
 
     // Photos
     document.getElementById('drwCheckinPhoto').src = record.checkin_photo;
@@ -3021,5 +3049,672 @@ document.addEventListener('DOMContentLoaded', () => {
 
 window.loadHotelStaysPageView = loadHotelStaysPageView;
 window.renderHotelStaysPageView = renderHotelStaysPageView;
+
+/* ==========================================================================
+   Leave Management & Attendance Alteration System
+   ========================================================================== */
+let cachedLeavesData = null;
+let currentLeaveDate = '';
+let currentLeaveTab = 'UNMARKED'; // 'UNMARKED' | 'RECORDED'
+
+function initLeavesControls() {
+  const dateInput = document.getElementById('leaveDatePicker');
+  if (dateInput) {
+    if (!dateInput.value) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      dateInput.value = todayStr;
+      currentLeaveDate = todayStr;
+    }
+    dateInput.addEventListener('change', () => {
+      currentLeaveDate = dateInput.value;
+      loadLeavesView(currentLeaveDate);
+    });
+  }
+
+  const btnToday = document.getElementById('btnLeaveDateToday');
+  if (btnToday) {
+    btnToday.addEventListener('click', () => {
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (dateInput) dateInput.value = todayStr;
+      currentLeaveDate = todayStr;
+      loadLeavesView(currentLeaveDate);
+    });
+  }
+
+  const btnYesterday = document.getElementById('btnLeaveDateYesterday');
+  if (btnYesterday) {
+    btnYesterday.addEventListener('click', () => {
+      const yDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      if (dateInput) dateInput.value = yDate;
+      currentLeaveDate = yDate;
+      loadLeavesView(currentLeaveDate);
+    });
+  }
+
+  const searchInput = document.getElementById('leaveSearchInput');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => filterLeavesTables());
+  }
+
+  const territoryFilter = document.getElementById('leaveTerritoryFilter');
+  if (territoryFilter) {
+    territoryFilter.addEventListener('change', () => filterLeavesTables());
+  }
+
+  const btnRefresh = document.getElementById('btnRefreshLeaves');
+  if (btnRefresh) {
+    btnRefresh.addEventListener('click', () => loadLeavesView(currentLeaveDate));
+  }
+
+  const btnSync = document.getElementById('btnSyncUnmarkedLeaves');
+  if (btnSync) {
+    btnSync.addEventListener('click', handleSyncUnmarkedLeaves);
+  }
+
+  const btnRecord = document.getElementById('btnOpenRecordLeaveModal');
+  if (btnRecord) {
+    btnRecord.addEventListener('click', () => openRecordLeaveModal());
+  }
+
+  const btnTabUnmarked = document.getElementById('btnTabUnmarkedLeaves');
+  const btnTabRecorded = document.getElementById('btnTabRecordedLeaves');
+
+  if (btnTabUnmarked && btnTabRecorded) {
+    btnTabUnmarked.addEventListener('click', () => switchLeaveTab('UNMARKED'));
+    btnTabRecorded.addEventListener('click', () => switchLeaveTab('RECORDED'));
+  }
+}
+
+function switchLeaveTab(tabName) {
+  currentLeaveTab = tabName;
+  const btnTabUnmarked = document.getElementById('btnTabUnmarkedLeaves');
+  const btnTabRecorded = document.getElementById('btnTabRecordedLeaves');
+  const panelUnmarked = document.getElementById('panelUnmarkedLeaves');
+  const panelRecorded = document.getElementById('panelRecordedLeaves');
+
+  if (tabName === 'UNMARKED') {
+    if (btnTabUnmarked) btnTabUnmarked.classList.add('active');
+    if (btnTabRecorded) btnTabRecorded.classList.remove('active');
+    if (panelUnmarked) panelUnmarked.style.display = 'block';
+    if (panelRecorded) panelRecorded.style.display = 'none';
+  } else {
+    if (btnTabUnmarked) btnTabUnmarked.classList.remove('active');
+    if (btnTabRecorded) btnTabRecorded.classList.add('active');
+    if (panelUnmarked) panelUnmarked.style.display = 'none';
+    if (panelRecorded) panelRecorded.style.display = 'block';
+  }
+}
+
+async function loadLeavesView(dateStr) {
+  if (!currentEmployerSession) return;
+  const targetDate = dateStr || currentLeaveDate || new Date().toISOString().split('T')[0];
+  currentLeaveDate = targetDate;
+
+  const dateInput = document.getElementById('leaveDatePicker');
+  if (dateInput) dateInput.value = targetDate;
+
+  try {
+    const res = await adminFetch(`/api/admin/leaves?employer_id=${currentEmployerSession.employer_id}&date=${targetDate}`);
+    const data = await res.json();
+    if (!data.success) {
+      console.warn('Leaves fetch error:', data.error);
+      return;
+    }
+
+    cachedLeavesData = data;
+    renderLeavesMetrics(data.metrics);
+    populateLeaveTerritoriesDropdown(data.unmarkedEmployees, data.leaves);
+    filterLeavesTables();
+  } catch (err) {
+    console.error('Error loading leaves view:', err);
+  }
+}
+
+function renderLeavesMetrics(m) {
+  if (!m) return;
+  const setTxt = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val != null ? String(val) : '--';
+  };
+  setTxt('metricLeaveTotalStaff', m.totalFieldEmployees);
+  setTxt('metricLeavePresent', m.presentCount);
+  setTxt('metricLeaveUnmarked', m.unmarkedCount);
+  setTxt('metricLeaveOnLeave', m.onLeaveCount);
+  setTxt('metricLeaveRegularized', m.regularizedCount);
+
+  const badgeUnmarked = document.getElementById('badgeTabUnmarkedCount');
+  if (badgeUnmarked) badgeUnmarked.textContent = String(m.unmarkedCount || 0);
+
+  const badgeRecorded = document.getElementById('badgeTabLeavesCount');
+  if (badgeRecorded) badgeRecorded.textContent = String(m.onLeaveCount || 0);
+}
+
+function populateLeaveTerritoriesDropdown(unmarkedList = [], leavesList = []) {
+  const select = document.getElementById('leaveTerritoryFilter');
+  if (!select) return;
+
+  const currentVal = select.value || 'ALL';
+  const territories = new Set();
+  [...unmarkedList, ...leavesList].forEach(item => {
+    if (item.district) territories.add(item.district);
+    else if (item.state) territories.add(item.state);
+    else if (item.team_name && item.team_name !== 'Direct Assignment') territories.add(item.team_name);
+  });
+
+  const sorted = Array.from(territories).sort();
+  select.innerHTML = '<option value="ALL">All Territories</option>' +
+    sorted.map(t => `<option value="${escapeHtml(t)}" ${t === currentVal ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('');
+}
+
+function filterLeavesTables() {
+  if (!cachedLeavesData) return;
+
+  const searchTerm = (document.getElementById('leaveSearchInput')?.value || '').toLowerCase().trim();
+  const territoryFilter = document.getElementById('leaveTerritoryFilter')?.value || 'ALL';
+
+  const matchesFilter = (item) => {
+    const name = (item.name || item.employee_name || '').toLowerCase();
+    const id = (item.id || item.employee_id || '').toLowerCase();
+    const dept = (item.department || '').toLowerCase();
+    const team = (item.team_name || '').toLowerCase();
+    const state = (item.state || '').toLowerCase();
+    const dist = (item.district || '').toLowerCase();
+
+    const matchesSearch = !searchTerm || name.includes(searchTerm) || id.includes(searchTerm) ||
+      dept.includes(searchTerm) || team.includes(searchTerm) || dist.includes(searchTerm) || state.includes(searchTerm);
+
+    const matchesTerritory = territoryFilter === 'ALL' ||
+      item.district === territoryFilter ||
+      item.state === territoryFilter ||
+      item.team_name === territoryFilter;
+
+    return matchesSearch && matchesTerritory;
+  };
+
+  const filteredUnmarked = (cachedLeavesData.unmarkedEmployees || []).filter(matchesFilter);
+  const filteredLeaves = (cachedLeavesData.leaves || []).filter(matchesFilter);
+
+  renderUnmarkedStaffTable(filteredUnmarked);
+  renderRecordedLeavesTable(filteredLeaves);
+}
+
+function renderUnmarkedStaffTable(list) {
+  const tbody = document.getElementById('bodyUnmarkedStaff');
+  const countBadge = document.getElementById('unmarkedTableCountBadge');
+  if (countBadge) countBadge.textContent = `${list.length} field worker${list.length === 1 ? '' : 's'}`;
+  if (!tbody) return;
+
+  if (list.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--color-text-muted); padding: 32px;">No unmarked personnel found for this selection. All active field workers have completed their attendance!</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = list.map(emp => {
+    const isMissingCheckout = emp.unmarked_status === 'MISSING_CHECKOUT';
+    const statusPill = isMissingCheckout
+      ? `<span class="badge" style="background: #fffbeb; color: #b45309; border: 1px solid #fde68a; font-size: 11px;">Checked In (Missing Checkout)</span>`
+      : `<span class="badge-leave-unmarked">No Punch (Absent)</span>`;
+
+    const leaveStatusHtml = emp.is_recorded_on_leave
+      ? `<span class="badge badge-leave-casual" title="Already added to leaves list">${escapeHtml(emp.leave_type || 'On Leave')}</span>`
+      : `<span style="font-size: 11px; color: var(--color-text-muted);">Not on leave</span>`;
+
+    const territory = emp.district
+      ? `${escapeHtml(emp.district)}, ${escapeHtml(emp.state || '')}`
+      : (emp.state ? escapeHtml(emp.state) : 'Unassigned');
+
+    return `
+      <tr>
+        <td>
+          <div style="display: flex; align-items: center; gap: 9px;">
+            <div class="table-emp-avatar">${escapeHtml((emp.name || 'E').charAt(0))}</div>
+            <div>
+              <div style="font-weight: 600; color: var(--color-text-primary);">${escapeHtml(emp.name || '')}</div>
+              <div style="font-size: 11px; color: var(--color-text-muted); font-family: var(--font-mono);">${escapeHtml(emp.id || '')}</div>
+            </div>
+          </div>
+        </td>
+        <td>
+          <div style="font-size: 12px; font-weight: 500; color: var(--color-text-primary);">${escapeHtml(emp.designation || 'Field Staff')}</div>
+          <div style="font-size: 11px; color: var(--color-text-muted);">${escapeHtml(emp.department || 'CDER')}</div>
+        </td>
+        <td>
+          <div style="font-size: 12px; font-weight: 500; color: var(--color-text-primary);">${escapeHtml(emp.team_name || 'Direct Assignment')}</div>
+          <div style="font-size: 11px; color: var(--color-text-muted); display: inline-flex; align-items: center; gap: 3px;">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+            <span>${territory}</span>
+          </div>
+        </td>
+        <td>${statusPill}</td>
+        <td>${leaveStatusHtml}</td>
+        <td style="text-align: right; white-space: nowrap;">
+          <div style="display: inline-flex; align-items: center; gap: 6px;">
+            <button type="button" class="btn btn-primary" style="padding: 4px 10px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;" onclick="openAlterAttendanceModal('${escapeHtml(emp.id)}', '${escapeHtml(currentLeaveDate)}', '${emp.attendance_id || ''}')" title="Alter and regularize verified attendance for this field worker">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              <span>Alter Attendance</span>
+            </button>
+            ${!emp.is_recorded_on_leave ? `
+              <button type="button" class="btn btn-secondary" style="padding: 4px 10px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;" onclick="openRecordLeaveModal('${escapeHtml(emp.id)}')" title="Add this worker to leave roster">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                <span>Add to Leaves</span>
+              </button>
+            ` : ''}
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderRecordedLeavesTable(list) {
+  const tbody = document.getElementById('bodyRecordedLeaves');
+  const countBadge = document.getElementById('leavesTableCountBadge');
+  if (countBadge) countBadge.textContent = `${list.length} record${list.length === 1 ? '' : 's'}`;
+  if (!tbody) return;
+
+  if (list.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--color-text-muted); padding: 32px;">No recorded leaves found for this date.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = list.map(lev => {
+    let typeBadge = `<span class="badge badge-neutral">${escapeHtml(lev.leave_type)}</span>`;
+    if (lev.leave_type === 'UNMARKED_ABSENCE') typeBadge = `<span class="badge-leave-unmarked">Field Absence</span>`;
+    else if (lev.leave_type === 'CASUAL_LEAVE') typeBadge = `<span class="badge-leave-casual">Casual Leave</span>`;
+    else if (lev.leave_type === 'SICK_LEAVE') typeBadge = `<span class="badge-leave-sick">Sick Leave</span>`;
+    else if (lev.leave_type === 'DUTY_TRANSIT') typeBadge = `<span class="badge-leave-duty">Duty Transit</span>`;
+    else if (lev.leave_type === 'COMP_OFF') typeBadge = `<span class="badge-leave-compoff">Comp-Off</span>`;
+
+    let statusBadge = `<span class="badge-leave-status-pending">Pending Review</span>`;
+    if (lev.status === 'APPROVED') statusBadge = `<span class="badge-leave-status-approved">Approved</span>`;
+    else if (lev.status === 'REGULARIZED') statusBadge = `<span class="badge badge-regularized">Regularized to Attendance</span>`;
+    else if (lev.status === 'REJECTED') statusBadge = `<span class="badge badge-danger">Rejected</span>`;
+
+    const territory = lev.district
+      ? `${escapeHtml(lev.district)}, ${escapeHtml(lev.state || '')}`
+      : (lev.state ? escapeHtml(lev.state) : 'Unassigned');
+
+    return `
+      <tr>
+        <td>
+          <div style="display: flex; align-items: center; gap: 9px;">
+            <div class="table-emp-avatar">${escapeHtml((lev.employee_name || 'E').charAt(0))}</div>
+            <div>
+              <div style="font-weight: 600; color: var(--color-text-primary);">${escapeHtml(lev.employee_name || '')}</div>
+              <div style="font-size: 11px; color: var(--color-text-muted); font-family: var(--font-mono);">${escapeHtml(lev.employee_id || '')} · ${escapeHtml(lev.department || 'CDER')}</div>
+            </div>
+          </div>
+        </td>
+        <td>
+          <div style="font-size: 12px; font-weight: 500; color: var(--color-text-primary);">${escapeHtml(lev.team_name || 'Direct Assignment')}</div>
+          <div style="font-size: 11px; color: var(--color-text-muted);">${territory}</div>
+        </td>
+        <td style="font-family: var(--font-mono); font-size: 12px;">${lev.leave_date ? String(lev.leave_date).split('T')[0] : ''}</td>
+        <td>${typeBadge}</td>
+        <td>${statusBadge}</td>
+        <td>
+          <div style="font-size: 12px; color: var(--color-text-primary);">${escapeHtml(lev.reason || 'No remarks provided')}</div>
+          ${lev.admin_remarks ? `<div style="font-size: 11px; color: var(--color-text-muted); margin-top: 2px;">Admin: ${escapeHtml(lev.admin_remarks)}</div>` : ''}
+        </td>
+        <td style="text-align: right; white-space: nowrap;">
+          <div style="display: inline-flex; align-items: center; gap: 5px;">
+            <button type="button" class="btn btn-primary" style="padding: 3px 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;" onclick="openAlterAttendanceModal('${escapeHtml(lev.employee_id)}', '${lev.leave_date ? String(lev.leave_date).split('T')[0] : ''}', '${lev.regularized_attendance_id || ''}', '${lev.id}')" title="Alter and regularize verified attendance for this leave">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              <span>Alter</span>
+            </button>
+            ${lev.status !== 'APPROVED' && lev.status !== 'REGULARIZED' ? `
+              <button type="button" class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="handleApproveLeave('${lev.id}', 'APPROVED')" title="Approve leave">Approve</button>
+            ` : ''}
+            <button type="button" class="btn btn-danger" style="padding: 3px 8px; font-size: 11px;" onclick="handleDeleteLeave('${lev.id}', '${escapeHtml(lev.employee_name)}')" title="Delete leave record">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function handleSyncUnmarkedLeaves() {
+  if (!currentEmployerSession) return;
+  const targetDate = currentLeaveDate || new Date().toISOString().split('T')[0];
+  const btn = document.getElementById('btnSyncUnmarkedLeaves');
+  const origText = btn ? btn.innerHTML : '';
+
+  if (!confirm(`Add all field workers without marked check-in / check-out on ${targetDate} to the Leave Roster?`)) {
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="ui-icon ui-icon-xs">${window.Icons ? window.Icons.raw('loader') : ''}</span> <span>Adding to Leaves...</span>`;
+  }
+
+  try {
+    const res = await adminFetch('/api/admin/leaves/sync-unmarked', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        date: targetDate,
+        leave_type: 'UNMARKED_ABSENCE',
+        reason: 'Unmarked Field Check-In/Check-Out (Pending Regularization)'
+      })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Failed to sync leaves');
+
+    alert(data.message || `Successfully added unmarked workers to leave list.`);
+    await loadLeavesView(targetDate);
+    switchLeaveTab('RECORDED');
+  } catch (err) {
+    alert(`Could not add to leaves: ${err.message}`);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origText;
+    }
+  }
+}
+
+function openAlterAttendanceModal(employeeId, defaultDate, attendanceId, leaveId) {
+  const modal = document.getElementById('modalAlterAttendance');
+  if (!modal) return;
+
+  const targetDate = defaultDate || currentLeaveDate || new Date().toISOString().split('T')[0];
+  document.getElementById('alterEmpId').value = employeeId || '';
+  document.getElementById('alterDate').value = targetDate;
+  document.getElementById('alterAttendanceId').value = attendanceId || '';
+  document.getElementById('alterLeaveId').value = leaveId || '';
+
+  // Find employee metadata
+  let emp = null;
+  if (cachedLeavesData) {
+    emp = (cachedLeavesData.unmarkedEmployees || []).find(e => e.id === employeeId) ||
+          (cachedLeavesData.leaves || []).find(l => (l.employee_id === employeeId || l.id === leaveId));
+  }
+  if (!emp && cachedAttendanceRecords) {
+    emp = cachedAttendanceRecords.find(r => r.employee_id === employeeId);
+  }
+
+  const nameEl = document.getElementById('alterModalEmpName');
+  const metaEl = document.getElementById('alterModalEmpMeta');
+  const stateInp = document.getElementById('alterState');
+  const distInp = document.getElementById('alterDistrict');
+  const siteInp = document.getElementById('alterSiteNotes');
+  const statusEl = document.getElementById('alterModalCurrentStatus');
+
+  if (nameEl) nameEl.textContent = emp ? (emp.name || emp.employee_name || employeeId) : employeeId;
+  if (metaEl) {
+    metaEl.textContent = emp
+      ? `${employeeId} · ${emp.department || 'Field Department'} · ${emp.team_name || 'Field Unit'}`
+      : `${employeeId} · Field Personnel`;
+  }
+  if (stateInp) stateInp.value = emp ? (emp.state || 'Jammu and Kashmir') : 'Jammu and Kashmir';
+  if (distInp) distInp.value = emp ? (emp.district || 'Srinagar') : 'Srinagar';
+  if (siteInp) siteInp.value = emp && emp.field_site_notes ? emp.field_site_notes : 'Field Duty Assignment';
+
+  if (statusEl) {
+    if (attendanceId) {
+      statusEl.textContent = 'Existing Attendance Record';
+      statusEl.className = 'badge badge-success';
+    } else if (emp && emp.is_recorded_on_leave) {
+      statusEl.textContent = 'On Leave Roster (Will Regularize)';
+      statusEl.className = 'badge badge-leave-casual';
+    } else {
+      statusEl.textContent = 'Unmarked Field Absence';
+      statusEl.className = 'badge-leave-unmarked';
+    }
+  }
+
+  // Pre-fill existing attendance details if altering an existing attendance record
+  if (attendanceId && cachedAttendanceRecords) {
+    const existingRec = cachedAttendanceRecords.find(r => r.id === attendanceId);
+    if (existingRec) {
+      if (existingRec.checkin_server_timestamp) {
+        const d = new Date(existingRec.checkin_server_timestamp);
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        document.getElementById('alterCheckinTime').value = `${hh}:${mm}`;
+      }
+      if (existingRec.checkout_server_timestamp) {
+        const d = new Date(existingRec.checkout_server_timestamp);
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        document.getElementById('alterCheckoutTime').value = `${hh}:${mm}`;
+      }
+      if (existingRec.work_mode) document.getElementById('alterWorkMode').value = existingRec.work_mode;
+      if (existingRec.regularization_notes) document.getElementById('alterReason').value = existingRec.regularization_notes;
+    }
+  }
+
+  calculateAlterHoursPreview();
+  modal.style.display = 'flex';
+}
+
+function closeAlterAttendanceModal() {
+  const modal = document.getElementById('modalAlterAttendance');
+  if (modal) modal.style.display = 'none';
+}
+
+function calculateAlterHoursPreview() {
+  const checkinVal = document.getElementById('alterCheckinTime')?.value || '09:00';
+  const checkoutVal = document.getElementById('alterCheckoutTime')?.value || '17:30';
+  const label = document.getElementById('alterShiftDurationLabel');
+  const pill = document.getElementById('alterShiftPill');
+
+  const [inH, inM] = checkinVal.split(':').map(Number);
+  const [outH, outM] = checkoutVal.split(':').map(Number);
+
+  let diffMins = (outH * 60 + outM) - (inH * 60 + inM);
+  if (diffMins < 0) diffMins += 24 * 60;
+
+  const diffHours = (diffMins / 60);
+  const formatted = diffHours.toFixed(2);
+
+  if (label) label.textContent = `Calculated Shift: ${formatted} hours`;
+
+  if (pill) {
+    if (diffHours >= 8.0) {
+      pill.className = 'badge-hours-green';
+      pill.textContent = `Full Shift (${formatted}h >= 8.0h Target)`;
+    } else if (diffHours >= 6.0) {
+      pill.className = 'badge-hours-yellow';
+      pill.textContent = `Partial Shift (${formatted}h)`;
+    } else {
+      pill.className = 'badge-hours-red';
+      pill.textContent = `Short Hours (${formatted}h < 6.0h)`;
+    }
+  }
+}
+
+async function handleSaveAlterAttendance() {
+  const empId = document.getElementById('alterEmpId').value;
+  const date = document.getElementById('alterDate').value;
+  const checkinTime = document.getElementById('alterCheckinTime').value;
+  const checkoutTime = document.getElementById('alterCheckoutTime').value;
+  const workMode = document.getElementById('alterWorkMode').value;
+  const state = document.getElementById('alterState').value;
+  const district = document.getElementById('alterDistrict').value;
+  const siteNotes = document.getElementById('alterSiteNotes').value;
+  const reason = document.getElementById('alterReason').value;
+  const attendanceId = document.getElementById('alterAttendanceId').value;
+  const leaveId = document.getElementById('alterLeaveId').value;
+
+  if (!empId || !date) {
+    alert('Employee ID and Date are required.');
+    return;
+  }
+  if (!reason || !reason.trim()) {
+    alert('Please enter an Alteration Reason / Audit Remark for compliance.');
+    return;
+  }
+
+  const btn = document.getElementById('btnSubmitAlterAttendance');
+  const origHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="ui-icon ui-icon-xs">${window.Icons ? window.Icons.raw('loader') : ''}</span> <span>Saving...</span>`;
+  }
+
+  try {
+    const res = await adminFetch('/api/admin/attendance/alter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        employee_id: empId,
+        date,
+        checkin_time: checkinTime,
+        checkout_time: checkoutTime,
+        work_mode: workMode,
+        state,
+        district,
+        field_site_notes: siteNotes,
+        alteration_reason: reason.trim(),
+        attendance_status: 'COMPLETED',
+        attendance_id: attendanceId || null,
+        leave_id: leaveId || null
+      })
+    });
+
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Failed to alter attendance');
+
+    closeAlterAttendanceModal();
+    alert(data.message || 'Attendance altered and verified successfully.');
+
+    // Reload leaves and attendance caches
+    await loadLeavesView(date);
+    if (typeof loadAttendanceRecords === 'function') {
+      await loadAttendanceRecords();
+    }
+  } catch (err) {
+    alert(`Could not alter attendance: ${err.message}`);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+    }
+  }
+}
+
+async function openRecordLeaveModal(prefillEmpId) {
+  const modal = document.getElementById('modalRecordLeave');
+  if (!modal) return;
+
+  const dateInp = document.getElementById('recordLeaveDate');
+  if (dateInp) dateInp.value = currentLeaveDate || new Date().toISOString().split('T')[0];
+
+  const select = document.getElementById('recordLeaveEmployeeSelect');
+  if (select) {
+    // Populate with employees
+    try {
+      const res = await adminFetch(`/api/employees?employer_id=${currentEmployerSession.employer_id}`);
+      const data = await res.json();
+      if (data.success && data.employees) {
+        select.innerHTML = '<option value="">-- Select Field Worker --</option>' +
+          data.employees.map(e => `
+            <option value="${escapeHtml(e.id)}" ${e.id === prefillEmpId ? 'selected' : ''}>
+              ${escapeHtml(e.name)} (${escapeHtml(e.id)} - ${escapeHtml(e.department || 'Field')})
+            </option>
+          `).join('');
+      }
+    } catch (e) {
+      console.warn('Could not populate employee select:', e);
+    }
+  }
+
+  modal.style.display = 'flex';
+}
+
+function closeRecordLeaveModal() {
+  const modal = document.getElementById('modalRecordLeave');
+  if (modal) modal.style.display = 'none';
+}
+
+async function handleSaveRecordLeave() {
+  const empId = document.getElementById('recordLeaveEmployeeSelect').value;
+  const date = document.getElementById('recordLeaveDate').value;
+  const type = document.getElementById('recordLeaveType').value;
+  const status = document.getElementById('recordLeaveStatus').value;
+  const reason = document.getElementById('recordLeaveReason').value;
+
+  if (!empId || !date) {
+    alert('Please select an employee and leave date.');
+    return;
+  }
+
+  const btn = document.getElementById('btnSubmitRecordLeave');
+  const origHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = 'Saving...';
+  }
+
+  try {
+    const res = await adminFetch('/api/admin/leaves', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        employee_id: empId,
+        leave_date: date,
+        leave_type: type,
+        status,
+        reason: reason || 'Manual leave entry'
+      })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Failed to record leave');
+
+    closeRecordLeaveModal();
+    alert('Leave recorded successfully.');
+    await loadLeavesView(date);
+    switchLeaveTab('RECORDED');
+  } catch (err) {
+    alert(`Error recording leave: ${err.message}`);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+    }
+  }
+}
+
+async function handleApproveLeave(leaveId, newStatus) {
+  try {
+    const res = await adminFetch(`/api/admin/leaves/${leaveId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Failed to update leave');
+    await loadLeavesView(currentLeaveDate);
+  } catch (err) {
+    alert(`Could not update leave: ${err.message}`);
+  }
+}
+
+async function handleDeleteLeave(leaveId, empName) {
+  if (!confirm(`Remove leave record for ${empName}?`)) return;
+  try {
+    const res = await adminFetch(`/api/admin/leaves/${leaveId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Failed to delete leave');
+    await loadLeavesView(currentLeaveDate);
+  } catch (err) {
+    alert(`Could not delete leave: ${err.message}`);
+  }
+}
+
+window.openAlterAttendanceModal = openAlterAttendanceModal;
+window.closeAlterAttendanceModal = closeAlterAttendanceModal;
+window.calculateAlterHoursPreview = calculateAlterHoursPreview;
+window.handleSaveAlterAttendance = handleSaveAlterAttendance;
+window.openRecordLeaveModal = openRecordLeaveModal;
+window.closeRecordLeaveModal = closeRecordLeaveModal;
+window.handleSaveRecordLeave = handleSaveRecordLeave;
+window.handleDeleteLeave = handleDeleteLeave;
+window.handleApproveLeave = handleApproveLeave;
+window.loadLeavesView = loadLeavesView;
 
 
