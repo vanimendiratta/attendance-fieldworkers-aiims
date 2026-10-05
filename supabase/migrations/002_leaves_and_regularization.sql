@@ -70,3 +70,6 @@ CREATE TABLE IF NOT EXISTS organization_holidays (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(employer_id, holiday_date)
 );
+
+-- 5. Rate Limits Timestamp Capacity Fix
+ALTER TABLE auth_rate_limits ALTER COLUMN timestamp TYPE BIGINT;

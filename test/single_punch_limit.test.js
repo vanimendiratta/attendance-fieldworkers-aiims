@@ -11,8 +11,12 @@ const assert = require('assert');
 const http = require('http');
 const db = require('../src/db/database');
 
-const PORT = 3000;
-const BASE_URL = `http://localhost:${PORT}`;
+const app = require('../server');
+const sessionService = require('../src/services/session_service');
+
+let BASE_URL = process.env.TEST_BASE_URL || '';
+let serverInstance = null;
+let empToken = '';
 
 function createUniquePhotoDataUri(variant = 1) {
   const base = Buffer.from(
@@ -33,15 +37,19 @@ function createUniquePhotoDataUri(variant = 1) {
 function apiRequest(method, path, body = null, headers = {}) {
   return new Promise((resolve, reject) => {
     const url = new URL(path, BASE_URL);
+    const reqHeaders = {
+      'Content-Type': 'application/json',
+      ...headers
+    };
+    if (!reqHeaders['Authorization'] && !reqHeaders['authorization'] && empToken) {
+      reqHeaders['Authorization'] = `Bearer ${empToken}`;
+    }
     const options = {
       hostname: url.hostname,
       port: url.port,
       path: url.pathname + url.search,
       method: method,
-      headers: {
-        'Content-Type': 'application/json',
-        ...headers
-      }
+      headers: reqHeaders
     };
 
     const req = http.request(options, (res) => {
@@ -63,6 +71,12 @@ function apiRequest(method, path, body = null, headers = {}) {
 }
 
 async function runSinglePunchLimitTests() {
+  if (!BASE_URL) {
+    serverInstance = app.listen(0);
+    const port = serverInstance.address().port;
+    BASE_URL = `http://localhost:${port}`;
+  }
+
   console.log('\n===============================================================');
   console.log('🔒 TESTING SINGLE CHECK-IN / CHECK-OUT PER DAY & PRE-REQUISITE ENFORCEMENT');
   console.log('===============================================================\n');
@@ -70,15 +84,23 @@ async function runSinglePunchLimitTests() {
   const testEmpId = 'EMP-1001';
   const testEmployerId = 'ORG-001';
 
+  try {
   // Step 0: Ensure test employee exists and clean up prior attendance
-  db.prepare(`
-    INSERT INTO employees (id, employer_id, name, email, department, designation, password, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  await db.query(`
+    INSERT INTO employees (id, employer_id, name, email, department, designation, password, pin, created_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, '1234', $8)
     ON CONFLICT(id) DO UPDATE SET employer_id=excluded.employer_id, department=excluded.department, designation=excluded.designation
-  `).run(testEmpId, testEmployerId, 'Dental Officer Test', 'dental.field@aiims.edu', 'Dental', 'PRS-1', 'Password@123', new Date().toISOString());
+  `, [testEmpId, testEmployerId, 'Dental Officer Test', 'dental.field@aiims.edu', 'Dental', 'PRS-1', 'Password@123', new Date().toISOString()]);
 
-  db.prepare("DELETE FROM breaks WHERE attendance_id IN (SELECT id FROM attendance WHERE employee_id = ?)").run(testEmpId);
-  db.prepare("DELETE FROM attendance WHERE employee_id = ?").run(testEmpId);
+  await db.query("DELETE FROM breaks WHERE attendance_id IN (SELECT id FROM attendance WHERE employee_id = $1)", [testEmpId]);
+  await db.query("DELETE FROM attendance WHERE employee_id = $1", [testEmpId]);
+
+  const session = await sessionService.createSession({
+    sessionType: 'employee',
+    userId: testEmpId,
+    employerId: testEmployerId
+  });
+  empToken = session.token;
 
   // Test 1: Checkout without check-in MUST be blocked
   console.log('1. Testing: Without check-in, check-out cannot be done...');
@@ -215,9 +237,15 @@ async function runSinglePunchLimitTests() {
   console.log('\n===============================================================');
   console.log('🎉 ALL SINGLE ATTENDANCE PER DAY & PRE-REQUISITE TESTS PASSED 100%!');
   console.log('===============================================================\n');
+  } finally {
+    if (serverInstance) serverInstance.close();
+  }
 }
 
-runSinglePunchLimitTests().catch(err => {
+runSinglePunchLimitTests().then(() => {
+  process.exit(0);
+}).catch(err => {
   console.error('❌ Test failed:', err);
+  if (serverInstance) serverInstance.close();
   process.exit(1);
 });

@@ -26,7 +26,7 @@ const isProduction = ['production'].includes(
 );
 const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 
-const DATABASE_URL = process.env.DATABASE_URL;
+const DATABASE_URL = process.env.DATABASE_URL || process.env.TEST_DATABASE_URL;
 
 if (!DATABASE_URL) {
   if (isProduction && !isServerless) {
@@ -132,6 +132,8 @@ async function ensureSchema() {
           CREATE INDEX IF NOT EXISTS idx_employee_leaves_emp_date ON employee_leaves(employer_id, leave_date);
           CREATE INDEX IF NOT EXISTS idx_employee_leaves_emp_id ON employee_leaves(employee_id);
           CREATE INDEX IF NOT EXISTS idx_employee_leaves_status ON employee_leaves(status);
+
+          ALTER TABLE auth_rate_limits ALTER COLUMN timestamp TYPE BIGINT;
         `);
         schemaEnsured = true;
       } catch (err) {

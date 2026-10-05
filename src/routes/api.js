@@ -292,17 +292,24 @@ router.post('/auth/employee/login', authService.rateLimitMiddleware(authService.
 });
 
 // ---------------------------------------------------------------------------
-// Employee ID sequence helper (async, PostgreSQL RETURNING)
+// Employee ID sequence helper (async, PostgreSQL RETURNING with collision guard)
 // ---------------------------------------------------------------------------
 async function generateEmployeeId(employerId = 'ORG-001') {
-  const result = await query(
-    `INSERT INTO employee_sequences (employer_id, last_seq)
-     VALUES ($1, 1001)
-     ON CONFLICT (employer_id) DO UPDATE SET last_seq = employee_sequences.last_seq + 1
-     RETURNING last_seq`,
-    [employerId]
-  );
-  return `EMP-${result.rows[0].last_seq}`;
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const result = await query(
+      `INSERT INTO employee_sequences (employer_id, last_seq)
+       VALUES ($1, 1001)
+       ON CONFLICT (employer_id) DO UPDATE SET last_seq = employee_sequences.last_seq + 1
+       RETURNING last_seq`,
+      [employerId]
+    );
+    const candidateId = `EMP-${result.rows[0].last_seq}`;
+    const checkRes = await query('SELECT 1 FROM employees WHERE UPPER(TRIM(id)) = $1', [candidateId.toUpperCase()]);
+    if (checkRes.rows.length === 0) {
+      return candidateId;
+    }
+  }
+  return `EMP-${Date.now().toString().slice(-6)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -484,6 +491,12 @@ router.post('/auth/employee/face-login', authService.rateLimitMiddleware(authSer
       if (demoEmp && demoEmp.face_descriptor) {
         candidateDescriptor = demoEmp.face_descriptor;
       }
+    }
+
+    if (typeof candidateDescriptor === 'string') {
+      try {
+        candidateDescriptor = JSON.parse(candidateDescriptor);
+      } catch {}
     }
 
     if (!candidateDescriptor || !Array.isArray(candidateDescriptor) || candidateDescriptor.length < 32) {

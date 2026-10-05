@@ -22,8 +22,10 @@ const authService = require('../src/services/auth_service');
 const biometricService = require('../src/services/biometric_service');
 const attendanceService = require('../src/services/attendance_service');
 
-const PORT = 3000;
-const BASE_URL = `http://localhost:${PORT}`;
+const sessionService = require('../src/services/session_service');
+
+let PORT = 0;
+let BASE_URL = '';
 
 function request(method, path, body = null, headers = {}, customBaseUrl = null) {
   return new Promise((resolve, reject) => {
@@ -73,6 +75,19 @@ async function runSecurityVerification() {
   console.log('🛡️ SENIOR-LEVEL QA & SECURITY VERIFICATION TEST SUITE');
   console.log('===============================================================');
 
+  const app = require('../server');
+  const server = http.createServer(app);
+  await new Promise(resolve => server.listen(0, resolve));
+  PORT = server.address().port;
+  BASE_URL = `http://localhost:${PORT}`;
+
+  try {
+    // Ensure test credentials
+    const empHash = authService.hashPassword('Password@123');
+    await db.query('UPDATE employees SET password = $1 WHERE id = $2', [empHash, 'EMP-1001']);
+    const adminHash = authService.hashPassword('Aiims@123');
+    await db.query('UPDATE organizations SET admin_password = $1 WHERE id = $2', [adminHash, 'ORG-001']);
+
   // -------------------------------------------------------------
   // 1. Password Policy & Cryptographic Hashing
   // -------------------------------------------------------------
@@ -120,13 +135,13 @@ async function runSecurityVerification() {
   });
   assert.strictEqual(emptyRes.statusCode, 400);
 
-  // Non-existent employer
+  // Non-existent employer (returns 401 generic error to prevent enumeration)
   const badOrgRes = await request('POST', '/api/auth/employee/login', {
     employer_id: 'ORG-NON-EXISTENT',
     login_id: 'EMP-1001',
     password: 'Password@123'
   });
-  assert.strictEqual(badOrgRes.statusCode, 404);
+  assert.strictEqual(badOrgRes.statusCode, 401);
 
   // Wrong password
   const badPassRes = await request('POST', '/api/auth/employee/login', {
@@ -135,7 +150,7 @@ async function runSecurityVerification() {
     password: 'WrongPassword@999'
   });
   assert.strictEqual(badPassRes.statusCode, 401);
-  assert.strictEqual(badPassRes.json.error.includes('Invalid password'), true);
+  assert.strictEqual(badPassRes.json.error.includes('Invalid Employee ID or password'), true);
   console.log('✓ Authentication handles SQL injection, non-existent accounts, and malformed bodies securely');
 
   // -------------------------------------------------------------
@@ -189,7 +204,8 @@ async function runSecurityVerification() {
   assert.strictEqual(validSignup.json.success, true);
   
   // Verify password was stored hashed, NOT plaintext
-  const storedEmp = db.prepare('SELECT password FROM employees WHERE id = ?').get(validSignupId);
+  const storedEmpRes = await db.query('SELECT password FROM employees WHERE id = $1', [validSignupId]);
+  const storedEmp = storedEmpRes.rows[0];
   assert.ok(storedEmp.password.startsWith('scrypt$'), 'Stored employee password must be a salted scrypt hash');
   assert.strictEqual(authService.verifyPassword('ValidSecure@123', storedEmp.password), true);
   console.log('✓ New employee registration stores salted scrypt hash and resolves territorial team');
@@ -200,29 +216,45 @@ async function runSecurityVerification() {
   console.log('\n[Section 4] Multi-Tenant Isolation (Zero Cross-Tenant Leakage)');
 
   // Create isolated secondary organization
-  db.prepare(`
-    INSERT OR REPLACE INTO organizations (id, name, office_name, office_lat, office_lng, geofence_radius_m, max_gps_accuracy_m, geofence_policy, shift_hours, timezone, admin_username, admin_password)
-    VALUES ('ORG-TENANT-X', 'Tenant X Corp', 'Tenant X HQ', 12.9716, 77.5946, 500, 100, 'STRICT_BLOCK', 8.0, 'Asia/Kolkata', 'admin_x', 'AdminX@123')
-  `).run();
+  const adminXHash = authService.hashPassword('AdminX@123');
+  await db.query(`
+    INSERT INTO organizations (id, name, office_name, office_lat, office_lng, geofence_radius_m, max_gps_accuracy_m, geofence_policy, shift_hours, timezone, admin_username, admin_password)
+    VALUES ('ORG-TENANT-X', 'Tenant X Corp', 'Tenant X HQ', 12.9716, 77.5946, 500, 100, 'STRICT_BLOCK', 8.0, 'Asia/Kolkata', 'admin_x', $1)
+    ON CONFLICT (id) DO UPDATE SET admin_password = EXCLUDED.admin_password
+  `, [adminXHash]);
 
-  db.prepare(`
-    INSERT OR REPLACE INTO employees (id, employer_id, name, email, department, designation, password, created_at)
-    VALUES ('EMP-X-01', 'ORG-TENANT-X', 'Tenant X User', 'user@tenantx.com', 'Dental', 'PRS-1', 'ValidSecure@123', datetime('now'))
-  `).run();
+  await db.query(`
+    INSERT INTO employees (id, employer_id, name, email, department, designation, password, pin, is_active, created_at)
+    VALUES ('EMP-X-01', 'ORG-TENANT-X', 'Tenant X User', 'user@tenantx.com', 'Dental', 'PRS-1', 'ValidSecure@123', '1234', 1, NOW())
+    ON CONFLICT (id) DO NOTHING
+  `);
 
-  db.prepare(`
-    INSERT OR REPLACE INTO attendance (
+  await db.query(`
+    INSERT INTO attendance (
       id, employee_id, employer_id, attendance_status, checkin_photo,
       checkin_lat, checkin_lng, checkin_accuracy, checkin_server_timestamp,
       work_mode, created_at, updated_at
     ) VALUES (
       'ATT-TENANT-X-01', 'EMP-X-01', 'ORG-TENANT-X', 'CHECKED_IN', 'photo',
-      12.9716, 77.5946, 10, datetime('now'), 'OFFICE', datetime('now'), datetime('now')
+      12.9716, 77.5946, 10, NOW(), 'OFFICE', NOW(), NOW()
     )
-  `).run();
+    ON CONFLICT (id) DO NOTHING
+  `);
+
+  const admin1Session = await sessionService.createSession({
+    sessionType: 'admin',
+    userId: 'aiims_admin',
+    employerId: 'ORG-001'
+  });
+  const adminXSession = await sessionService.createSession({
+    sessionType: 'admin',
+    userId: 'admin_x',
+    employerId: 'ORG-TENANT-X'
+  });
 
   // Query ORG-001 admin attendance
   const org1AttRes = await request('GET', '/api/admin/attendance?employer_id=ORG-001', null, {
+    'Authorization': `Bearer ${admin1Session.token}`,
     'x-employer-id': 'ORG-001'
   });
   assert.strictEqual(org1AttRes.statusCode, 200);
@@ -231,6 +263,7 @@ async function runSecurityVerification() {
 
   // Query ORG-TENANT-X admin attendance
   const orgXAttRes = await request('GET', '/api/admin/attendance?employer_id=ORG-TENANT-X', null, {
+    'Authorization': `Bearer ${adminXSession.token}`,
     'x-employer-id': 'ORG-TENANT-X'
   });
   assert.strictEqual(orgXAttRes.statusCode, 200);
@@ -238,9 +271,9 @@ async function runSecurityVerification() {
   assert.ok(orgXAttRes.json.records.some(r => r.id === 'ATT-TENANT-X-01'));
 
   // Clean up tenant X
-  db.prepare(`DELETE FROM attendance WHERE employer_id = 'ORG-TENANT-X'`).run();
-  db.prepare(`DELETE FROM employees WHERE employer_id = 'ORG-TENANT-X'`).run();
-  db.prepare(`DELETE FROM organizations WHERE id = 'ORG-TENANT-X'`).run();
+  await db.query(`DELETE FROM attendance WHERE employer_id = 'ORG-TENANT-X'`);
+  await db.query(`DELETE FROM employees WHERE employer_id = 'ORG-TENANT-X'`);
+  await db.query(`DELETE FROM organizations WHERE id = 'ORG-TENANT-X'`);
   console.log('✓ Multi-tenant queries rigorously enforce organization isolation');
 
   // -------------------------------------------------------------
@@ -257,7 +290,7 @@ async function runSecurityVerification() {
     verified: true
   });
   assert.strictEqual(spoofRes.statusCode, 400);
-  assert.ok(spoofRes.json.error.includes('No face biometric data captured'));
+  assert.ok(spoofRes.json.error.includes('No face biometric'));
 
   // Attacker sends random non-matching biometric vector with matched: true
   const randomVector = new Array(64).fill(0).map(() => (Math.random() - 0.5) * 2);
@@ -332,23 +365,24 @@ async function runSecurityVerification() {
   // Direct sequence concurrency benchmark (50 parallel reservations)
   const seqReservations = [];
   for (let j = 0; j < 50; j++) {
-    const seqRow = db.prepare(`
+    const seqRowRes = await db.query(`
       INSERT INTO employee_sequences (employer_id, last_seq)
       VALUES ('ORG-BENCHMARK', 5000)
-      ON CONFLICT(employer_id) DO UPDATE SET last_seq = last_seq + 1
+      ON CONFLICT(employer_id) DO UPDATE SET last_seq = employee_sequences.last_seq + 1
       RETURNING last_seq;
-    `).get();
+    `);
+    const seqRow = seqRowRes.rows[0];
     seqReservations.push(`EMP-${seqRow.last_seq}`);
   }
   const uniqueSeqSet = new Set(seqReservations);
   assert.strictEqual(seqReservations.length, 50);
   assert.strictEqual(uniqueSeqSet.size, 50, 'All 50 sequence reservations must be uniquely monotonic');
-  db.prepare(`DELETE FROM employee_sequences WHERE employer_id = 'ORG-BENCHMARK'`).run();
+  await db.query(`DELETE FROM employee_sequences WHERE employer_id = 'ORG-BENCHMARK'`);
   console.log('✓ 50 parallel atomic database sequence reservations verified with 0 collisions');
 
   // Cleanup test employees
   for (const id of generatedIds) {
-    db.prepare('DELETE FROM employees WHERE id = ?').run(id);
+    await db.query('DELETE FROM employees WHERE id = $1', [id]);
   }
 
   // -------------------------------------------------------------
@@ -356,9 +390,9 @@ async function runSecurityVerification() {
   // -------------------------------------------------------------
   console.log('\n[Section 8] Server-Side Rate Limiting (Brute-Force Protection)');
 
-  // Trigger login rate limit (> 10 requests)
+  // Trigger login rate limit (> 30 requests)
   let hitRateLimit = false;
-  for (let i = 0; i < 15; i++) {
+  for (let i = 0; i < 35; i++) {
     const res = await request('POST', '/api/auth/employee/login', {
       employer_id: 'ORG-001',
       login_id: 'rate_limit_test_user',
@@ -374,7 +408,8 @@ async function runSecurityVerification() {
   console.log('✓ Server-side sliding-window rate limiter triggered HTTP 429 Too Many Requests');
 
   // Reset rate limiter for the client key so subsequent tests run cleanly
-  authService.loginRateLimiter.reset('127.0.0.1:rate_limit_test_user');
+  await authService.loginRateLimiter.reset('ip:127.0.0.1');
+  await authService.loginRateLimiter.reset('account:rate_limit_test_user');
 
   // -------------------------------------------------------------
   // 9. Authoritative Server Geofence & Timestamp Calculations
@@ -383,11 +418,21 @@ async function runSecurityVerification() {
 
   // Employee attempting check-in with spoofed client timestamp
   const spoofClientTimestamp = '2000-01-01T00:00:00.000Z';
-  const testWorker = db.prepare('SELECT * FROM employees WHERE id = ?').get('EMP-1004');
+  let emp1004Res = await db.query('SELECT * FROM employees WHERE id = $1', ['EMP-1004']);
+  let testWorker = emp1004Res.rows[0];
+  if (!testWorker) {
+    await db.query(`
+      INSERT INTO employees (id, employer_id, name, email, department, designation, password, pin, is_active, created_at)
+      VALUES ('EMP-1004', 'ORG-001', 'Test Worker 1004', 'emp1004@test.com', 'Dental', 'PRS-1', 'dummyhash', '1234', 1, NOW())
+      ON CONFLICT (id) DO NOTHING
+    `);
+    emp1004Res = await db.query('SELECT * FROM employees WHERE id = $1', ['EMP-1004']);
+    testWorker = emp1004Res.rows[0];
+  }
 
   // Clear any existing active session
-  db.prepare(`DELETE FROM breaks WHERE attendance_id IN (SELECT id FROM attendance WHERE employee_id = 'EMP-1004')`).run();
-  db.prepare(`DELETE FROM attendance WHERE employee_id = 'EMP-1004'`).run();
+  await db.query(`DELETE FROM breaks WHERE attendance_id IN (SELECT id FROM attendance WHERE employee_id = 'EMP-1004')`);
+  await db.query(`DELETE FROM attendance WHERE employee_id = 'EMP-1004'`);
 
   const checkinRes = await attendanceService.processCheckIn({
     employee: testWorker,
@@ -402,21 +447,28 @@ async function runSecurityVerification() {
   });
 
   assert.strictEqual(checkinRes.status, 'CHECK_IN_SUCCESSFUL');
-  const serverRec = db.prepare('SELECT * FROM attendance WHERE id = ?').get(checkinRes.attendance.id);
+  const serverRecRes = await db.query('SELECT * FROM attendance WHERE id = $1', [checkinRes.attendance.id]);
+  const serverRec = serverRecRes.rows[0];
   assert.notStrictEqual(serverRec.checkin_server_timestamp, spoofClientTimestamp, 'Server must NOT trust client-supplied timestamp');
   const recordYear = new Date(serverRec.checkin_server_timestamp).getFullYear();
   assert.ok(recordYear >= 2026, 'Server timestamp must be current UTC year');
   console.log('✓ Server-side UTC timestamp is authoritatively recorded; client timestamp spoofing rejected');
 
   // Cleanup EMP-1004
-  db.prepare(`DELETE FROM attendance WHERE id = ?`).run(checkinRes.attendance.id);
+  await db.query(`DELETE FROM breaks WHERE attendance_id = $1`, [checkinRes.attendance.id]);
+  await db.query(`DELETE FROM attendance WHERE id = $1`, [checkinRes.attendance.id]);
 
   console.log('\n===============================================================');
   console.log('🎉 ALL SECURITY & INTEGRITY VERIFICATIONS PASSED 100%!');
   console.log('===============================================================');
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
 }
 
-runSecurityVerification().catch(err => {
+runSecurityVerification().then(() => {
+  process.exit(0);
+}).catch(err => {
   console.error('\n❌ Security verification failed:', err);
   process.exit(1);
 });

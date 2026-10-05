@@ -12,9 +12,12 @@
 
 const assert = require('assert');
 const http = require('http');
+const app = require('../server');
+const db = require('../src/db/database');
 
-const PORT = 3000;
-const BASE_URL = `http://localhost:${PORT}`;
+let BASE_URL = process.env.TEST_BASE_URL || '';
+let serverInstance = null;
+let adminToken = '';
 
 function fetchRaw(path, headers = {}) {
   return new Promise((resolve, reject) => {
@@ -25,6 +28,7 @@ function fetchRaw(path, headers = {}) {
       path: url.pathname + url.search,
       method: 'GET',
       headers: {
+        'Authorization': `Bearer ${adminToken}`,
         ...headers
       }
     };
@@ -49,8 +53,23 @@ function fetchRaw(path, headers = {}) {
 }
 
 async function runTests() {
+  if (!BASE_URL) {
+    serverInstance = app.listen(0);
+    const port = serverInstance.address().port;
+    BASE_URL = `http://localhost:${port}`;
+  }
+
+  const sessionService = require('../src/services/session_service');
+  const adminSession = await sessionService.createSession({
+    sessionType: 'admin',
+    userId: 'aiims_admin',
+    employerId: 'ORG-001'
+  });
+  adminToken = adminSession.token;
+
   console.log('--- Starting Attendance CSV Export Tests ---');
 
+  try {
   // Test 1: Basic CSV Export endpoint check
   console.log('\n[Test 1] GET /api/admin/attendance/export.csv returns 200 and text/csv headers');
   const res1 = await fetchRaw('/api/admin/attendance/export.csv?employer_id=ORG-001', {
@@ -99,63 +118,51 @@ async function runTests() {
   const headerLine = lines[0];
   const headerColumns = headerLine.split(',');
 
-  const authoritative37Columns = [
-    'Attendance ID',
-    'Employee ID',
-    'Employee Name',
-    'Department',
-    'Designation',
-    'Email',
-    'Organization',
-    'Team Name',
-    'State / UT',
-    'District',
-    'Work Mode',
-    'Attendance Status',
-    'Check-In Date',
-    'Check-In Time',
-    'Check-In Server Timestamp (UTC)',
-    'Check-In Latitude',
-    'Check-In Longitude',
-    'Check-In GPS Accuracy (m)',
-    'Check-In Geofence Distance (m)',
-    'Check-In Geofence Status',
-    'Check-In Address',
-    'Checkout Date',
-    'Checkout Time',
-    'Checkout Server Timestamp (UTC)',
-    'Checkout Latitude',
-    'Checkout Longitude',
-    'Checkout GPS Accuracy (m)',
-    'Checkout Geofence Distance (m)',
-    'Checkout Geofence Status',
-    'Checkout Address',
-    'Gross Working Hours',
-    'Break Minutes',
-    'Net Working Hours',
-    'Overtime Hours',
-    'Field Site Notes',
-    'REDCap Sync Status',
-    'Created At'
+  const authoritativeColumns = [
+    'Attendance ID','Employee ID','Employee Name','Department','Designation','Email',
+    'Organization','Team Name','State / UT','District','Work Mode','Attendance Status',
+    'Location Classification','Hotel / Stay Name','Hotel Room Number','Hotel Contact Phone',
+    'Holiday / Sunday Duty','Holiday Name','Comp-Off Credit',
+    'Check-In Date','Check-In Time','Check-In Server Timestamp (UTC)',
+    'Check-In Latitude','Check-In Longitude','Check-In GPS Accuracy (m)',
+    'Exact Google Maps Satellite Pin URL',
+    'Check-In Geofence Distance (m)','Check-In Geofence Status','Check-In Address',
+    'Checkout Date','Checkout Time','Checkout Server Timestamp (UTC)',
+    'Checkout Latitude','Checkout Longitude','Checkout GPS Accuracy (m)',
+    'Checkout Geofence Distance (m)','Checkout Geofence Status','Checkout Address',
+    'Gross Working Hours','Break Minutes','Net Working Hours','Overtime Hours',
+    'Shift Variance vs Target (Dec)','Field Site Notes','DB Sync Status','Created At'
   ];
 
   assert.strictEqual(
-    headerColumns.length, 37,
-    `Authoritative enterprise attendance CSV must have exactly 37 columns, but found ${headerColumns.length}`
+    headerColumns.length, authoritativeColumns.length,
+    `Authoritative enterprise attendance CSV must have exactly ${authoritativeColumns.length} columns, but found ${headerColumns.length}`
   );
 
-  for (let i = 0; i < authoritative37Columns.length; i++) {
+  for (let i = 0; i < authoritativeColumns.length; i++) {
     assert.strictEqual(
-      headerColumns[i], authoritative37Columns[i],
-      `Column ${i + 1} mismatch: expected "${authoritative37Columns[i]}", got "${headerColumns[i]}"`
+      headerColumns[i], authoritativeColumns[i],
+      `Column ${i + 1} mismatch: expected "${authoritativeColumns[i]}", got "${headerColumns[i]}"`
     );
   }
-  console.log(`✓ All ${authoritative37Columns.length} authoritative enterprise columns verified in exact sequence`);
+  console.log(`✓ All ${authoritativeColumns.length} authoritative enterprise columns verified in exact sequence`);
 
   // Test 4: Tenant isolation
   console.log('\n[Test 4] Multi-tenant isolation in CSV export');
+  await db.query(`
+    INSERT INTO organizations (id, name, office_name, office_lat, office_lng, geofence_radius_m, geofence_policy, max_gps_accuracy_m, shift_hours, timezone, admin_username, admin_password, is_active, updated_at)
+    VALUES ('ORG-002', 'Cyberdyne', 'Cyberdyne HQ', 19.0760, 72.8777, 500, 'ALLOW_WITH_FLAG', 500, 8.0, 'Asia/Kolkata', 'org2_admin', 'hash', 1, NOW())
+    ON CONFLICT (id) DO NOTHING
+  `);
+
+  const org2Session = await sessionService.createSession({
+    sessionType: 'admin',
+    userId: 'org2_admin',
+    employerId: 'ORG-002'
+  });
+
   const resOrg2 = await fetchRaw('/api/admin/attendance/export.csv?employer_id=ORG-002', {
-    'x-employer-id': 'ORG-002'
+    'Authorization': `Bearer ${org2Session.token}`
   });
   assert.strictEqual(resOrg2.statusCode, 200);
   const linesOrg2 = resOrg2.text.replace(/^\uFEFF/, '').split(/\r?\n/).filter(line => line.trim().length > 0);
@@ -199,19 +206,18 @@ async function runTests() {
 
   // Test 7: CSV / Excel Formula Injection Sanitization
   console.log('\n[Test 7] Verify CSV / Excel formula injection sanitization (=, +, -, @)');
-  const db = require('../src/db/database');
   const testAttId = 'TEST-FORMULA-ATT-' + Date.now();
-  db.prepare(`
+  await db.query(`
     INSERT INTO attendance (
       id, employee_id, employer_id, attendance_status, checkin_photo,
       checkin_lat, checkin_lng, checkin_accuracy, checkin_server_timestamp,
       work_mode, field_site_notes, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+  `, [
     testAttId, 'EMP-1001', 'ORG-001', 'CHECKED_IN', 'data:image/png;base64,test',
     28.5662, 77.2136, 10, new Date().toISOString(),
     'FIELD_WORK', '=SUM(1+1)*cmd|', new Date().toISOString(), new Date().toISOString()
-  );
+  ]);
 
   const resFormula = await fetchRaw(`/api/admin/attendance/export.csv?employer_id=ORG-001&search=${encodeURIComponent('=SUM')}`, {
     'x-employer-id': 'ORG-001'
@@ -222,15 +228,21 @@ async function runTests() {
     'Formula injection must be safely prefixed with single quote in CSV output'
   );
   // Cleanup test record
-  db.prepare('DELETE FROM attendance WHERE id = ?').run(testAttId);
+  await db.query('DELETE FROM attendance WHERE id = $1', [testAttId]);
   console.log('✓ Excel formula injection strictly neutralized with leading quote escape');
 
   console.log('\n===========================================');
   console.log('🎉 ALL ATTENDANCE CSV EXPORT TESTS PASSED!');
   console.log('===========================================');
+  } finally {
+    if (serverInstance) serverInstance.close();
+  }
 }
 
-runTests().catch((err) => {
+runTests().then(() => {
+  process.exit(0);
+}).catch((err) => {
   console.error('❌ Test failed:', err);
+  if (serverInstance) serverInstance.close();
   process.exit(1);
 });

@@ -12,9 +12,13 @@
 
 const assert = require('assert');
 const http = require('http');
+const app = require('../server');
 
-const PORT = 3000;
-const BASE_URL = `http://localhost:${PORT}`;
+process.env.NODE_ENV = 'test';
+process.env.ALLOW_DEMO_BYPASS = 'true';
+
+let BASE_URL = process.env.TEST_BASE_URL || '';
+let serverInstance = null;
 
 function apiRequest(method, path, body = null, headers = {}) {
   return new Promise((resolve, reject) => {
@@ -71,17 +75,27 @@ function generateTestVector(seed) {
 }
 
 async function runTests() {
+  if (!BASE_URL) {
+    serverInstance = app.listen(0);
+    const port = serverInstance.address().port;
+    BASE_URL = `http://localhost:${port}`;
+  }
+
   console.log('===============================================================');
   console.log('📱 TESTING SIGN IN / SIGN UP & SCREENLOCK FACE RECOGNITION');
   console.log('===============================================================');
 
-  // Test 1: Sign Up with missing required fields
-  console.log('\n1. Testing Sign Up field validations...');
-  const resMissing = await apiRequest('POST', '/api/auth/employee/signup', {
-    name: 'Incomplete User'
-    // missing email, employer_id, department, designation, password
-  });
-  assert.strictEqual(resMissing.status, 400, 'Must reject missing fields with 400');
+  try {
+    const { query } = require('../src/db/database');
+    await query("DELETE FROM employees WHERE email LIKE '%@apexcorp.internal'");
+
+    // Test 1: Sign Up with missing required fields
+    console.log('\n1. Testing Sign Up field validations...');
+    const resMissing = await apiRequest('POST', '/api/auth/employee/signup', {
+      name: 'Incomplete User'
+      // missing email, employer_id, department, designation, password
+    });
+    assert.strictEqual(resMissing.status, 400, 'Must reject missing fields with 400');
   assert.ok(resMissing.data.error, 'Must provide validation error message');
   console.log('   ✓ Rejected registration with missing enquiries');
 
@@ -179,9 +193,15 @@ async function runTests() {
   console.log('\n===============================================================');
   console.log('🎉 ALL SIGN UP & SCREENLOCK FACE RECOGNITION TESTS PASSED 100%!');
   console.log('===============================================================');
+  } finally {
+    if (serverInstance) serverInstance.close();
+  }
 }
 
-runTests().catch(err => {
+runTests().then(() => {
+  process.exit(0);
+}).catch(err => {
   console.error('❌ Test execution error:', err);
+  if (serverInstance) serverInstance.close();
   process.exit(1);
 });

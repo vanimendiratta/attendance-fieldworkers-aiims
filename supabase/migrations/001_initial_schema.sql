@@ -189,8 +189,8 @@ CREATE TABLE IF NOT EXISTS employee_sequences (
 -- 8. auth_rate_limits
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS auth_rate_limits (
-    rate_key  TEXT    NOT NULL,
-    timestamp INTEGER NOT NULL
+    rate_key  TEXT   NOT NULL,
+    timestamp BIGINT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_rate_limits_key_ts

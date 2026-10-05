@@ -70,7 +70,7 @@ async function runSecurityRemediationTests() {
 
   // Clear rate limits for clean test environment
   try {
-    db.prepare('DELETE FROM auth_rate_limits').run();
+    await db.query('DELETE FROM auth_rate_limits');
   } catch (_) {}
   if (authService.loginRateLimiter?.hits) authService.loginRateLimiter.hits.clear();
   if (authService.faceRateLimiter?.hits) authService.faceRateLimiter.hits.clear();
@@ -80,19 +80,29 @@ async function runSecurityRemediationTests() {
     // -----------------------------------------------------------------
     // Setup: Retrieve seed users
     // -----------------------------------------------------------------
-    const emp1 = db.prepare('SELECT * FROM employees WHERE id = ?').get('EMP-1001');
+    const emp1Res = await db.query('SELECT * FROM employees WHERE id = $1', ['EMP-1001']);
+    const emp1 = emp1Res.rows[0];
     assert(emp1, 'EMP-1001 must exist in database');
+    const emp1Hash = authService.hashPassword('Password@123');
+    await db.query('UPDATE employees SET password = $1 WHERE id = $2', [emp1Hash, 'EMP-1001']);
 
-    const org1 = db.prepare('SELECT * FROM organizations WHERE id = ?').get('ORG-001');
-    let org2 = db.prepare('SELECT * FROM organizations WHERE id = ?').get('ORG-002');
+    const org1Res = await db.query('SELECT * FROM organizations WHERE id = $1', ['ORG-001']);
+    const org1 = org1Res.rows[0];
+    const org1Hash = authService.hashPassword('Aiims@123');
+    await db.query('UPDATE organizations SET admin_password = $1 WHERE id = $2', [org1Hash, 'ORG-001']);
+    let org2Res = await db.query('SELECT * FROM organizations WHERE id = $1', ['ORG-002']);
+    let org2 = org2Res.rows[0];
+    const org2Hash = authService.hashPassword('Password@123');
     if (!org2) {
-      const hash = authService.hashPassword('Password@123');
-      db.prepare(`
+      await db.query(`
         INSERT INTO organizations (id, name, office_name, office_lat, office_lng, geofence_radius_m, admin_username, admin_password)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run('ORG-002', 'Safdarjung Hospital', 'Safdarjung Campus', 28.5684, 77.2064, 100, 'safdarjung_admin', hash);
-      org2 = db.prepare('SELECT * FROM organizations WHERE id = ?').get('ORG-002');
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `, ['ORG-002', 'Safdarjung Hospital', 'Safdarjung Campus', 28.5684, 77.2064, 100, 'safdarjung_admin', org2Hash]);
+    } else {
+      await db.query('UPDATE organizations SET admin_password = $1, admin_username = $2 WHERE id = $3', [org2Hash, 'safdarjung_admin', 'ORG-002']);
     }
+    org2Res = await db.query('SELECT * FROM organizations WHERE id = $1', ['ORG-002']);
+    org2 = org2Res.rows[0];
     assert(org1 && org2, 'Organizations ORG-001 and ORG-002 must exist');
 
     // Create valid sessions directly or via login
@@ -180,14 +190,16 @@ async function runSecurityRemediationTests() {
     }
 
     // Admin 1 tries to delete or modify an employee from ORG-002
-    let empOrg2 = db.prepare('SELECT * FROM employees WHERE employer_id = ?').get('ORG-002');
+    let empOrg2Res = await db.query('SELECT * FROM employees WHERE employer_id = $1', ['ORG-002']);
+    let empOrg2 = empOrg2Res.rows[0];
     if (!empOrg2) {
       const id = 'EMP-ORG2-TEST';
-      db.prepare(`
-        INSERT INTO employees (id, name, email, department, designation, employer_id, password, is_active, created_at)
-        VALUES (?, 'Org2 Emp', 'org2emp@test.com', 'Cardiology', 'Nurse', 'ORG-002', 'dummyhash', 1, datetime('now'))
-      `).run(id);
-      empOrg2 = db.prepare('SELECT * FROM employees WHERE id = ?').get(id);
+      await db.query(`
+        INSERT INTO employees (id, name, email, department, designation, employer_id, password, pin, is_active, created_at)
+        VALUES ($1, 'Org2 Emp', 'org2emp@test.com', 'Cardiology', 'Nurse', 'ORG-002', 'dummyhash', '1234', 1, NOW())
+      `, [id]);
+      empOrg2Res = await db.query('SELECT * FROM employees WHERE id = $1', [id]);
+      empOrg2 = empOrg2Res.rows[0];
     }
 
     const crossTenantDelete = await request('DELETE', `/api/employees/${empOrg2.id}`, null, {
@@ -293,11 +305,12 @@ async function runSecurityRemediationTests() {
     assert.strictEqual(logoutRes.statusCode, 200, 'Logout should succeed');
     assert.strictEqual(logoutRes.body.success, true);
 
-    const sessionAfterLogout = sessionService.getSession(empToken);
+    const sessionAfterLogout = await sessionService.getSession(empToken);
     assert.strictEqual(sessionAfterLogout, null, 'Session must be revoked after logout');
 
-    const dbSession = db.prepare('SELECT * FROM sessions WHERE id = ?').get(empToken);
-    assert.strictEqual(dbSession.is_revoked, 1, 'Session record must be marked as revoked in database');
+    const dbSessionRes = await db.query('SELECT * FROM sessions WHERE id = $1', [empToken]);
+    const dbSession = dbSessionRes.rows[0];
+    assert.strictEqual(Number(dbSession.is_revoked), 1, 'Session record must be marked as revoked in database');
 
     const revokedRes = await request('GET', '/api/attendance/current', null, {
       'Authorization': `Bearer ${empToken}`
@@ -352,8 +365,10 @@ async function runSecurityRemediationTests() {
     process.env.ALLOW_DEMO_BYPASS = 'true';
     const biometricService = require('../src/services/biometric_service');
     const empDescriptor = biometricService.createDeterministicDescriptor(emp1.name);
-    db.prepare('UPDATE employees SET face_enrolled = 1, face_descriptor = ? WHERE id = ?')
-      .run(JSON.stringify(empDescriptor), 'EMP-1001');
+    await db.query('UPDATE employees SET face_enrolled = 1, face_descriptor = $1 WHERE id = $2', [
+      JSON.stringify(empDescriptor),
+      'EMP-1001'
+    ]);
 
     const bypassPerm5 = await request('POST', '/api/auth/employee/face-login', {
       employer_id: 'ORG-001',
@@ -443,7 +458,9 @@ async function runSecurityRemediationTests() {
 }
 
 if (require.main === module) {
-  runSecurityRemediationTests().catch(err => {
+  runSecurityRemediationTests().then(() => {
+    process.exit(0);
+  }).catch(err => {
     console.error('❌ Security remediation test suite failed:', err);
     process.exit(1);
   });

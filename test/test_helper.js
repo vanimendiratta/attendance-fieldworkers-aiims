@@ -164,6 +164,7 @@ async function cleanTestData() {
   if (!TEST_DATABASE_URL) return;
 
   await query("DELETE FROM audit_logs WHERE action LIKE 'TEST_%' OR event_type LIKE 'TEST_%'");
+  await query("DELETE FROM breaks WHERE attendance_id IN (SELECT id FROM attendance WHERE employee_id LIKE 'TEST_%' OR employee_id = 'EMP-1001')");
   await query("DELETE FROM attendance WHERE employee_id LIKE 'TEST_%' OR employee_id = 'EMP-1001'");
   await query("DELETE FROM auth_rate_limits");
 }

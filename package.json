@@ -10,6 +10,7 @@
     "start": "node server.js",
     "dev": "node server.js",
     "test": "node test/api.test.js",
+    "test:all": "node scripts/test_all.js",
     "lint": "node scripts/lint.js",
     "build": "node scripts/build.js",
     "seed": "node scripts/seed.js"
