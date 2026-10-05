@@ -989,6 +989,7 @@ function renderDailyAttendanceTables(records) {
               const addrText = r.checkout_address || (r.checkout_lat != null ? `${Number(r.checkout_lat).toFixed(4)}°, ${Number(r.checkout_lng).toFixed(4)}°` : 'Checkout Recorded');
               const accText = r.checkout_accuracy ? `±${r.checkout_accuracy}m accuracy` : 'Recorded';
               return `
+                <span class="badge badge-neutral" style="font-size: 10px; margin-bottom: 2px;">Checkout Point</span>
                 <div style="font-size: 11px; color: var(--color-text-primary); font-weight: 500; max-width: 210px; white-space: normal; line-height: 1.3;">
                   ${escapeHtml(addrText)}
                 </div>
@@ -1087,7 +1088,7 @@ function renderDailyAttendanceTables(records) {
                 <th>Team &amp; Territory</th>
                 <th>Check-In</th>
                 <th>Check-In Photo</th>
-                <th>Location / Lodging / Map</th>
+                <th>Check-In Location</th>
                 <th>Checkout</th>
                 <th>Checkout Photo</th>
                 <th>Checkout Location</th>
@@ -1300,6 +1301,7 @@ function renderAttendanceTable(records) {
             const accText = r.checkout_accuracy ? `±${r.checkout_accuracy}m accuracy` : 'Recorded';
 
             return `
+              <span class="badge badge-neutral" style="font-size: 10px; margin-bottom: 2px;">Checkout Point</span>
               <div style="font-size: 11px; color: var(--color-text-primary); font-weight: 500; max-width: 210px; white-space: normal; line-height: 1.3;">
                 ${escapeHtml(addrText)}
               </div>
