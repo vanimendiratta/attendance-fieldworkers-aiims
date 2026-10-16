@@ -13,7 +13,9 @@
     "test:all": "node scripts/test_all.js",
     "lint": "node scripts/lint.js",
     "build": "node scripts/build.js",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "keepalive": "node scripts/supabase-keepalive.js",
+    "test:keepalive": "node test/supabase_keepalive.test.js"
   },
   "keywords": [],
   "author": "",

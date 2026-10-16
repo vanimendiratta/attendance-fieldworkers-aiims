@@ -1,0 +1,83 @@
+name: Supabase Database Keep-Alive
+
+on:
+  # Run automatically every 3 days at 04:15 UTC (off-peak, well within Supabase 7-day limit)
+  schedule:
+    - cron: '15 4 */3 * *'
+
+  # Allow manual trigger on demand from the GitHub Actions UI
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (validates configuration without querying database)'
+        required: false
+        type: boolean
+        default: false
+      verbose:
+        description: 'Enable verbose logging'
+        required: false
+        type: boolean
+        default: false
+
+# Minimal required permissions for running keepalive check
+permissions:
+  contents: read
+
+# Prevent overlapping executions
+concurrency:
+  group: supabase-keepalive
+  cancel-in-progress: false
+
+jobs:
+  keepalive:
+    name: Supabase Keep-Alive Health Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install production dependencies
+        run: |
+          npm ci --omit=dev || npm install --omit=dev --no-audit --no-fund
+
+      - name: Execute Keep-Alive Script
+        id: run_keepalive
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          VERBOSE: ${{ github.event.inputs.verbose || 'false' }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          CLI_ARGS=""
+          if [ "$DRY_RUN" = "true" ]; then
+            CLI_ARGS="$CLI_ARGS --dry-run"
+          fi
+          if [ "$VERBOSE" = "true" ]; then
+            CLI_ARGS="$CLI_ARGS --verbose"
+          fi
+          node scripts/supabase-keepalive.js $CLI_ARGS
+
+      - name: Publish Workflow Step Summary
+        if: always()
+        run: |
+          echo "## Supabase Keep-Alive Execution Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Execution Status:** \`${{ steps.run_keepalive.outcome }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Trigger Event:** \`${{ github.event_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Run Timestamp:** \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Workflow Schedule:** \`Every 3 days (15 4 */3 * * UTC)\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.run_keepalive.outcome }}" = "success" ]; then
+            echo "The lightweight keep-alive query completed successfully. Supabase project activity has been confirmed." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Keep-alive failed. Please check repository secrets (\`DATABASE_URL\` or \`SUPABASE_URL\` + \`SUPABASE_ANON_KEY\`) or verify if the Supabase project requires manual unpausing." >> $GITHUB_STEP_SUMMARY
+          fi

@@ -15,7 +15,8 @@ const suites = [
   { name: 'Security Hardening & Multi-Tenant Isolation', cmd: 'node test/security_hardening.test.js' },
   { name: '16-Phase Security Remediation Regression', cmd: 'node test/security_remediation.test.js' },
   { name: 'Single Punch Per Day Limit Enforcement', cmd: 'node test/single_punch_limit.test.js' },
-  { name: 'Indian States, Districts & Teams Tracking', cmd: 'node test/state_district_team.test.js' }
+  { name: 'Indian States, Districts & Teams Tracking', cmd: 'node test/state_district_team.test.js' },
+  { name: 'Supabase Automated Keep-Alive & Security Redaction', cmd: 'node test/supabase_keepalive.test.js' }
 ];
 
 console.log('===============================================================');
