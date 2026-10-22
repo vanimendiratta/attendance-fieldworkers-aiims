@@ -1,0 +1,376 @@
+/* ==========================================================================
+   AIIMS CDER — EMPLOYEE MANAGEMENT & LEAVE GOVERNANCE STYLES
+   Clean light theme / high contrast / responsive grid / zero emojis
+   ========================================================================== */
+
+/* Container & Layout */
+.ems-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+/* Header & Profile Banner */
+.ems-profile-banner {
+  background: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border-subtle, #e2e8f0);
+  border-radius: var(--radius-md, 10px);
+  padding: 20px 24px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+
+.ems-profile-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.ems-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #0284c7;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  box-shadow: 0 2px 4px rgba(2, 132, 199, 0.2);
+}
+
+.ems-profile-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-text-primary, #0f172a);
+  margin-bottom: 4px;
+}
+
+.ems-profile-details {
+  font-size: 13px;
+  color: var(--color-text-secondary, #475569);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* Balances KPI Cards */
+.ems-balance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 16px;
+}
+
+.ems-balance-card {
+  background: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border-subtle, #e2e8f0);
+  border-radius: var(--radius-md, 10px);
+  padding: 18px 20px;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.ems-balance-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.ems-balance-card.cl { border-top: 4px solid #0284c7; }
+.ems-balance-card.el { border-top: 4px solid #059669; }
+.ems-balance-card.rh { border-top: 4px solid #d97706; }
+.ems-balance-card.co { border-top: 4px solid #7c3aed; }
+
+.ems-card-code {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-tertiary, #64748b);
+  margin-bottom: 6px;
+}
+
+.ems-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary, #0f172a);
+  margin-bottom: 10px;
+}
+
+.ems-card-val {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--color-text-primary, #0f172a);
+  line-height: 1;
+}
+
+.ems-card-sub {
+  font-size: 11.5px;
+  color: var(--color-text-secondary, #64748b);
+  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Sub Navigation Pills */
+.ems-subnav {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--color-border-subtle, #e2e8f0);
+  padding-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.ems-subnav-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm, 6px);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary, #475569);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: all 0.15s ease;
+}
+
+.ems-subnav-btn:hover {
+  background: var(--color-bg-base, #f8fafc);
+  color: var(--color-text-primary, #0f172a);
+}
+
+.ems-subnav-btn.active {
+  background: #0284c7;
+  color: #ffffff;
+  border-color: #0284c7;
+  box-shadow: 0 1px 3px rgba(2, 132, 199, 0.25);
+}
+
+/* Forms & Cards */
+.ems-card {
+  background: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border-subtle, #e2e8f0);
+  border-radius: var(--radius-md, 10px);
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.ems-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.ems-card-heading {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text-primary, #0f172a);
+  margin: 0;
+}
+
+/* Live Calculation Preview Card */
+.ems-calc-preview {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: var(--radius-md, 8px);
+  padding: 16px 20px;
+  margin: 18px 0;
+}
+
+.ems-calc-preview.has-error {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.ems-calc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.ems-calc-cell {
+  background: #ffffff;
+  border: 1px solid #dcfce7;
+  border-radius: 6px;
+  padding: 8px 12px;
+  text-align: center;
+}
+
+.ems-calc-preview.has-error .ems-calc-cell {
+  border-color: #fee2e2;
+}
+
+.ems-calc-cell-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.ems-calc-cell-val {
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.ems-calc-cell-val.chargeable {
+  color: #059669;
+}
+
+.ems-calc-preview.has-error .ems-calc-cell-val.chargeable {
+  color: #dc2626;
+}
+
+/* Status Badges */
+.ems-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.ems-badge-pending {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.ems-badge-approved {
+  background: #d1fae5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.ems-badge-rejected {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.ems-badge-hold {
+  background: #e0e7ff;
+  color: #3730a3;
+  border: 1px solid #c7d2fe;
+}
+
+.ems-badge-cancelled {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+/* Responsive Table */
+.ems-table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ems-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  text-align: left;
+}
+
+.ems-table th {
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.ems-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+  vertical-align: middle;
+}
+
+.ems-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+/* Decision Review Modal */
+.ems-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.ems-modal {
+  background: #ffffff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 580px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+  padding: 24px;
+}
+
+.ems-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 12px;
+}
+
+.ems-modal-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.ems-close-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px 8px;
+  line-height: 1;
+}
+
+@media (max-width: 640px) {
+  .ems-profile-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .ems-balance-grid {
+    grid-template-columns: 1fr;
+  }
+}

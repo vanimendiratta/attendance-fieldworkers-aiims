@@ -2,17 +2,21 @@
 
 const express        = require('express');
 const router         = express.Router();
+const crypto         = require('crypto');
 const { query, initSeed } = require('../db/database');
 const attendanceService = require('../services/attendance_service');
 const geoService     = require('../services/geo_service');
 const sqlSyncClient  = require('../services/sql_sync_client');
 const teamService    = require('../services/team_service');
 const biometricService = require('../services/biometric_service');
-const { STATE_DISTRICTS_MAP, getAllStates, getDistrictsForState, matchStateAndDistrict } = require('../data/india_states_districts');
+const { STATE_DISTRICTS_MAP, getAllStates, getDistrictsForState, matchStateAndDistrict, validateStateAndDistrict, normalizeStateName } = require('../data/india_states_districts');
 const authService    = require('../services/auth_service');
 const sessionService = require('../services/session_service');
 const storageService = require('../services/storage_service');
 const emailService   = require('../services/email_service');
+const geofenceService = require('../services/geofence_service');
+const hotelVerificationService = require('../services/hotel_verification_service');
+const csvService = require('../services/csv_service');
 const {
   extractToken,
   requireAuthenticatedEmployee,
@@ -49,10 +53,11 @@ router.get('/health', async (req, res) => {
       serverTime: new Date().toISOString()
     });
   } catch (err) {
+    const isProd = isProductionEnvironment();
     res.status(500).json({
       status: 'unhealthy',
       database: 'error',
-      error: err.message
+      error: isProd ? 'Database service temporarily unavailable.' : err.message
     });
   }
 });
@@ -192,11 +197,38 @@ router.put('/employees/:id', requireAuthenticatedAdmin, async (req, res) => {
     const newTeam = team_id !== undefined ? team_id : current.team_id;
     const newActive = is_active !== undefined ? (is_active ? 1 : 0) : current.is_active;
 
+    let newState = current.state;
+    let newDistrict = current.district;
+    if (req.body.state !== undefined) {
+      if (req.body.state && String(req.body.state).trim()) {
+        const stateCheck = validateStateAndDistrict(req.body.state, req.body.district !== undefined ? req.body.district : current.district);
+        if (!stateCheck.valid) {
+          return res.status(400).json({ success: false, error: stateCheck.error });
+        }
+        newState = stateCheck.state;
+        newDistrict = stateCheck.district;
+      } else {
+        newState = null;
+        newDistrict = null;
+      }
+    } else if (req.body.district !== undefined) {
+      if (req.body.district && String(req.body.district).trim()) {
+        const stateCheck = validateStateAndDistrict(current.state, req.body.district);
+        if (!stateCheck.valid) {
+          return res.status(400).json({ success: false, error: stateCheck.error });
+        }
+        newState = stateCheck.state;
+        newDistrict = stateCheck.district;
+      } else {
+        newDistrict = null;
+      }
+    }
+
     await query(
       `UPDATE employees
-       SET name = $1, department = $2, designation = $3, team_id = $4, is_active = $5, updated_at = $6
-       WHERE id = $7 AND employer_id = $8`,
-      [newName, newDept, newDesig, newTeam, newActive, new Date().toISOString(), empId, employerId]
+       SET name = $1, department = $2, designation = $3, team_id = $4, is_active = $5, state = $6, district = $7, updated_at = $8
+       WHERE id = $9 AND employer_id = $10`,
+      [newName, newDept, newDesig, newTeam, newActive, newState, newDistrict, new Date().toISOString(), empId, employerId]
     );
 
     res.json({ success: true, message: 'Employee profile updated successfully.' });
@@ -235,7 +267,9 @@ router.post('/auth/employee/login', authService.rateLimitMiddleware(authService.
       return res.status(401).json({ success: false, error: 'Invalid Employee ID or password.' });
     }
 
-    const digitsOnly = effectiveLoginId.replace(/\D/g, '');
+    let digitsOnly = effectiveLoginId.replace(/\D/g, '');
+    if (digitsOnly.length === 12 && digitsOnly.startsWith('91')) digitsOnly = digitsOnly.slice(2);
+    else if (digitsOnly.length === 11 && digitsOnly.startsWith('0')) digitsOnly = digitsOnly.slice(1);
 
     const empRes = await query(
       `SELECT e.*, COALESCE(t.name, 'Unassigned') AS team_name
@@ -292,28 +326,136 @@ router.post('/auth/employee/login', authService.rateLimitMiddleware(authService.
 });
 
 // ---------------------------------------------------------------------------
-// Employee ID sequence helper (async, PostgreSQL RETURNING with collision guard)
+// Employee Registration Validation Helpers (DOB, Email 'cder', Mobile, Short ID)
 // ---------------------------------------------------------------------------
-async function generateEmployeeId(employerId = 'ORG-001') {
-  for (let attempt = 0; attempt < 50; attempt++) {
-    const result = await query(
-      `INSERT INTO employee_sequences (employer_id, last_seq)
-       VALUES ($1, 1001)
-       ON CONFLICT (employer_id) DO UPDATE SET last_seq = employee_sequences.last_seq + 1
-       RETURNING last_seq`,
-      [employerId]
-    );
-    const candidateId = `EMP-${result.rows[0].last_seq}`;
-    const checkRes = await query('SELECT 1 FROM employees WHERE UPPER(TRIM(id)) = $1', [candidateId.toUpperCase()]);
+const EMPLOYEE_ID_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+
+function validateDateOfBirth(dob) {
+  if (!dob || typeof dob !== 'string' || !dob.trim()) {
+    return { valid: false, error: 'Date of Birth is required.' };
+  }
+  const trimmed = dob.trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (!match) {
+    return { valid: false, error: 'Date of Birth must be in YYYY-MM-DD format.' };
+  }
+  const year = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const day = parseInt(match[3], 10);
+
+  if (year < 1900) {
+    return { valid: false, error: 'Date of Birth must be after year 1900.' };
+  }
+  if (month < 1 || month > 12) {
+    return { valid: false, error: 'Date of Birth contains an invalid month.' };
+  }
+  if (day < 1 || day > 31) {
+    return { valid: false, error: 'Date of Birth contains an invalid day.' };
+  }
+
+  // Validate calendar days in month (handles leap years)
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  if (day > daysInMonth) {
+    return { valid: false, error: 'Date of Birth contains an impossible calendar date.' };
+  }
+
+  const parsedDate = new Date(Date.UTC(year, month - 1, day));
+  const now = new Date();
+  const todayUtc = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+
+  if (parsedDate > todayUtc) {
+    return { valid: false, error: 'Date of Birth cannot be in the future.' };
+  }
+
+  return {
+    valid: true,
+    dob: `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+  };
+}
+
+function validateAndNormalizeEmail(email) {
+  if (!email || typeof email !== 'string' || !email.trim()) {
+    return { valid: false, error: 'Email address is required.' };
+  }
+  const trimmed = email.trim();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(trimmed)) {
+    return { valid: false, error: 'Please enter a valid email address.' };
+  }
+  return { valid: true, email: trimmed.toLowerCase() };
+}
+
+function normalizeMobileNumber(phone) {
+  if (!phone || typeof phone !== 'string' || !phone.trim()) {
+    return { valid: false, error: 'Mobile number is required.' };
+  }
+  const trimmed = phone.trim();
+  let cleaned = trimmed.replace(/[\s\-\(\)\.]/g, '');
+  if (cleaned.startsWith('+91')) {
+    cleaned = cleaned.slice(3);
+  } else if (cleaned.startsWith('0') && cleaned.length === 11) {
+    cleaned = cleaned.slice(1);
+  } else if (cleaned.startsWith('91') && cleaned.length === 12) {
+    cleaned = cleaned.slice(2);
+  }
+  if (!/^[6-9]\d{9}$/.test(cleaned)) {
+    return { valid: false, error: 'Please enter a valid 10-digit mobile number.' };
+  }
+  return { valid: true, phone: cleaned };
+}
+
+async function generateShortEmployeeId(maxRetries = 50) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const randomBuffer = crypto.randomBytes(6);
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+      code += EMPLOYEE_ID_ALPHABET[randomBuffer[i] % EMPLOYEE_ID_ALPHABET.length];
+    }
+    const candidateId = `FW-${code}`;
+    const checkRes = await query('SELECT 1 FROM employees WHERE UPPER(TRIM(id)) = $1', [candidateId]);
     if (checkRes.rows.length === 0) {
       return candidateId;
     }
   }
-  return `EMP-${Date.now().toString().slice(-6)}`;
+  throw new Error('Failed to generate a unique Employee ID after 50 attempts. Please try again.');
 }
 
+async function generateEmployeeId(employerId = 'ORG-001') {
+  return await generateShortEmployeeId();
+}
+
+// Signed, short-lived token binding a server-generated Employee ID to the signup form.
+// The client can display the ID but cannot choose one: unsigned/forged/expired IDs are ignored.
+const ID_TOKEN_TTL_MS = 30 * 60 * 1000;
+function getIdTokenSecret() {
+  return process.env.ID_TOKEN_SECRET || process.env.SESSION_SECRET ||
+    crypto.createHash('sha256').update('empid:' + (process.env.DATABASE_URL || process.env.TEST_DATABASE_URL || 'local')).digest('hex');
+}
+function signEmployeeIdToken(id, exp) {
+  const mac = crypto.createHmac('sha256', getIdTokenSecret()).update(`${id}.${exp}`).digest('hex');
+  return `${exp}.${mac}`;
+}
+function verifyEmployeeIdToken(id, token) {
+  if (typeof id !== 'string' || typeof token !== 'string') return false;
+  if (!/^FW-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{6}$/.test(id)) return false;
+  const [expStr, mac] = token.split('.');
+  const exp = Number(expStr);
+  if (!Number.isFinite(exp) || exp < Date.now() || !mac) return false;
+  const expected = signEmployeeIdToken(id, exp).split('.')[1];
+  const a = Buffer.from(mac, 'hex'), b = Buffer.from(expected, 'hex');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+router.get('/auth/employee/next-id', authService.rateLimitMiddleware(authService.signupRateLimiter, 'Signup'), async (req, res) => {
+  try {
+    const id = await generateShortEmployeeId();
+    const exp = Date.now() + ID_TOKEN_TTL_MS;
+    res.json({ success: true, employee_id: id, id_token: signEmployeeIdToken(id, exp) });
+  } catch (err) { return handleApiError(res, req, err); }
+});
+
 // ---------------------------------------------------------------------------
-// 4a-pre. Check Employee ID availability
+// 4a-pre. Check Employee ID availability (kept for admin / compatibility)
 // ---------------------------------------------------------------------------
 router.get('/auth/employee/check-id', async (req, res) => {
   try {
@@ -337,8 +479,8 @@ router.get('/auth/employee/check-id', async (req, res) => {
 router.post('/auth/employee/signup', authService.rateLimitMiddleware(authService.signupRateLimiter, 'Signup'), async (req, res) => {
   try {
     const {
-      name, employee_id, email, phone,
-      employer_id = 'ORG-001', department = 'Dental', designation = 'PRS-1',
+      name, dob, email, phone, employee_id, id_token,
+      employer_id = 'ORG-001', department = 'CDER', designation = 'PRS-1',
       state, district, password, face_photo, face_descriptor
     } = req.body;
 
@@ -347,32 +489,39 @@ router.post('/auth/employee/signup', authService.rateLimitMiddleware(authService
 
     if (!name || !name.trim()) return res.status(400).json({ success: false, error: 'Full Name is required.' });
 
-    const manualEmpId = employee_id ? employee_id.trim() : '';
-    if (!manualEmpId && (!email || !email.trim())) {
-      return res.status(400).json({ success: false, error: 'Employee ID is required.' });
-    }
-
     const policyCheck = authService.validatePasswordPolicy(password);
     if (!policyCheck.valid) return res.status(400).json({ success: false, error: policyCheck.error });
 
     // State / district validation
+    let finalState = null;
+    let finalDistrict = null;
     if (state && String(state).trim()) {
-      const validStates   = getAllStates();
-      const cleanState    = String(state).trim();
-      const matchedState  = validStates.find(s => s.toLowerCase() === cleanState.toLowerCase());
-      if (!matchedState) {
-        return res.status(400).json({ success: false, error: `Invalid State/UT '${state}'. Please select a valid Indian State or Union Territory.` });
+      const stateValidation = validateStateAndDistrict(state, district);
+      if (!stateValidation.valid) {
+        return res.status(400).json({ success: false, error: stateValidation.error });
       }
-      if (district && String(district).trim()) {
-        const cleanDistrict    = String(district).trim();
-        const validDistricts   = getDistrictsForState(matchedState);
-        const matchedDistName  = validDistricts.find(d => d.toLowerCase() === cleanDistrict.toLowerCase());
-        if (!matchedDistName) {
-          return res.status(400).json({ success: false, error: `District '${district}' does not belong to State '${matchedState}'. Please select a valid district.` });
-        }
-      }
+      finalState = stateValidation.state;
+      finalDistrict = stateValidation.district;
     } else if (district && String(district).trim()) {
       return res.status(400).json({ success: false, error: 'State must be specified when district is provided.' });
+    }
+
+    // 1. Mandatory Date of Birth (DOB) Validation
+    const dobCheck = validateDateOfBirth(dob);
+    if (!dobCheck.valid) {
+      return res.status(400).json({ success: false, error: dobCheck.error });
+    }
+
+    // 2. Mandatory Email Validation with 'cder' code requirement & normalization
+    const emailCheck = validateAndNormalizeEmail(email);
+    if (!emailCheck.valid) {
+      return res.status(400).json({ success: false, error: emailCheck.error });
+    }
+
+    // 3. Mandatory Mobile Number Validation & 10-digit normalization
+    const phoneCheck = normalizeMobileNumber(phone);
+    if (!phoneCheck.valid) {
+      return res.status(400).json({ success: false, error: phoneCheck.error });
     }
 
     const cleanOrgId = String(employer_id || 'ORG-001').trim();
@@ -385,36 +534,52 @@ router.post('/auth/employee/signup', authService.rateLimitMiddleware(authService
     if (!employer) return res.status(404).json({ success: false, error: 'Employer organization not found.' });
 
     const effectiveOrgId = employer.id;
-    const newEmpId = manualEmpId ? manualEmpId.toUpperCase() : await generateEmployeeId(effectiveOrgId);
 
-    const existingByIdRes = await query('SELECT id, name FROM employees WHERE UPPER(TRIM(id)) = $1', [newEmpId.toUpperCase()]);
-    if (existingByIdRes.rows.length > 0) {
-      const ex = existingByIdRes.rows[0];
-      return res.status(409).json({ success: false, error: `Employee ID '${ex.id}' is already registered. Please sign in or use a different ID.` });
-    }
-
-    const finalEmail = (email && email.trim())
-      ? email.trim().toLowerCase()
-      : `${newEmpId.toLowerCase().replace(/[^a-z0-9_-]/g, '')}@aiims.internal`;
-
-    const existingEmailRes = await query('SELECT id, email FROM employees WHERE email = $1', [finalEmail]);
+    // Check duplicate email (case-insensitive)
+    const existingEmailRes = await query(
+      'SELECT id FROM employees WHERE LOWER(TRIM(email)) = $1',
+      [emailCheck.email]
+    );
     if (existingEmailRes.rows.length > 0) {
-      return res.status(409).json({ success: false, error: 'An employee account with this ID or Email already exists. Please sign in.' });
+      return res.status(409).json({
+        success: false,
+        error: 'An account with this email address already exists. Please sign in or use a different email.'
+      });
     }
+
+    // Check duplicate mobile number
+    const existingPhoneRes = await query(
+      'SELECT id FROM employees WHERE phone = $1',
+      [phoneCheck.phone]
+    );
+    if (existingPhoneRes.rows.length > 0) {
+      return res.status(409).json({
+        success: false,
+        error: 'An account with this mobile number already exists. Please sign in or use a different number.'
+      });
+    }
+
+    // Automatically generate short, unique Employee ID (e.g. FW-7K4P2M)
+    let newEmpId = null;
+    if (verifyEmployeeIdToken(employee_id, id_token)) {
+      const taken = await query('SELECT 1 FROM employees WHERE UPPER(TRIM(id)) = $1', [employee_id]);
+      if (taken.rows.length === 0) newEmpId = employee_id;
+    }
+    if (!newEmpId) newEmpId = await generateShortEmployeeId();
 
     // Resolve matching team
     let teamId = null;
-    if (state && district) {
+    if (finalState && finalDistrict) {
       const teamRes = await query(
         'SELECT id FROM teams WHERE employer_id = $1 AND state = $2 AND district = $3 LIMIT 1',
-        [effectiveOrgId, state, district]
+        [effectiveOrgId, finalState, finalDistrict]
       );
       if (teamRes.rows.length > 0) {
         teamId = teamRes.rows[0].id;
       } else {
         const stateTeamRes = await query(
           'SELECT id FROM teams WHERE employer_id = $1 AND state = $2 LIMIT 1',
-          [effectiveOrgId, state]
+          [effectiveOrgId, finalState]
         );
         if (stateTeamRes.rows.length > 0) teamId = stateTeamRes.rows[0].id;
       }
@@ -431,25 +596,52 @@ router.post('/auth/employee/signup', authService.rateLimitMiddleware(authService
 
     const hashedPassword = authService.hashPassword(password);
 
-    await query(
-      `INSERT INTO employees
-         (id, employer_id, name, email, phone, department, designation,
-          pin, password, face_photo, face_descriptor, face_enrolled,
-          is_active, is_admin, team_id, state, district, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
-      [
-        newEmpId, effectiveOrgId, name.trim(), finalEmail,
-        phone ? phone.trim() : null,
-        department ? department.trim() : 'Dental',
-        designation ? designation.trim() : 'PRS-1',
-        '1234', hashedPassword,
-        null, descriptorToSave, hasFaceEnrolled,
-        1, 0, teamId, state || null, district || null, now
-      ]
-    );
+    try {
+      await query(
+        `INSERT INTO employees
+           (id, employer_id, name, dob, email, phone, department, designation,
+            pin, password, face_photo, face_descriptor, face_enrolled,
+            is_active, is_admin, team_id, state, district, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+        [
+          newEmpId, effectiveOrgId, name.trim(), dobCheck.dob, emailCheck.email,
+          phoneCheck.phone,
+          department ? department.trim() : 'CDER',
+          designation ? designation.trim() : 'PRS-1',
+          '1234', hashedPassword,
+          null, descriptorToSave, hasFaceEnrolled,
+          1, 0, teamId, finalState || null, finalDistrict || null, now
+        ]
+      );
+    } catch (dbErr) {
+      // Safe uniqueness conflict handling (handles concurrency race conditions)
+      if (dbErr.code === '23505') {
+        const detail = (dbErr.detail || '').toLowerCase();
+        const msg = (dbErr.message || '').toLowerCase();
+        if (detail.includes('email') || msg.includes('idx_employees_email_lower') || msg.includes('employees_email')) {
+          return res.status(409).json({
+            success: false,
+            error: 'An account with this email address already exists. Please sign in or use a different email.'
+          });
+        }
+        if (detail.includes('phone') || msg.includes('idx_employees_phone_unique')) {
+          return res.status(409).json({
+            success: false,
+            error: 'An account with this mobile number already exists. Please sign in or use a different number.'
+          });
+        }
+        if (detail.includes('id') || msg.includes('employees_pkey')) {
+          return res.status(409).json({
+            success: false,
+            error: 'Employee ID generation collision encountered. Please retry registration.'
+          });
+        }
+      }
+      throw dbErr;
+    }
 
     attendanceService.logAudit('EMPLOYEE_SIGNUP_SUCCESS', newEmpId, effectiveOrgId, 'EMPLOYEE_SIGNUP', 'SUCCESS', {
-      name: name.trim(), email: finalEmail, department: department ? department.trim() : 'Dental', face_enrolled: hasFaceEnrolled
+      name: name.trim(), email: emailCheck.email, department: department ? department.trim() : 'CDER', face_enrolled: hasFaceEnrolled
     }, clientIp, userAgent);
 
     const createdRes = await query(
@@ -467,7 +659,14 @@ router.post('/auth/employee/signup', authService.rateLimitMiddleware(authService
     });
 
     res.setHeader('Set-Cookie', `attendance_session=${session.token}; Path=/; HttpOnly; SameSite=Lax${isProductionEnvironment() ? '; Secure' : ''}`);
-    res.status(201).json({ success: true, token: session.token, message: `Account created successfully! Welcome to ${employer.name}, ${name.trim()}.`, employee: safeEmployee, employer: safeEmployer });
+    res.status(201).json({
+      success: true,
+      token: session.token,
+      employee_id: newEmpId,
+      message: `Account created successfully! Your unique Employee ID is: ${newEmpId}. Please save or remember this ID to sign in.`,
+      employee: safeEmployee,
+      employer: safeEmployer
+    });
   } catch (err) { return handleApiError(res, req, err); }
 });
 
@@ -743,8 +942,15 @@ router.post('/attendance/check-in', requireAuthenticatedEmployee, async (req, re
 router.get('/location/preview', async (req, res) => {
   try {
     const { lat, lng } = req.query;
-    if (!lat || !lng) return res.status(400).json({ success: false, error: 'Latitude and longitude required.' });
-    const details = await geoService.reverseGeocodeDetailed(parseFloat(lat), parseFloat(lng));
+    if (lat === undefined || lng === undefined) {
+      return res.status(400).json({ success: false, error: 'Latitude and longitude required.' });
+    }
+    const numLat = parseFloat(lat);
+    const numLng = parseFloat(lng);
+    if (!Number.isFinite(numLat) || !Number.isFinite(numLng) || numLat < -90 || numLat > 90 || numLng < -180 || numLng > 180) {
+      return res.status(400).json({ success: false, error: 'Valid geographic coordinates (-90 to 90 lat, -180 to 180 lng) are required.' });
+    }
+    const details = await geoService.reverseGeocodeDetailed(numLat, numLng);
     const matched = matchStateAndDistrict({ state: details.address, city: details.address });
     res.json({ 
       success: true, 
@@ -757,7 +963,9 @@ router.get('/location/preview', async (req, res) => {
       state: matched.state, 
       district: matched.district 
     });
-  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+  } catch (err) {
+    return handleApiError(res, req, err);
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -779,19 +987,118 @@ router.get('/employee/hotel-stay/active', requireAuthenticatedEmployee, async (r
 });
 
 // ---------------------------------------------------------------------------
-// 8d. Employee: Register or Update Hotel Stay Details
+// 8c-2. Employee: Verify Hotel Stay GPS & Place Location
+// ---------------------------------------------------------------------------
+router.post('/employee/hotel-stay/verify-location', requireAuthenticatedEmployee, authService.rateLimitMiddleware(authService.loginRateLimiter, 'HotelVerify'), async (req, res) => {
+  try {
+    const employeeId = req.employee.id;
+    const body = req.body || {};
+    const hotel_name    = body.hotel_name    || body.hotelName;
+    const hotel_address = body.hotel_address || body.hotelAddress;
+    const latitude      = body.latitude      !== undefined ? body.latitude      : body.hotelLatitude;
+    const longitude     = body.longitude     !== undefined ? body.longitude     : body.hotelLongitude;
+    const accuracy      = body.accuracy      !== undefined ? body.accuracy      : body.hotelAccuracy;
+    const timestamp     = body.timestamp     !== undefined ? body.timestamp     : (body.captureTimestamp !== undefined ? body.captureTimestamp : body.gpsCaptureTimestamp);
+
+    const verification = await hotelVerificationService.verifyHotelLocation({
+      employee_id: employeeId,
+      hotel_name,
+      hotel_address,
+      latitude,
+      longitude,
+      accuracy,
+      timestamp
+    });
+
+    res.json({
+      success: true,
+      result: verification
+    });
+  } catch (err) {
+    return handleApiError(res, req, err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 8d. Employee: Register or Update Hotel Stay Details (Requires Verification)
 // ---------------------------------------------------------------------------
 router.post('/employee/hotel-stay', requireAuthenticatedEmployee, async (req, res) => {
   try {
     const employeeId = req.employee.id;
     const employerId = req.employee.employer_id || 'ORG-001';
-    const {
-      hotel_name, room_number, hotel_address, hotel_phone,
-      checkin_date, checkout_date, booking_ref, hotel_lat, hotel_lng, notes
-    } = req.body;
+    const body = req.body || {};
+
+    // Support both snake_case and camelCase field names
+    const hotel_name             = body.hotel_name             || body.hotelName;
+    const room_number            = body.room_number            || body.roomNumber;
+    const hotel_address          = body.hotel_address          || body.hotelAddress;
+    const hotel_phone            = body.hotel_phone            || body.hotelContact || body.hotelPhone;
+    const checkin_date           = body.checkin_date           || body.checkinDate;
+    const checkout_date          = body.checkout_date          || body.checkoutDate;
+    const booking_ref            = body.booking_ref            || body.bookingReference || body.bookingRef;
+    const hotel_lat              = body.hotel_lat              !== undefined ? body.hotel_lat   : body.hotelLatitude;
+    const hotel_lng              = body.hotel_lng              !== undefined ? body.hotel_lng   : body.hotelLongitude;
+    const notes                  = body.notes;
+    const hotel_accuracy         = body.hotel_accuracy         !== undefined ? body.hotel_accuracy  : body.hotelAccuracy;
+    const gps_capture_timestamp  = body.gps_capture_timestamp  || body.gpsCaptureTimestamp;
+    const verification_token     = body.verification_token     || body.verificationToken;
+    const manual_review_requested = body.manual_review_requested || body.requestManualReview;
 
     if (!hotel_name || !hotel_address) {
       return res.status(400).json({ success: false, error: 'Hotel name and hotel address are required.' });
+    }
+
+    if (hotel_lat == null || hotel_lng == null || isNaN(hotel_lat) || isNaN(hotel_lng)) {
+      return res.status(400).json({ success: false, error: 'Captured GPS coordinates are required for hotel stay registration.' });
+    }
+
+    let verificationStatus = 'PENDING';
+    let verifiedPlaceName = null;
+    let verifiedAddress = null;
+    let distanceMeters = null;
+    let placeId = null;
+    let verificationTimestamp = null;
+    let isManualOverride = false;
+    let verificationNotes = null;
+
+    if (verification_token) {
+      const tokenVerification = hotelVerificationService.verifyVerificationToken(
+        verification_token,
+        { employeeId, hotelName: hotel_name, latitude: hotel_lat, longitude: hotel_lng }
+      );
+
+      if (!tokenVerification.valid) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid or expired hotel verification token: ${tokenVerification.error}. Please re-verify your hotel location.`
+        });
+      }
+
+      const tData = tokenVerification.data;
+      if (tData.status !== 'VERIFIED') {
+        return res.status(400).json({
+          success: false,
+          error: `Cannot register hotel stay with status '${tData.status}'. Physical location must be VERIFIED or submitted for manual review.`
+        });
+      }
+
+      verificationStatus = 'VERIFIED';
+      verifiedPlaceName = tData.verified_place_name || null;
+      verifiedAddress = tData.verified_address || null;
+      distanceMeters = tData.distance_meters != null ? parseFloat(tData.distance_meters) : null;
+      placeId = tData.place_id || null;
+      verificationTimestamp = new Date(tData.timestamp || Date.now()).toISOString();
+      verificationNotes = `Auto-verified via GPS and place registry (${Math.round(distanceMeters || 0)}m distance).`;
+    } else if (manual_review_requested === true || manual_review_requested === 'true') {
+      verificationStatus = 'PENDING_REVIEW';
+      isManualOverride = false;
+      verificationNotes = 'Location could not be matched in public map registry; manual review requested by fieldworker.';
+      verificationTimestamp = new Date().toISOString();
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: 'Verification required: Hotel location GPS verification is required before saving hotel stay details.'
+      });
     }
 
     const stayId = `STAY-${employeeId}-${Date.now().toString(36)}`;
@@ -809,21 +1116,39 @@ router.post('/employee/hotel-stay', requireAuthenticatedEmployee, async (req, re
     const result = await query(
       `INSERT INTO employee_hotel_stays (
          id, employer_id, employee_id, hotel_name, room_number, hotel_address, hotel_phone,
-         checkin_date, checkout_date, booking_ref, hotel_lat, hotel_lng, stay_status, notes,
-         created_at, updated_at
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'ACTIVE', $13, NOW(), NOW())
+         checkin_date, checkout_date, booking_ref, hotel_lat, hotel_lng,
+         hotel_accuracy, gps_capture_timestamp, verification_status, verification_timestamp,
+         verified_place_name, verified_address, distance_meters, place_id, verification_notes,
+         is_manual_override, stay_status, notes, created_at, updated_at
+       ) VALUES (
+         $1, $2, $3, $4, $5, $6, $7,
+         $8, $9, $10, $11, $12,
+         $13, $14, $15, $16,
+         $17, $18, $19, $20, $21,
+         $22, 'ACTIVE', $23, NOW(), NOW()
+       )
        RETURNING *`,
       [
         stayId, employerId, employeeId, String(hotel_name).trim(), room_number ? String(room_number).trim() : null,
         String(hotel_address).trim(), hotel_phone ? String(hotel_phone).trim() : null,
         cIn, cOut, booking_ref ? String(booking_ref).trim() : null,
-        hotel_lat != null && !isNaN(hotel_lat) ? parseFloat(hotel_lat) : null,
-        hotel_lng != null && !isNaN(hotel_lng) ? parseFloat(hotel_lng) : null,
-        notes ? String(notes).trim() : null
+        parseFloat(hotel_lat), parseFloat(hotel_lng),
+        hotel_accuracy != null && !isNaN(hotel_accuracy) ? parseFloat(hotel_accuracy) : null,
+        gps_capture_timestamp ? new Date(gps_capture_timestamp).toISOString() : new Date().toISOString(),
+        verificationStatus, verificationTimestamp,
+        verifiedPlaceName, verifiedAddress, distanceMeters, placeId, verificationNotes,
+        isManualOverride, notes ? String(notes).trim() : null
       ]
     );
 
-    res.json({ success: true, stay: result.rows[0], message: 'Hotel stay details registered successfully.' });
+    res.json({
+      success: true,
+      stayId,
+      stay: result.rows[0],
+      message: verificationStatus === 'VERIFIED'
+        ? 'Hotel stay verified and registered successfully.'
+        : 'Hotel stay submitted for administrative manual review.'
+    });
   } catch (err) {
     return handleApiError(res, req, err);
   }
@@ -913,6 +1238,57 @@ router.get('/admin/employees/:id/hotel-stays', requireAuthenticatedAdmin, async 
 });
 
 // ---------------------------------------------------------------------------
+// 8g. Admin: Manual Location Verification Override / Approval
+// ---------------------------------------------------------------------------
+router.post('/admin/hotel-stays/:id/verify-override', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const employerId = req.employerId;
+    const stayId = req.params.id;
+    const body = req.body || {};
+    const decision = body.decision || body.status || 'APPROVED';
+    const remarks  = body.notes    || body.remarks;
+
+    // Map decision labels to verification_status values
+    const STATUS_MAP = {
+      'APPROVED':      'ADMIN_APPROVED',
+      'ADMIN_APPROVED': 'ADMIN_APPROVED',
+      'REJECTED':      'ADMIN_REJECTED',
+      'PENDING':       'PENDING_REVIEW'
+    };
+    const newStatus = STATUS_MAP[String(decision).toUpperCase()] || String(decision).trim();
+
+    const stayRes = await query(
+      `SELECT * FROM employee_hotel_stays WHERE id = $1`,
+      [stayId]
+    );
+    const stay = stayRes.rows[0];
+    if (!stay) {
+      return res.status(404).json({ success: false, error: 'Hotel stay record not found.' });
+    }
+
+    const updated = await query(
+      `UPDATE employee_hotel_stays
+       SET verification_status = $1,
+           is_manual_override = TRUE,
+           verification_notes = COALESCE($2, 'Approved via authorized administrative review'),
+           verification_timestamp = NOW(),
+           updated_at = NOW()
+       WHERE id = $3
+       RETURNING *`,
+      [newStatus, remarks ? String(remarks).trim() : null, stayId]
+    );
+
+    res.json({
+      success: true,
+      stay: updated.rows[0],
+      message: 'Hotel stay verification status updated by administrator.'
+    });
+  } catch (err) {
+    return handleApiError(res, req, err);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // 9. Start Break
 // ---------------------------------------------------------------------------
 router.post('/attendance/break/start', requireAuthenticatedEmployee, async (req, res) => {
@@ -987,6 +1363,8 @@ async function getFilteredAttendanceRecords({ employerId, employee_id, work_mode
   const params = [employerId];
   let sql = `
     SELECT a.*, e.name AS employee_name, e.department, e.designation, e.email,
+           COALESCE(t.id, a.team_id, e.team_id) AS team_id,
+           t.id AS dedicated_team_id,
            COALESCE(t.name, 'Direct Assignment') AS team_name,
            COALESCE(a.state, e.state, t.state) AS state,
            COALESCE(a.district, e.district, t.district) AS district,
@@ -1087,15 +1465,8 @@ async function getFilteredAttendanceRecords({ employerId, employee_id, work_mode
 // ---------------------------------------------------------------------------
 // CSV generator (unchanged logic — uses already-fetched rows)
 // ---------------------------------------------------------------------------
-function escapeCsvCell(val) {
-  if (val === null || val === undefined) return '';
-  let str = String(val);
-  if (/^[\s\t\r]*[=+\-@\t\r|%]/.test(str)) str = "'" + str;
-  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
+// escapeCsvCell is provided by the shared csv_service module
+const escapeCsvCell = csvService.escapeCsvCell;
 
 function generateAttendanceCsv(records) {
   const headers = [
@@ -1245,12 +1616,33 @@ router.post('/admin/attendance/send-backup-email', requireAuthenticatedAdmin, as
 router.get('/cron/daily-attendance-backup', async (req, res) => {
   try {
     const cronSecret = process.env.CRON_SECRET;
+    const authHeader = req.headers['authorization'];
+    const querySecret = req.query.secret;
+
     if (cronSecret) {
-      const authHeader = req.headers['authorization'];
-      const querySecret = req.query.secret;
       const isAuthorized = (authHeader === `Bearer ${cronSecret}`) || (querySecret === cronSecret);
       if (!isAuthorized) {
         return res.status(401).json({ success: false, error: 'Unauthorized cron request.' });
+      }
+    } else {
+      // If CRON_SECRET is not set, reject in production to prevent unauthenticated resource exhaustion
+      if (isProductionEnvironment()) {
+        return res.status(401).json({
+          success: false,
+          error: 'Unauthorized: CRON_SECRET must be configured in environment variables to execute cron tasks.'
+        });
+      }
+      // In dev/test, require administrator authentication
+      const token = extractToken(req);
+      if (!token) {
+        return res.status(401).json({
+          success: false,
+          error: 'Authentication required. Provide CRON_SECRET or an authenticated administrator session.'
+        });
+      }
+      const session = await sessionService.getSession(token);
+      if (!session || session.session_type !== 'admin') {
+        return res.status(403).json({ success: false, error: 'Forbidden: Administrator credentials required.' });
       }
     }
 
@@ -1523,7 +1915,7 @@ router.get('/admin/employees/:id/timesheet', requireAuthenticatedAdmin, async (r
       avgWorkingSecondsPerShift,
       avgWorkingHoursPerShift,
       avgWorkingFormatted: formatSecToHhMm(avgWorkingSecondsPerShift),
-      targetShiftHours,
+      targetShiftHours: shiftTargetHours,
       totalExpectedHours,
       hoursBalance,
       hoursBalanceStatus,
@@ -1679,7 +2071,7 @@ router.get('/admin/employees/:id/timesheet/export.csv', requireAuthenticatedAdmi
       avgWorkingSecondsPerShift,
       avgWorkingHoursPerShift,
       avgWorkingFormatted: formatSecToHhMm(avgWorkingSecondsPerShift),
-      targetShiftHours,
+      targetShiftHours: shiftTargetHours,
       totalExpectedHours,
       hoursBalance,
       hoursBalanceStatus,
@@ -2593,7 +2985,8 @@ router.post('/settings/set-current-office', requireAuthenticatedAdmin, async (re
     attendanceService.logAudit('OFFICE_LOCATION_SYNCED', null, req.employerId, 'SYNC_OFFICE_COORDS', 'SUCCESS', { lat, lng });
 
     const updatedRes = await query('SELECT * FROM organizations WHERE id = $1', [req.employerId]);
-    res.json({ success: true, message: 'Office location synchronized to your current GPS coordinates.', settings: updatedRes.rows[0] });
+    const { admin_password: _, ...safeSettings } = updatedRes.rows[0] || {};
+    res.json({ success: true, message: 'Office location synchronized to your current GPS coordinates.', settings: safeSettings });
   } catch (err) { res.status(500).json({ success: false, error: isProductionEnvironment() ? 'An internal server error occurred.' : err.message }); }
 });
 
@@ -2623,8 +3016,364 @@ router.get('/admin/redcap/data-dictionary.csv', requireAuthenticatedAdmin, async
   } catch (err) { res.status(500).json({ success: false, error: isProductionEnvironment() ? 'Internal server error' : err.message }); }
 });
 
+// ---------------------------------------------------------------------------
+// 18. Admin: Geofence Management (Workplace & Hotel Geofences)
+// ---------------------------------------------------------------------------
+router.get('/admin/geofences', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const { type } = req.query;
+    const geofences = await geofenceService.listGeofences(req.employerId, {
+      geofenceType: type,
+      activeOnly: true
+    });
+
+    const orgRes = await query(
+      'SELECT id, name, office_name, office_lat, office_lng, geofence_radius_m, geofence_policy FROM organizations WHERE id = $1',
+      [req.employerId]
+    );
+    const org = orgRes.rows[0] || {};
+
+    res.json({
+      success: true,
+      employer_id: req.employerId,
+      organization: {
+        office_name: org.office_name,
+        office_lat: org.office_lat,
+        office_lng: org.office_lng,
+        geofence_radius_m: org.geofence_radius_m,
+        geofence_policy: org.geofence_policy
+      },
+      geofences
+    });
+  } catch (err) { return handleApiError(res, req, err, 'Failed to fetch geofences.'); }
+});
+
+router.post('/admin/geofences', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const { name, geofence_type, latitude, longitude, radius_meters, policy, address } = req.body;
+    if (!name || latitude === undefined || longitude === undefined) {
+      return res.status(400).json({ success: false, error: 'Name, latitude, and longitude are required.' });
+    }
+
+    const created = await geofenceService.createGeofence({
+      employerId: req.employerId,
+      name,
+      geofenceType: geofence_type || 'WORKPLACE',
+      latitude,
+      longitude,
+      radiusMeters: radius_meters || 150,
+      policy: policy || 'ALLOW_WITH_FLAG',
+      address
+    });
+
+    attendanceService.logAudit('GEOFENCE_CREATED', null, req.employerId, 'CREATE_GEOFENCE', 'SUCCESS', {
+      id: created.id,
+      name: created.name,
+      type: created.geofence_type
+    });
+
+    res.status(201).json({ success: true, geofence: created });
+  } catch (err) { res.status(400).json({ success: false, error: err.message }); }
+});
+
+router.put('/admin/geofences/:id', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const { name, geofence_type, latitude, longitude, radius_meters, policy, address, is_active } = req.body;
+    const updated = await geofenceService.updateGeofence(req.params.id, req.employerId, {
+      name,
+      geofenceType: geofence_type,
+      latitude,
+      longitude,
+      radiusMeters: radius_meters,
+      policy,
+      address,
+      isActive: is_active
+    });
+
+    attendanceService.logAudit('GEOFENCE_UPDATED', null, req.employerId, 'UPDATE_GEOFENCE', 'SUCCESS', {
+      id: updated.id,
+      name: updated.name
+    });
+
+    res.json({ success: true, geofence: updated });
+  } catch (err) { res.status(400).json({ success: false, error: err.message }); }
+});
+
+router.delete('/admin/geofences/:id', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const deleted = await geofenceService.deleteGeofence(req.params.id, req.employerId);
+    if (!deleted) {
+      return res.status(404).json({ success: false, error: 'Geofence not found or unauthorized.' });
+    }
+
+    attendanceService.logAudit('GEOFENCE_DELETED', null, req.employerId, 'DELETE_GEOFENCE', 'SUCCESS', {
+      id: req.params.id
+    });
+
+    res.json({ success: true, message: 'Geofence deleted successfully.' });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
 router.getOrganizationHolidaysMap = getOrganizationHolidaysMap;
 router.generateAttendanceCsv = generateAttendanceCsv;
 router.generateIndividualTimesheetCsv = generateIndividualTimesheetCsv;
+
+// ---------------------------------------------------------------------------
+// 20. CSV Export Endpoints
+// All endpoints:
+//   • Require admin authentication (requireAuthenticatedAdmin)
+//   • Scope data to req.employerId (never cross-tenant)
+//   • Accept filter query params mirroring the corresponding list endpoints
+//   • Exclude passwords, hashes, tokens and all sensitive credential fields
+//   • Use csvService for formula-injection-safe generation
+// ---------------------------------------------------------------------------
+
+// 20a. Employees CSV Export
+router.get('/admin/employees/export.csv', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const employerId = req.employerId;
+    const { state, district, team_id, status, search } = req.query;
+
+    const params = [employerId];
+    let sql = `
+      SELECT e.id, e.employer_id, e.name, e.email, e.phone, e.department, e.designation,
+             e.is_admin, e.is_active, e.team_id, e.state, e.district, e.created_at, e.dob,
+             COALESCE(t.name, 'Unassigned') AS team_name
+      FROM employees e
+      LEFT JOIN teams t ON e.team_id = t.id
+      WHERE e.employer_id = $1
+    `;
+
+    if (state && state !== 'ALL') {
+      params.push(state);
+      sql += ` AND e.state = $${params.length}`;
+    }
+    if (district && district !== 'ALL') {
+      params.push(district);
+      sql += ` AND e.district = $${params.length}`;
+    }
+    if (team_id && team_id !== 'ALL') {
+      params.push(team_id);
+      sql += ` AND e.team_id = $${params.length}`;
+    }
+    if (status === 'ACTIVE') {
+      sql += ` AND e.is_active = 1`;
+    } else if (status === 'INACTIVE') {
+      sql += ` AND e.is_active = 0`;
+    }
+    if (search && search.trim()) {
+      params.push(`%${search.trim().toLowerCase()}%`);
+      const n = params.length;
+      sql += ` AND (LOWER(e.name) LIKE $${n} OR LOWER(e.email) LIKE $${n} OR LOWER(e.id) LIKE $${n})`;
+    }
+
+    sql += ' ORDER BY e.created_at DESC';
+    const result = await query(sql, params);
+    const csvData = csvService.generateEmployeesCsv(result.rows);
+    const dateStr = csvService.todayDateStr();
+    const isFiltered = state || district || team_id || status || search;
+    const filename = isFiltered
+      ? `employees_filtered_${dateStr}.csv`
+      : `employees_${dateStr}.csv`;
+    csvService.setCsvHeaders(res, filename);
+    res.send(csvData);
+  } catch (err) {
+    const isProd = isProductionEnvironment();
+    res.status(500).json({ success: false, error: isProd ? 'Export failed.' : err.message });
+  }
+});
+
+// 20b. Hotel Stays CSV Export
+router.get('/admin/hotel-stays/export.csv', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const employerId = req.employerId;
+    const { employee_id, status, search } = req.query;
+
+    const params = [employerId];
+    let sql = `
+      SELECT s.*, e.name AS employee_name, e.department, e.designation, e.phone AS employee_phone,
+             COALESCE(t.name, 'Unassigned') AS team_name
+      FROM employee_hotel_stays s
+      JOIN employees e ON s.employee_id = e.id
+      LEFT JOIN teams t ON e.team_id = t.id
+      WHERE s.employer_id = $1
+    `;
+
+    if (employee_id && employee_id !== 'ALL') {
+      params.push(employee_id);
+      sql += ` AND s.employee_id = $${params.length}`;
+    }
+    if (status && status !== 'ALL') {
+      params.push(status);
+      sql += ` AND s.stay_status = $${params.length}`;
+    }
+    if (search && search.trim()) {
+      params.push(`%${search.trim().toLowerCase()}%`);
+      const n = params.length;
+      sql += ` AND (
+        LOWER(e.name) LIKE $${n} OR
+        LOWER(s.hotel_name) LIKE $${n} OR
+        LOWER(s.hotel_address) LIKE $${n} OR
+        LOWER(COALESCE(s.room_number, '')) LIKE $${n}
+      )`;
+    }
+
+    sql += ' ORDER BY s.created_at DESC';
+    const result = await query(sql, params);
+    const csvData = csvService.generateHotelStaysCsv(result.rows);
+    const dateStr = csvService.todayDateStr();
+    const isFiltered = employee_id || status || search;
+    const filename = isFiltered
+      ? `hotel_stays_filtered_${dateStr}.csv`
+      : `hotel_stays_${dateStr}.csv`;
+    csvService.setCsvHeaders(res, filename);
+    res.send(csvData);
+  } catch (err) {
+    const isProd = isProductionEnvironment();
+    res.status(500).json({ success: false, error: isProd ? 'Export failed.' : err.message });
+  }
+});
+
+// 20c. Leaves / Absences CSV Export
+router.get('/admin/leaves/export.csv', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const employerId = req.employerId;
+    const { date, employee_id, status, search } = req.query;
+
+    // Ensure employee_leaves table exists (idempotent)
+    await query(`
+      CREATE TABLE IF NOT EXISTS employee_leaves (
+        id TEXT PRIMARY KEY, employer_id TEXT NOT NULL, employee_id TEXT NOT NULL,
+        leave_date DATE NOT NULL, leave_type TEXT NOT NULL DEFAULT 'UNMARKED_ABSENCE',
+        status TEXT NOT NULL DEFAULT 'PENDING', reason TEXT,
+        applied_by TEXT DEFAULT 'SYSTEM_ABSENCE', admin_remarks TEXT,
+        regularized_attendance_id TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(employer_id, employee_id, leave_date)
+      )
+    `).catch(() => {});
+
+    const params = [employerId];
+    let sql = `
+      SELECT l.*, e.name AS employee_name, e.department, e.designation,
+             e.state, e.district,
+             COALESCE(t.name, 'Unassigned') AS team_name
+      FROM employee_leaves l
+      JOIN employees e ON l.employee_id = e.id
+      LEFT JOIN teams t ON e.team_id = t.id
+      WHERE l.employer_id = $1
+    `;
+
+    if (date) {
+      params.push(date);
+      sql += ` AND l.leave_date = $${params.length}`;
+    }
+    if (employee_id && employee_id !== 'ALL') {
+      params.push(employee_id);
+      sql += ` AND l.employee_id = $${params.length}`;
+    }
+    if (status && status !== 'ALL') {
+      params.push(status);
+      sql += ` AND l.status = $${params.length}`;
+    }
+    if (search && search.trim()) {
+      params.push(`%${search.trim().toLowerCase()}%`);
+      const n = params.length;
+      sql += ` AND (LOWER(e.name) LIKE $${n} OR LOWER(l.employee_id) LIKE $${n})`;
+    }
+
+    sql += ' ORDER BY l.leave_date DESC, e.name ASC';
+    const result = await query(sql, params);
+    const csvData = csvService.generateLeavesCsv(result.rows);
+    const dateStr = csvService.todayDateStr();
+    const isFiltered = date || employee_id || status || search;
+    const filename = isFiltered
+      ? `leaves_filtered_${dateStr}.csv`
+      : `leaves_${dateStr}.csv`;
+    csvService.setCsvHeaders(res, filename);
+    res.send(csvData);
+  } catch (err) {
+    const isProd = isProductionEnvironment();
+    res.status(500).json({ success: false, error: isProd ? 'Export failed.' : err.message });
+  }
+});
+
+// 20d. Teams CSV Export
+router.get('/teams/export.csv', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const { state, district } = req.query;
+    const teams = await teamService.listTeams(req.employerId, state, district);
+    const csvData = csvService.generateTeamsCsv(teams);
+    const dateStr = csvService.todayDateStr();
+    const isFiltered = state || district;
+    const filename = isFiltered
+      ? `teams_filtered_${dateStr}.csv`
+      : `teams_${dateStr}.csv`;
+    csvService.setCsvHeaders(res, filename);
+    res.send(csvData);
+  } catch (err) {
+    const isProd = isProductionEnvironment();
+    res.status(500).json({ success: false, error: isProd ? 'Export failed.' : err.message });
+  }
+});
+
+// 20e. Geofences CSV Export (admin only)
+router.get('/admin/geofences/export.csv', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const { geofence_type } = req.query;
+    const filters = {};
+    if (geofence_type && geofence_type !== 'ALL') filters.geofenceType = geofence_type;
+    const geofences = await geofenceService.listGeofences(req.employerId, filters);
+    const csvData = csvService.generateGeofencesCsv(geofences);
+    const dateStr = csvService.todayDateStr();
+    const filename = `geofences_${dateStr}.csv`;
+    csvService.setCsvHeaders(res, filename);
+    res.send(csvData);
+  } catch (err) {
+    const isProd = isProductionEnvironment();
+    res.status(500).json({ success: false, error: isProd ? 'Export failed.' : err.message });
+  }
+});
+
+// 20f. Audit Logs CSV Export (admin only)
+// NOTE: details_json is excluded; user_agent is included for legitimate audit purposes.
+router.get('/admin/audit-logs/export.csv', requireAuthenticatedAdmin, async (req, res) => {
+  try {
+    const { event_type, employee_id, limit: limitParam } = req.query;
+    const limit = Math.min(2000, Math.max(1, parseInt(limitParam || '500', 10)));
+
+    const params = [req.employerId];
+    let sql = `
+      SELECT l.id, l.event_type, l.employee_id, l.employer_id, l.action, l.status,
+             l.client_ip, l.user_agent, l.timestamp,
+             e.name AS employee_name
+      FROM audit_logs l
+      LEFT JOIN employees e ON l.employee_id = e.id
+      WHERE l.employer_id = $1
+    `;
+
+    if (event_type && event_type !== 'ALL') {
+      params.push(event_type);
+      sql += ` AND l.event_type = $${params.length}`;
+    }
+    if (employee_id && employee_id !== 'ALL') {
+      params.push(employee_id);
+      sql += ` AND l.employee_id = $${params.length}`;
+    }
+
+    params.push(limit);
+    sql += ` ORDER BY l.timestamp DESC LIMIT $${params.length}`;
+
+    const result = await query(sql, params);
+    const csvData = csvService.generateAuditLogsCsv(result.rows);
+    const dateStr = csvService.todayDateStr();
+    const filename = `audit_logs_${dateStr}.csv`;
+    csvService.setCsvHeaders(res, filename);
+    res.send(csvData);
+  } catch (err) {
+    const isProd = isProductionEnvironment();
+    res.status(500).json({ success: false, error: isProd ? 'Export failed.' : err.message });
+  }
+});
 
 module.exports = router;

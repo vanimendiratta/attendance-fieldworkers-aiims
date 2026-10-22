@@ -6,9 +6,14 @@
   <title>Attendance Operations | AIIMS</title>
   <meta name="description" content="Verified real-time photo and geolocation attendance for enterprise employees.">
   <link rel="stylesheet" href="./style.css?v=10">
+  <link rel="stylesheet" href="./ems.css?v=1">
+  <!-- Leaflet Interactive Maps -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <!-- Client-side States & Districts Dictionary & Professional SVG Iconography -->
   <script src="./states_districts_client.js?v=6"></script>
   <script src="./icons.js?v=1"></script>
+  <script src="./ems_client.js?v=1"></script>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%230f172a'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -57,6 +62,10 @@
           <span>Hotel Stay</span>
           <span id="tabHotelStayIndicator" class="tab-pill-dot" style="display: none;"></span>
         </button>
+        <button type="button" id="tabNavEms" class="employee-tab-btn" role="tab" aria-selected="false" onclick="if(window.switchEmployeeView)window.switchEmployeeView('ems')">
+          <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+          <span>Employee Management</span>
+        </button>
       </nav>
 
       <!-- PANEL 1: ATTENDANCE PUNCH -->
@@ -68,6 +77,7 @@
         <h1 class="greeting-name" id="displayGreetingName">Welcome to AIIMS Workspace</h1>
         <div class="greeting-date" id="displayGreetingDate"></div>
         <div style="display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap;" id="profileTeamBadgeContainer">
+          <span class="badge badge-neutral" id="displayEmployeeIdBadge" style="font-size: 11px; display: inline-flex; align-items: center; gap: 5px;"><span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><line x1="15" y1="8" x2="17" y2="8"/><line x1="15" y1="12" x2="17" y2="12"/><line x1="7" y1="16" x2="17" y2="16"/></svg></span> <span id="displayEmployeeIdText">ID: Loading...</span></span>
           <span class="badge badge-neutral" id="displayEmployeeTeam" style="font-size: 11px; display: inline-flex; align-items: center; gap: 5px;"><span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Team: Loading...</span>
           <span class="badge badge-neutral" id="displayEmployeeTerritory" style="font-size: 11px; display: inline-flex; align-items: center; gap: 5px;"><span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></span> Territory: Loading...</span>
         </div>
@@ -123,42 +133,6 @@
                 </label>
                 <select id="selectFieldState" class="form-select" style="padding: 6px 10px; font-size: 12px; width: 100%; border-radius: var(--radius-sm);" onchange="if(window.handleFieldStateChange)window.handleFieldStateChange(this.value)" oninput="if(window.handleFieldStateChange)window.handleFieldStateChange(this.value)">
                   <option value="">Select State / UT</option>
-                  <option value="Andaman and Nicobar Islands">Andaman and Nicobar Islands</option>
-                  <option value="Andhra Pradesh">Andhra Pradesh</option>
-                  <option value="Arunachal Pradesh">Arunachal Pradesh</option>
-                  <option value="Assam">Assam</option>
-                  <option value="Bihar">Bihar</option>
-                  <option value="Chandigarh">Chandigarh</option>
-                  <option value="Chhattisgarh">Chhattisgarh</option>
-                  <option value="Dadra and Nagar Haveli and Daman and Diu">Dadra and Nagar Haveli and Daman and Diu</option>
-                  <option value="Delhi">Delhi</option>
-                  <option value="Goa">Goa</option>
-                  <option value="Gujarat">Gujarat</option>
-                  <option value="Haryana">Haryana</option>
-                  <option value="Himachal Pradesh">Himachal Pradesh</option>
-                  <option value="Jammu and Kashmir">Jammu and Kashmir</option>
-                  <option value="Jharkhand">Jharkhand</option>
-                  <option value="Karnataka">Karnataka</option>
-                  <option value="Kerala">Kerala</option>
-                  <option value="Ladakh">Ladakh</option>
-                  <option value="Lakshadweep">Lakshadweep</option>
-                  <option value="Madhya Pradesh">Madhya Pradesh</option>
-                  <option value="Maharashtra">Maharashtra</option>
-                  <option value="Manipur">Manipur</option>
-                  <option value="Meghalaya">Meghalaya</option>
-                  <option value="Mizoram">Mizoram</option>
-                  <option value="Nagaland">Nagaland</option>
-                  <option value="Odisha">Odisha</option>
-                  <option value="Puducherry">Puducherry</option>
-                  <option value="Punjab">Punjab</option>
-                  <option value="Rajasthan">Rajasthan</option>
-                  <option value="Sikkim">Sikkim</option>
-                  <option value="Tamil Nadu">Tamil Nadu</option>
-                  <option value="Telangana">Telangana</option>
-                  <option value="Tripura">Tripura</option>
-                  <option value="Uttar Pradesh">Uttar Pradesh</option>
-                  <option value="Uttarakhand">Uttarakhand</option>
-                  <option value="West Bengal">West Bengal</option>
                 </select>
               </div>
               <div>
@@ -353,17 +327,51 @@
               </div>
             </div>
 
-            <!-- GPS Verification Capture Box -->
-            <div style="background: #f8fafc; border: 1px solid var(--color-border-default); border-radius: 8px; padding: 12px; margin-bottom: 14px;">
+            <!-- GPS Verification Capture Box & Interactive Leaflet Map -->
+            <div style="background: #f8fafc; border: 1px solid var(--color-border-default); border-radius: 10px; padding: 14px; margin-bottom: 14px;">
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
                 <div>
-                  <div style="font-size: 11px; font-weight: 700; color: var(--color-text-primary);">Hotel GPS Verification Pin</div>
-                  <div id="textHotelGpsDisplay" style="font-size: 11px; color: var(--color-text-muted); font-family: var(--font-mono); margin-top: 2px;">Not captured yet</div>
+                  <div style="font-size: 11px; font-weight: 700; color: var(--color-text-primary); display: flex; align-items: center; gap: 5px;">
+                    <span class="ui-icon ui-icon-xs" style="color: #0284c7;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></span>
+                    <span>Hotel GPS Verification Pin & Map</span>
+                  </div>
+                  <div id="textHotelGpsDisplay" style="font-size: 11px; color: var(--color-text-muted); font-family: var(--font-mono); margin-top: 3px;">Not captured yet</div>
+                  <div id="textHotelGpsAccuracy" style="font-size: 11px; color: var(--color-text-secondary); margin-top: 2px; display: none;"></div>
                 </div>
-                <button type="button" id="btnCaptureHotelGps" class="btn btn-secondary" style="font-size: 11px; padding: 6px 12px; display: inline-flex; align-items: center; gap: 5px;">
-                  <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></span>
-                  <span>Capture Current GPS</span>
-                </button>
+                <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                  <button type="button" id="btnCaptureHotelGps" class="btn btn-secondary" style="font-size: 11px; padding: 6px 12px; display: inline-flex; align-items: center; gap: 5px;">
+                    <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></span>
+                    <span id="btnCaptureHotelGpsText">Capture Current GPS</span>
+                  </button>
+                  <button type="button" id="btnVerifyHotelGps" class="btn btn-primary" style="font-size: 11px; padding: 6px 12px; display: none; align-items: center; gap: 5px;">
+                    <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 12 2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg></span>
+                    <span id="btnVerifyHotelGpsText">Verify Hotel Location</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Interactive Leaflet Map Container -->
+              <div id="hotelStayMapContainer" style="margin-top: 12px; display: none;">
+                <div id="hotelStayMap" style="height: 220px; width: 100%; border-radius: 8px; border: 1px solid var(--color-border-default); z-index: 1;"></div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px; font-size: 10px; color: var(--color-text-tertiary);">
+                  <span>Interactive Map · OpenStreetMap</span>
+                  <span id="textMapCoordsSummary" style="font-family: var(--font-mono);"></span>
+                </div>
+              </div>
+
+              <!-- Verification Result / Status Card -->
+              <div id="boxHotelVerificationStatus" style="display: none; margin-top: 12px; padding: 10px 12px; border-radius: 8px; font-size: 12px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
+                  <span style="font-weight: 700;" id="hotelVerificationTitle">Verification Status</span>
+                  <span id="badgeHotelVerificationStatus" class="badge" style="font-size: 10px;"></span>
+                </div>
+                <div id="hotelVerificationMessage" style="line-height: 1.4; color: var(--color-text-secondary);"></div>
+                <div id="hotelVerificationMatchedDetails" style="margin-top: 6px; font-size: 11px; display: none; padding-top: 6px; border-top: 1px dashed rgba(0,0,0,0.1);"></div>
+                <div id="hotelVerificationActions" style="margin-top: 8px; display: none;">
+                  <button type="button" id="btnRequestManualReview" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;">
+                    Request Administrative Review
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -381,6 +389,9 @@
         </section>
       </div> <!-- /panelHotelStay -->
 
+      <!-- PANEL 3: EMPLOYEE MANAGEMENT & LEAVE GOVERNANCE -->
+      <div id="panelEmployeeManagement" class="employee-page-panel" style="display: none;"></div>
+
     </main>
 
     <!-- 4. Mobile Bottom Navigation Bar (Section 17) -->
@@ -393,11 +404,15 @@
         <span class="ui-icon ui-icon-md"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg></span>
         <span>Hotel Stay</span>
       </button>
+      <button class="bottom-nav-item" id="bnavEms" onclick="if(window.switchEmployeeView)window.switchEmployeeView('ems')">
+        <span class="ui-icon ui-icon-md"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+        <span>Leave &amp; EMS</span>
+      </button>
       <button class="bottom-nav-item" id="bnavHistory" onclick="alert('Attendance History: Verified attendance records are synchronized directly with your employer’s REDCap instance.')">
         <span class="ui-icon ui-icon-md"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
         <span>History</span>
       </button>
-      <button class="bottom-nav-item" id="bnavProfile" onclick="alert('Signed in as ' + (state.currentEmployee?.name || 'Employee') + ' · ' + (state.currentEmployer?.name || 'Organization'))">
+      <button class="bottom-nav-item" id="bnavProfile" onclick="if(window.showEmployeeProfileModal)window.showEmployeeProfileModal()">
         <span class="ui-icon ui-icon-md"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
         <span>Profile</span>
       </button>
@@ -549,20 +564,31 @@
               <input type="text" id="signupName" required placeholder="e.g. Dr. Ananya Sharma" class="form-input">
             </div>
 
-            <!-- Employee ID -->
+            <!-- Employee ID (auto-generated, read-only) -->
+            <div class="signup-full-width">
+              <label class="form-label" for="signupEmployeeId">Employee ID (auto-generated)</label>
+              <input type="text" id="signupEmployeeId" class="form-input" value="" placeholder="Generating..." readonly tabindex="-1" autocomplete="off" spellcheck="false" style="font-family: monospace; font-weight: 700; letter-spacing: 0.08em; cursor: not-allowed; background: var(--color-bg-tertiary, #eef2f7);">
+            </div>
+
+            <!-- Date of Birth (DOB) -->
             <div>
-              <label class="form-label" for="signupEmployeeId">Employee ID *</label>
-              <div style="position:relative;">
-                <input type="text" id="signupEmployeeId" required placeholder="e.g. EMP-1001 or PRS-01" class="form-input" autocomplete="username" spellcheck="false" style="padding-right:2.5rem;">
-                <span id="signupIdStatusIcon" style="position:absolute;right:0.75rem;top:50%;transform:translateY(-50%);font-size:1.1rem;display:none;"></span>
-              </div>
-              <span id="signupIdStatusMsg" style="font-size:0.78rem;margin-top:0.25rem;display:none;font-weight:500;"></span>
+              <label class="form-label" for="signupDob">Date of Birth (DOB) *</label>
+              <input type="date" id="signupDob" required class="form-input" style="color-scheme: light dark;">
+              <span id="signupDobError" style="font-size:0.78rem;margin-top:0.25rem;display:none;color:#ef4444;font-weight:500;"></span>
             </div>
 
             <!-- Phone Number -->
             <div>
-              <label class="form-label" for="signupPhone">Mobile / Phone *</label>
-              <input type="tel" id="signupPhone" required placeholder="+91 98765 43210" class="form-input">
+              <label class="form-label" for="signupPhone">Mobile Number (10 digits) *</label>
+              <input type="tel" id="signupPhone" required placeholder="e.g. 9876543210" maxlength="15" class="form-input" autocomplete="tel">
+              <span id="signupPhoneError" style="font-size:0.78rem;margin-top:0.25rem;display:none;color:#ef4444;font-weight:500;"></span>
+            </div>
+
+            <!-- Email Address -->
+            <div class="signup-full-width">
+              <label class="form-label" for="signupEmail">Email Address *</label>
+              <input type="email" id="signupEmail" required class="form-input" autocomplete="email" spellcheck="false">
+              <span id="signupEmailError" style="font-size:0.78rem;margin-top:0.25rem;display:none;color:#ef4444;font-weight:500;"></span>
             </div>
 
             <!-- Employer Organization -->
@@ -613,38 +639,6 @@
               <label class="form-label" for="signupState">Duty State / UT *</label>
               <select id="signupState" class="form-select" required onchange="if(window.handleStateChange)window.handleStateChange(this.value)" oninput="if(window.handleStateChange)window.handleStateChange(this.value)">
                 <option value="">Select State / UT</option>
-                <option value="Uttar Pradesh">Uttar Pradesh</option>
-                <option value="Maharashtra">Maharashtra</option>
-                <option value="Andhra Pradesh &amp; Telangana">Andhra Pradesh &amp; Telangana</option>
-                <option value="West Bengal">West Bengal</option>
-                <option value="Gujarat">Gujarat</option>
-                <option value="Tamil Nadu">Tamil Nadu</option>
-                <option value="Karnataka">Karnataka</option>
-                <option value="Rajasthan">Rajasthan</option>
-                <option value="Madhya Pradesh">Madhya Pradesh</option>
-                <option value="Bihar">Bihar</option>
-                <option value="Odisha">Odisha</option>
-                <option value="Jharkhand">Jharkhand</option>
-                <option value="Kerala">Kerala</option>
-                <option value="Assam">Assam</option>
-                <option value="Punjab">Punjab</option>
-                <option value="Chhattisgarh">Chhattisgarh</option>
-                <option value="Haryana">Haryana</option>
-                <option value="Jammu &amp; Kashmir and Ladakh">Jammu &amp; Kashmir and Ladakh</option>
-                <option value="Himachal Pradesh">Himachal Pradesh</option>
-                <option value="Uttarakhand">Uttarakhand</option>
-                <option value="NCT of Delhi">NCT of Delhi</option>
-                <option value="Arunachal Pradesh">Arunachal Pradesh</option>
-                <option value="Nagaland">Nagaland</option>
-                <option value="Manipur">Manipur</option>
-                <option value="Mizoram">Mizoram</option>
-                <option value="Tripura">Tripura</option>
-                <option value="Meghalaya">Meghalaya</option>
-                <option value="Puducherry">Puducherry</option>
-                <option value="Chandigarh">Chandigarh</option>
-                <option value="Sikkim">Sikkim</option>
-                <option value="Goa">Goa</option>
-                <option value="Dadra &amp; Nagar Haveli and Daman &amp; Diu">Dadra &amp; Nagar Haveli and Daman &amp; Diu</option>
               </select>
             </div>
 
@@ -728,44 +722,8 @@
     </div>
   </div>
 
-  <!-- CDER-specific State → District mapping (overrides the all-India dataset) -->
-  <script>
-    window.INDIA_STATES_DISTRICTS = {
-      "Uttar Pradesh":       ["Mahamaya Nagar (Hathras)","Farrukhabad","Firozabad","Ballia","Bulandshahr","Sultanpur","Bareilly","Ghaziabad"],
-      "Maharashtra":        ["Gadchiroli","Jalna","Yavatmal","Nanded","Solapur","Nashik","Pune"],
-      "Andhra Pradesh & Telangana": ["Khammam","Nalgonda","Hyderabad","Anantapur","Krishna","Rangareddy"],
-      "West Bengal":        ["Purulia","Kolkata","Nadia","Murshidabad","North 24 Parganas"],
-      "Gujarat":            ["Patan","Kachchh","Sabarkantha","Rajkot","Surat"],
-      "Tamil Nadu":         ["The Nilgiris","Thoothukudi","Tiruvannamalai","Tirunelveli","Thirupattur"],
-      "Karnataka":          ["Kodagu","Kolar","Dharwad","Ballari","Belagavi"],
-      "Rajasthan":          ["Bharatpur","Jhunjhunu","Bikaner","Sikar","Jodhpur"],
-      "Madhya Pradesh":     ["Shahdol","Tikamgarh","Balaghat","Gwalior","Jabalpur"],
-      "Bihar":              ["Saharsa","Nalanda","Siwan","Samastipur","Purba Champaran"],
-      "Odisha":             ["Kandhamal","Kendrapara","Jajpur","Mayurbhanj"],
-      "Jharkhand":          ["Ranchi","Dumka","Palamu","Dhanbad"],
-      "Kerala":             ["Kozhikode","Thrissur","Kottayam","Thiruvananthapuram"],
-      "Assam":              ["Dima Hasao","Lakhimpur","Kamrup"],
-      "Punjab":             ["Mansa","Jalandhar","Ludhiana"],
-      "Chhattisgarh":       ["Dakshin Bastar Dantewada","Raigarh","Bilaspur"],
-      "Haryana":            ["Kaithal","Sonipat","Faridabad"],
-      "Jammu & Kashmir and Ladakh": ["Kulgam","Jammu","Leh"],
-      "Himachal Pradesh":   ["Bilaspur","Shimla"],
-      "Uttarakhand":        ["Pithoragarh","Dehradun"],
-      "NCT of Delhi":       ["Central Delhi","North Delhi"],
-      "Arunachal Pradesh":  ["Papum Pare"],
-      "Nagaland":           ["Peren"],
-      "Manipur":            ["Thoubal"],
-      "Mizoram":            ["Aizawl"],
-      "Tripura":            ["South Tripura"],
-      "Meghalaya":          ["West Garo Hills"],
-      "Puducherry":         ["Puducherry"],
-      "Chandigarh":         ["Chandigarh UT"],
-      "Sikkim":             ["South District"],
-      "Goa":                ["North Goa"],
-      "Dadra & Nagar Haveli and Daman & Diu": ["Dadra and Nagar Haveli"]
-    };
-  </script>
   <script src="./face_biometric_client.js?v=3"></script>
+  <script src="./confirm_modal.js?v=1"></script>
   <script src="./app.js?v=19"></script>
 </body>
 </html>

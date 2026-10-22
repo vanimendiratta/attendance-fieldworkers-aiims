@@ -74,6 +74,7 @@ async function runGateTests() {
   await db.query('UPDATE employees SET password = $1 WHERE id = $2', [empHash, 'EMP-1001']);
   const adminHash = authService.hashPassword('Aiims@123');
   await db.query('UPDATE organizations SET admin_password = $1 WHERE id = $2', [adminHash, 'ORG-001']);
+  await db.query('DELETE FROM auth_rate_limits');
 
   // Ensure EMP-1002 exists for Gate 6
   await db.query(`
@@ -189,6 +190,7 @@ async function runGateTests() {
   assert.strictEqual(triggered429, true, 'Rate limiter must trigger HTTP 429 on abuse');
   assert.ok(retryAfterHeader, 'HTTP 429 response must contain RFC 6585 Retry-After header');
   await authService.loginRateLimiter.reset(`ip:${abuseIp}`);
+  await db.query('DELETE FROM auth_rate_limits');
   console.log(`  ✓ HTTP 429 returned with valid Retry-After: ${retryAfterHeader}s`);
 
   // -----------------------------------------------------------------
@@ -231,13 +233,13 @@ async function runGateTests() {
   console.log('  ✓ Employee directory list strictly excludes biometric descriptors');
 
   // 3. Verify signup does not persist raw camera frames
-  const uniqueId = 'EMP-GATE-' + Date.now();
   const testDesc = new Array(128).fill(0.088);
   const signupRes = await request('POST', '/api/auth/employee/signup', {
-    employee_id: uniqueId,
     employer_id: 'ORG-001',
     name: 'Gate Test Employee',
-    email: `gate_${Date.now()}@aiims.edu`,
+    dob: '1991-03-25',
+    email: `gate_${Date.now()}_cder@aiims.edu`,
+    phone: '98765' + String(Math.floor(10000 + Math.random() * 90000)),
     password: 'GatePassword@2026',
     department: 'Dental',
     designation: 'PRS-1',
@@ -247,9 +249,11 @@ async function runGateTests() {
     face_descriptor: testDesc
   });
   assert.ok(signupRes.statusCode === 200 || signupRes.statusCode === 201, `Expected 200 or 201, got ${signupRes.statusCode}`);
+  const actualEmpId = signupRes.body?.employee?.id || signupRes.body?.employee_id;
+  assert.ok(actualEmpId, 'Must return generated employee ID');
 
   // Direct database inspection: raw camera frame must NOT be stored
-  const dbEmpRes = await db.query('SELECT * FROM employees WHERE id = $1', [uniqueId]);
+  const dbEmpRes = await db.query('SELECT * FROM employees WHERE id = $1', [actualEmpId]);
   const dbEmp = dbEmpRes.rows[0];
   assert.strictEqual(dbEmp.face_photo, null, 'Raw camera frames must NEVER be persisted in employees table');
   assert.strictEqual(Number(dbEmp.face_enrolled), 1, 'face_enrolled flag should be 1');
@@ -257,9 +261,9 @@ async function runGateTests() {
   console.log('  ✓ Raw camera frames are NEVER persisted (verified in database row)');
 
   // 4. Verify employee deletion purges biometric descriptor
-  const delRes = await request('DELETE', `/api/employees/${uniqueId}`, null, adminHeaders);
+  const delRes = await request('DELETE', `/api/employees/${actualEmpId}`, null, adminHeaders);
   assert.strictEqual(delRes.statusCode, 200);
-  const deletedCheckRes = await db.query('SELECT * FROM employees WHERE id = $1', [uniqueId]);
+  const deletedCheckRes = await db.query('SELECT * FROM employees WHERE id = $1', [actualEmpId]);
   const deletedCheck = deletedCheckRes.rows[0];
   assert.strictEqual(deletedCheck, undefined, 'Deleted employee and associated biometric descriptor permanently removed');
   console.log('  ✓ Employee deletion permanently removes all associated biometric descriptors');

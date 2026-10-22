@@ -1,7 +1,7 @@
 'use strict';
 
 const { query }                              = require('../db/database');
-const { STATE_DISTRICTS_MAP, getDistrictsForState } = require('../data/india_states_districts');
+const { STATE_DISTRICTS_MAP, getDistrictsForState, normalizeStateName } = require('../data/india_states_districts');
 
 /**
  * Team Service (PostgreSQL async version)
@@ -54,7 +54,8 @@ class TeamService {
     if (!state || !state.trim())   throw new Error('State/UT is required.');
     if (!district || !district.trim()) throw new Error('District is required.');
 
-    const validDistricts = getDistrictsForState(state.trim());
+    const canonicalState = normalizeStateName(state);
+    const validDistricts = getDistrictsForState(canonicalState);
     if (validDistricts.length === 0) {
       throw new Error(`Unrecognized Indian State or Union Territory: "${state}".`);
     }
@@ -63,7 +64,7 @@ class TeamService {
       d => d.toLowerCase() === district.trim().toLowerCase()
     );
     if (!matchedDist) {
-      throw new Error(`District "${district}" does not belong to State "${state}".`);
+      throw new Error(`District "${district}" does not belong to State "${canonicalState}".`);
     }
 
     const teamId = `TEAM-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random() * 1000)}`;
@@ -72,7 +73,7 @@ class TeamService {
     await query(
       `INSERT INTO teams (id, employer_id, name, state, district, description, created_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [teamId, employerId, name.trim(), state.trim(), matchedDist, description ? description.trim() : null, now]
+      [teamId, employerId, name.trim(), canonicalState, matchedDist, description ? description.trim() : null, now]
     );
 
     const result = await query('SELECT * FROM teams WHERE id = $1', [teamId]);

@@ -1,0 +1,33 @@
+{
+  "name": "ems-leave-management",
+  "version": "1.0.0",
+  "description": "Production-grade, dynamic, rule-based Employee Leave Management System",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "migrate": "node server/database/migrate.js",
+    "seed": "node server/database/seed.js",
+    "seed:master": "node -e \"require('./server/database/seed').seedMasterPolicies()\"",
+    "seed:demo": "SEED_DEMO=true node -e \"require('./server/database/seed').seedDevelopmentDemoData()\"",
+    "import:cder": "python3 server/database/extract_cder_docx.py && node server/database/importCderData.js",
+    "test": "node --test --test-concurrency=1 tests/*.test.js"
+  },
+  "keywords": [
+    "ems",
+    "leave-management",
+    "rule-engine",
+    "ledger"
+  ],
+  "author": "Antigravity",
+  "license": "ISC",
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2"
+  }
+}

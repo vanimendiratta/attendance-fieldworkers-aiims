@@ -238,10 +238,18 @@ async function runTests() {
   console.log('\n🎉 ALL AUTOMATED TESTS PASSED SUCCESSFULLY!\n');
 }
 
-runTests().catch(async (err) => {
+runTests().then(async () => {
+  try {
+    const { closePool } = require('../src/db/database');
+    await closePool();
+  } catch {}
+  process.exit(0);
+}).catch(async (err) => {
   console.error('\n❌ Test failure:\n', err.message);
   try {
     await testHelper.closeTestPool();
+    const { closePool } = require('../src/db/database');
+    await closePool();
   } catch {}
   process.exit(1);
 });

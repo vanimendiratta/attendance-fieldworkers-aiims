@@ -3,6 +3,7 @@
 const { randomUUID }                         = require('crypto');
 const { query }                                = require('../db/database');
 const geoService                               = require('./geo_service');
+const geofenceService                          = require('./geofence_service');
 const photoService                             = require('./photo_service');
 const storageService                           = require('./storage_service');
 const redcapClient                             = require('./sql_sync_client');
@@ -156,9 +157,19 @@ class AttendanceService {
 
     // 6. Geofence
     const mode           = (workMode === 'TRAVEL' || workMode === 'FIELD_WORK') ? workMode : 'OFFICE';
-    const geofenceResult = geoService.evaluateGeofence(
-      lat, lng, org.office_lat, org.office_lng, org.geofence_radius_m, org.geofence_policy, mode
-    );
+    const geofenceResult = await geofenceService.verifyLocation({
+      latitude: lat,
+      longitude: lng,
+      accuracy: accuracyCheck.accuracy,
+      employerId: org.id,
+      geofenceType: 'WORKPLACE',
+      officeLat: org.office_lat,
+      officeLng: org.office_lng,
+      radiusMeters: org.geofence_radius_m,
+      policy: org.geofence_policy,
+      workMode: mode,
+      maxAllowedAccuracy: org.max_gps_accuracy_m
+    });
     if (!geofenceResult.allowed) {
       this.logAudit('CHECK_IN_GEOFENCE_BLOCKED', employee.id, org.id, 'CHECK_IN', 'BLOCKED', geofenceResult, clientIp, userAgent);
       throw new Error(geofenceResult.reason);
@@ -296,7 +307,7 @@ class AttendanceService {
           attendanceId, employee.id, org.id, 'CHECKED_IN',
           photoPath, photoResult.hash, lat, lng, accuracyCheck.accuracy,
           clientTimestamp || serverTimestamp, serverTimestamp, reverseAddress,
-          geofenceResult.distance, geofenceResult.status,
+          geofenceResult.distance, geofenceResult.legacyStatus || geofenceResult.status,
           mode, fieldSiteNotes ? String(fieldSiteNotes).trim() : null,
           finalTeamId, finalState, finalDistrict,
           resolvedLocationType, resolvedHotelStayId, resolvedHotelName, resolvedHotelRoom, resolvedHotelPhone,
@@ -468,9 +479,19 @@ class AttendanceService {
     }
 
     const activeWorkMode = session.work_mode || 'OFFICE';
-    const geofenceResult = geoService.evaluateGeofence(
-      lat, lng, org.office_lat, org.office_lng, org.geofence_radius_m, org.geofence_policy, activeWorkMode
-    );
+    const geofenceResult = await geofenceService.verifyLocation({
+      latitude: lat,
+      longitude: lng,
+      accuracy: accuracyCheck.accuracy,
+      employerId: org.id,
+      geofenceType: 'WORKPLACE',
+      officeLat: org.office_lat,
+      officeLng: org.office_lng,
+      radiusMeters: org.geofence_radius_m,
+      policy: org.geofence_policy,
+      workMode: activeWorkMode,
+      maxAllowedAccuracy: org.max_gps_accuracy_m
+    });
     if (!geofenceResult.allowed) {
       this.logAudit('CHECK_OUT_GEOFENCE_BLOCKED', employee.id, org.id, 'CHECK_OUT', 'BLOCKED', geofenceResult, clientIp, userAgent);
       throw new Error(geofenceResult.reason);
@@ -565,7 +586,7 @@ class AttendanceService {
           lat, lng, accuracyCheck.accuracy,
           clientTimestamp || checkoutServerTimestamp,
           checkoutServerTimestamp, reverseAddress,
-          geofenceResult.distance, geofenceResult.status,
+          geofenceResult.distance, geofenceResult.legacyStatus || geofenceResult.status,
           grossWorkingSeconds, totalBreaks, netWorkingSeconds, overtimeSeconds,
           checkoutServerTimestamp,
           session.id

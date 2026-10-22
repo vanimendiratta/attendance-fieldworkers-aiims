@@ -33,6 +33,18 @@ document.addEventListener('DOMContentLoaded', () => {
   if (teamFilterElem) teamFilterElem.addEventListener('change', applyAttendanceFilters);
   const btnExportCsv = document.getElementById('btnExportAttendanceCsv');
   if (btnExportCsv) btnExportCsv.addEventListener('click', handleExportAttendanceCsv);
+  const btnExportEmp = document.getElementById('btnExportEmployeesCsv');
+  if (btnExportEmp) btnExportEmp.addEventListener('click', handleExportEmployeesCsv);
+  const btnExportHotel = document.getElementById('btnExportHotelStaysCsv');
+  if (btnExportHotel) btnExportHotel.addEventListener('click', handleExportHotelStaysCsv);
+  const btnExportLeaves = document.getElementById('btnExportLeavesCsv');
+  if (btnExportLeaves) btnExportLeaves.addEventListener('click', handleExportLeavesCsv);
+  const btnExportAudit = document.getElementById('btnExportAuditLogsCsv');
+  if (btnExportAudit) btnExportAudit.addEventListener('click', handleExportAuditLogsCsv);
+  const btnExportTeams = document.getElementById('btnExportTeamsCsv');
+  if (btnExportTeams) btnExportTeams.addEventListener('click', handleExportTeamsCsv);
+  const btnExportGeofences = document.getElementById('btnExportGeofencesCsv');
+  if (btnExportGeofences) btnExportGeofences.addEventListener('click', handleExportGeofencesCsv);
   const btnEmailBackup = document.getElementById('btnEmailAttendanceBackup');
   if (btnEmailBackup) btnEmailBackup.addEventListener('click', handleEmailAttendanceBackup);
   const btnOpenHolidays = document.getElementById('btnOpenHolidaysModal');
@@ -40,6 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnOpenHotelStays = document.getElementById('btnOpenHotelStaysModal');
   if (btnOpenHotelStays) btnOpenHotelStays.addEventListener('click', openHotelStaysModal);
   initLeavesControls();
+  initGeofenceControls();
 });
 
 /**
@@ -74,6 +87,7 @@ function switchView(viewId, targetParam) {
     viewAttendance: { title: 'Attendance', breadcrumb: 'Verified Records & History' },
     viewTimesheets: { title: 'Cumulative Timesheets', breadcrumb: 'Individual Performance & Hours Breakdown' },
     viewLeave: { title: 'Leave', breadcrumb: 'Requests & Balance' },
+    viewEmsAdmin: { title: 'Employee Management', breadcrumb: 'Leave Governance & Entitlements' },
     viewHotelStays: { title: 'Hotel Stays', breadcrumb: 'Field Worker Lodging & Safety Directory' },
     viewReports: { title: 'Reports', breadcrumb: 'Analytics & Payroll Export' },
     viewSettings: { title: 'Organization & Geofence', breadcrumb: 'Policy Configuration' },
@@ -94,9 +108,18 @@ function switchView(viewId, targetParam) {
   if (viewId === 'viewAttendance') loadAttendanceRecords();
   if (viewId === 'viewTimesheets') loadTimesheetsView(targetParam);
   if (viewId === 'viewLeave') loadLeavesView();
+  if (viewId === 'viewEmsAdmin') {
+    if (typeof window.loadEmsAdminView === 'function') {
+      window.loadEmsAdminView(targetParam);
+    }
+  }
   if (viewId === 'viewHotelStays') loadHotelStaysPageView();
   if (viewId === 'viewAudit') loadAuditLogs();
   if (viewId === 'viewRedcap') loadRedcapData();
+  if (viewId === 'viewSettings') {
+    loadSettings();
+    loadGeofences();
+  }
 }
 
 window.switchView = switchView;
@@ -536,6 +559,101 @@ async function handleExportAttendanceCsv() {
 }
 
 /**
+ * Universal Secure Admin CSV Downloader Helper
+ */
+async function downloadAdminCsv(url, defaultFilename, btnElement) {
+  let originalContent = '';
+  if (btnElement) {
+    originalContent = btnElement.innerHTML;
+    btnElement.disabled = true;
+    btnElement.innerHTML = `${window.Icons ? window.Icons.render('loader', { size: 14 }) : ''} <span>Exporting...</span>`;
+  }
+
+  try {
+    const res = await adminFetch(url);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Export request failed');
+    }
+
+    const blob = await res.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+
+    const contentDisposition = res.headers.get('Content-Disposition');
+    let filename = defaultFilename;
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="?([^"]+)"?/);
+      if (match && match[1]) filename = match[1];
+    }
+
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(downloadUrl);
+  } catch (err) {
+    console.error(`Export CSV error (${defaultFilename}):`, err);
+    alert('Failed to export CSV: ' + err.message);
+  } finally {
+    if (btnElement) {
+      btnElement.disabled = false;
+      btnElement.innerHTML = originalContent;
+    }
+  }
+}
+
+async function handleExportEmployeesCsv() {
+  const btn = document.getElementById('btnExportEmployeesCsv');
+  await downloadAdminCsv('/api/admin/employees/export.csv', 'aiims_employees_export.csv', btn);
+}
+
+async function handleExportHotelStaysCsv() {
+  const btn = document.getElementById('btnExportHotelStaysCsv');
+  const search = (document.getElementById('hotelStaysSearchInput')?.value || '').trim();
+  const status = document.getElementById('hotelStaysStatusFilter')?.value || 'ALL';
+  const params = new URLSearchParams();
+  if (status !== 'ALL') params.set('status', status);
+  if (search) params.set('search', search);
+  await downloadAdminCsv(`/api/admin/hotel-stays/export.csv?${params.toString()}`, 'aiims_hotel_stays_export.csv', btn);
+}
+
+async function handleExportLeavesCsv() {
+  const btn = document.getElementById('btnExportLeavesCsv');
+  const date = (document.getElementById('leaveDateFilter')?.value || '').trim();
+  const territory = document.getElementById('leaveTerritoryFilter')?.value || 'ALL';
+  const params = new URLSearchParams();
+  if (date) params.set('date', date);
+  if (territory !== 'ALL') params.set('team_id', territory);
+  await downloadAdminCsv(`/api/admin/leaves/export.csv?${params.toString()}`, 'aiims_leaves_export.csv', btn);
+}
+
+async function handleExportAuditLogsCsv() {
+  const btn = document.getElementById('btnExportAuditLogsCsv');
+  await downloadAdminCsv('/api/admin/audit-logs/export.csv', 'aiims_audit_logs_export.csv', btn);
+}
+
+async function handleExportTeamsCsv() {
+  const btn = document.getElementById('btnExportTeamsCsv');
+  const state = document.getElementById('teamFilterState')?.value || 'ALL';
+  const district = document.getElementById('teamFilterDistrict')?.value || 'ALL';
+  const params = new URLSearchParams();
+  if (state !== 'ALL') params.set('state', state);
+  if (district !== 'ALL') params.set('district', district);
+  await downloadAdminCsv(`/api/teams/export.csv?${params.toString()}`, 'aiims_teams_export.csv', btn);
+}
+
+async function handleExportGeofencesCsv() {
+  const btn = document.getElementById('btnExportGeofencesCsv');
+  const activeBtn = document.querySelector('.gf-filter-btn.active');
+  const gfType = activeBtn ? (activeBtn.getAttribute('data-filter') || 'ALL') : 'ALL';
+  const params = new URLSearchParams();
+  if (gfType !== 'ALL') params.set('geofence_type', gfType);
+  await downloadAdminCsv(`/api/admin/geofences/export.csv?${params.toString()}`, 'aiims_geofences_export.csv', btn);
+}
+
+/**
  * Email Complete Attendance Backup CSV
  */
 async function handleEmailAttendanceBackup() {
@@ -650,6 +768,7 @@ function computeWorkingHoursMeta(r) {
 }
 
 let attendanceViewMode = 'DAILY';
+let attendancePerspective = 'INDIVIDUAL'; // 'INDIVIDUAL' | 'TEAM'
 let viewModeToggleInitialized = false;
 let currentAttendanceDateWindow = 'RECENT_WEEK'; // 'RECENT_WEEK' | 'TODAY' | 'ALL' | 'SPECIFIC_DATE'
 let selectedHistoricalDate = null;
@@ -658,44 +777,80 @@ function initAttendanceViewModeToggle() {
   if (viewModeToggleInitialized) return;
   const btnDaily = document.getElementById('btnViewModeDaily');
   const btnUnified = document.getElementById('btnViewModeUnified');
-  if (!btnDaily || !btnUnified) return;
+  const btnPerspInd = document.getElementById('btnPerspectiveIndividual');
+  const btnPerspTeam = document.getElementById('btnPerspectiveTeam');
+
+  if (btnDaily && btnUnified) {
+    btnDaily.onclick = () => {
+      attendanceViewMode = 'DAILY';
+      btnDaily.style.background = '#fff';
+      btnDaily.style.color = 'var(--color-text-primary)';
+      btnDaily.style.fontWeight = '600';
+      btnDaily.style.boxShadow = '0 1px 2px rgba(0,0,0,0.08)';
+
+      btnUnified.style.background = 'transparent';
+      btnUnified.style.color = 'var(--color-text-secondary)';
+      btnUnified.style.fontWeight = '500';
+      btnUnified.style.boxShadow = 'none';
+
+      const dailyWrap = document.getElementById('attendanceDailyTablesWrap');
+      const unifiedWrap = document.getElementById('attendanceUnifiedTableWrap');
+      if (dailyWrap) dailyWrap.style.display = 'block';
+      if (unifiedWrap) unifiedWrap.style.display = 'none';
+    };
+
+    btnUnified.onclick = () => {
+      attendanceViewMode = 'UNIFIED';
+      btnUnified.style.background = '#fff';
+      btnUnified.style.color = 'var(--color-text-primary)';
+      btnUnified.style.fontWeight = '600';
+      btnUnified.style.boxShadow = '0 1px 2px rgba(0,0,0,0.08)';
+
+      btnDaily.style.background = 'transparent';
+      btnDaily.style.color = 'var(--color-text-secondary)';
+      btnDaily.style.fontWeight = '500';
+      btnDaily.style.boxShadow = 'none';
+
+      const dailyWrap = document.getElementById('attendanceDailyTablesWrap');
+      const unifiedWrap = document.getElementById('attendanceUnifiedTableWrap');
+      if (dailyWrap) dailyWrap.style.display = 'none';
+      if (unifiedWrap) unifiedWrap.style.display = 'block';
+    };
+  }
+
+  if (btnPerspInd && btnPerspTeam) {
+    btnPerspInd.onclick = () => {
+      attendancePerspective = 'INDIVIDUAL';
+      btnPerspInd.style.background = '#fff';
+      btnPerspInd.style.color = 'var(--color-text-primary)';
+      btnPerspInd.style.fontWeight = '600';
+      btnPerspInd.style.boxShadow = '0 1px 2px rgba(0,0,0,0.08)';
+
+      btnPerspTeam.style.background = 'transparent';
+      btnPerspTeam.style.color = 'var(--color-text-secondary)';
+      btnPerspTeam.style.fontWeight = '500';
+      btnPerspTeam.style.boxShadow = 'none';
+
+      applyAttendanceFilters();
+    };
+
+    btnPerspTeam.onclick = () => {
+      attendancePerspective = 'TEAM';
+      btnPerspTeam.style.background = '#fff';
+      btnPerspTeam.style.color = 'var(--color-text-primary)';
+      btnPerspTeam.style.fontWeight = '600';
+      btnPerspTeam.style.boxShadow = '0 1px 2px rgba(0,0,0,0.08)';
+
+      btnPerspInd.style.background = 'transparent';
+      btnPerspInd.style.color = 'var(--color-text-secondary)';
+      btnPerspInd.style.fontWeight = '500';
+      btnPerspInd.style.boxShadow = 'none';
+
+      applyAttendanceFilters();
+    };
+  }
+
   viewModeToggleInitialized = true;
-
-  btnDaily.onclick = () => {
-    attendanceViewMode = 'DAILY';
-    btnDaily.style.background = '#fff';
-    btnDaily.style.color = 'var(--color-text-primary)';
-    btnDaily.style.fontWeight = '600';
-    btnDaily.style.boxShadow = '0 1px 2px rgba(0,0,0,0.08)';
-
-    btnUnified.style.background = 'transparent';
-    btnUnified.style.color = 'var(--color-text-secondary)';
-    btnUnified.style.fontWeight = '500';
-    btnUnified.style.boxShadow = 'none';
-
-    const dailyWrap = document.getElementById('attendanceDailyTablesWrap');
-    const unifiedWrap = document.getElementById('attendanceUnifiedTableWrap');
-    if (dailyWrap) dailyWrap.style.display = 'block';
-    if (unifiedWrap) unifiedWrap.style.display = 'none';
-  };
-
-  btnUnified.onclick = () => {
-    attendanceViewMode = 'UNIFIED';
-    btnUnified.style.background = '#fff';
-    btnUnified.style.color = 'var(--color-text-primary)';
-    btnUnified.style.fontWeight = '600';
-    btnUnified.style.boxShadow = '0 1px 2px rgba(0,0,0,0.08)';
-
-    btnDaily.style.background = 'transparent';
-    btnDaily.style.color = 'var(--color-text-secondary)';
-    btnDaily.style.fontWeight = '500';
-    btnDaily.style.boxShadow = 'none';
-
-    const dailyWrap = document.getElementById('attendanceDailyTablesWrap');
-    const unifiedWrap = document.getElementById('attendanceUnifiedTableWrap');
-    if (dailyWrap) dailyWrap.style.display = 'none';
-    if (unifiedWrap) unifiedWrap.style.display = 'block';
-  };
 }
 
 function setAttendanceDateWindow(mode) {
@@ -732,6 +887,210 @@ function handleSelectOlderDate(dateVal) {
 
 window.setAttendanceDateWindow = setAttendanceDateWindow;
 window.handleSelectOlderDate = handleSelectOlderDate;
+
+/**
+ * Render single attendance row (used by both Individual flat view and Dedicated Team-wise view)
+ */
+function renderAttendanceDailyRow(r, dateStr, isInsideDedicatedTeamGroup = false) {
+  const checkinTime = new Date(r.checkin_server_timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const checkoutTime = r.checkout_server_timestamp
+    ? new Date(r.checkout_server_timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : '--:--';
+
+  const hoursMeta = computeWorkingHoursMeta(r);
+
+  const statusBadge = r.attendance_status === 'COMPLETED'
+    ? '<span class="badge badge-neutral">Completed</span>'
+    : (r.attendance_status === 'ON_BREAK'
+      ? '<span class="badge badge-warning">On Break</span>'
+      : '<span class="badge badge-success">Working</span>');
+
+  const checkinPhoto = r.checkin_photo
+    ? `<img src="${r.checkin_photo}" class="table-photo-thumb" alt="Checkin" onclick="event.stopPropagation(); openPhotoLightbox('${r.checkin_photo}')" title="Click to view full photo">`
+    : '<span style="color: var(--color-text-muted);">None</span>';
+
+  const checkoutPhoto = r.checkout_photo
+    ? `<img src="${r.checkout_photo}" class="table-photo-thumb" alt="Checkout" onclick="event.stopPropagation(); openPhotoLightbox('${r.checkout_photo}')" title="Click to view full photo">`
+    : '<span style="color: var(--color-text-muted);">--</span>';
+
+  const isTravel = r.work_mode === 'TRAVEL';
+  const isField = r.work_mode === 'FIELD_WORK';
+  const isHotel = (r.punch_location_type === 'HOTEL_STAY') || Boolean(r.hotel_name);
+
+  const mapPinUrl = r.exact_coordinates_url || (r.checkin_lat != null && r.checkin_lng != null ? `https://www.google.com/maps?q=${Number(r.checkin_lat).toFixed(6)},${Number(r.checkin_lng).toFixed(6)}&t=k` : '');
+  const mapPinHtml = mapPinUrl ? `
+    <div style="margin-top: 3px;">
+      <a href="${mapPinUrl}" target="_blank" rel="noopener noreferrer" class="exact-map-pin-link" onclick="event.stopPropagation();" title="View exact GPS pin in Google Maps Satellite view">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+        <span>${Number(r.checkin_lat).toFixed(5)}°, ${Number(r.checkin_lng).toFixed(5)}°</span>
+      </a>
+    </div>
+  ` : '';
+
+  let locationHtml = '';
+  if (isHotel) {
+    locationHtml = `
+      <span class="badge-location-hotel" style="margin-bottom: 2px;">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M9 9h1m4 0h1M9 13h1m4 0h1M9 17h1m4 0h1"/></svg>
+        <span>Hotel: ${escapeHtml(r.hotel_name || 'Hotel Stay')} ${r.hotel_room ? '(Rm ' + escapeHtml(r.hotel_room) + ')' : ''}</span>
+      </span>
+      <div style="font-size: 11px; color: var(--color-text-primary); max-width: 220px; line-height: 1.3;">
+        ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Hotel Lodging'))}
+      </div>
+      ${r.hotel_phone ? `<div style="font-size: 10px; color: #4338ca; margin-top: 1px;">Reception: ${escapeHtml(r.hotel_phone)}</div>` : ''}
+      ${mapPinHtml}
+    `;
+  } else if (isTravel) {
+    locationHtml = `
+      <span class="badge" style="background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; font-size: 10px; margin-bottom: 2px; display: inline-flex; align-items: center; gap: 4px;">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+        <span>Travel / Transit ${r.field_site_notes ? '· ' + escapeHtml(r.field_site_notes) : ''}</span>
+      </span>
+      <div style="font-size: 11px; color: var(--color-text-primary); max-width: 220px; line-height: 1.3;">
+        ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Transit Origin'))}
+      </div>
+      <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">Official Transit Duty</div>
+      ${mapPinHtml}
+    `;
+  } else if (isField) {
+    locationHtml = `
+      <span class="badge-location-field" style="margin-bottom: 2px;">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+        <span>Field Site ${r.field_site_notes ? '· ' + escapeHtml(r.field_site_notes) : ''}</span>
+      </span>
+      <div style="font-size: 11px; color: var(--color-text-primary); max-width: 220px; line-height: 1.3;">
+        ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Premises'))}
+      </div>
+      <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">±${r.checkin_accuracy}m accuracy</div>
+      ${mapPinHtml}
+    `;
+  } else {
+    locationHtml = `
+      <span class="badge badge-neutral" style="font-size: 10px; margin-bottom: 2px;">Office Premises</span>
+      <div style="font-size: 11px; color: var(--color-text-secondary); max-width: 200px;">${escapeHtml(r.checkin_address || 'Office Premises')}</div>
+      ${mapPinHtml}
+    `;
+  }
+
+  const isDedicatedTeam = Boolean(r.dedicated_team_id || (r.team_name && r.team_name !== 'Direct Assignment'));
+
+  let teamTerritoryColumn = '';
+  if (isInsideDedicatedTeamGroup) {
+    teamTerritoryColumn = `
+      <div>
+        <div style="font-weight: 600; font-size: 12px; color: var(--color-text-primary);">${escapeHtml(r.designation || 'Field Staff')}</div>
+        <div style="font-size: 11px; color: var(--color-text-secondary);">${escapeHtml(r.department || 'CDER')}</div>
+        <span class="team-chip-tag" style="margin-top: 2px; display: inline-flex; align-items: center; gap: 4px;">
+          ${window.Icons ? window.Icons.render('mapPin', { size: 10 }) : ''}
+          <span>${r.district ? `${escapeHtml(r.district)}, ${escapeHtml(r.state || '')}` : (escapeHtml(r.state) || 'Assigned Territory')}</span>
+        </span>
+      </div>
+    `;
+  } else {
+    teamTerritoryColumn = `
+      <div>
+        <div style="font-weight: 600; font-size: 12px; color: var(--color-text-primary);">${escapeHtml(r.team_name || 'Direct Assignment')}</div>
+        <div>
+          ${isDedicatedTeam
+            ? '<span class="badge badge-primary" style="font-size: 10px; padding: 1px 6px; margin-top: 2px;">Dedicated Team</span>'
+            : '<span class="badge badge-neutral" style="font-size: 10px; padding: 1px 6px; margin-top: 2px;">Direct Assignment</span>'}
+        </div>
+        <span class="team-chip-tag" style="margin-top: 3px; display: inline-flex; align-items: center; gap: 4px;">
+          ${window.Icons ? window.Icons.render('mapPin', { size: 10 }) : ''}
+          <span>${r.district ? `${escapeHtml(r.district)}, ${escapeHtml(r.state || '')}` : (escapeHtml(r.state) || 'Territory Unspecified')}</span>
+        </span>
+      </div>
+    `;
+  }
+
+  return `
+    <tr id="att-row-${r.id}" class="${hoursMeta.rowClass}" onclick="openAttendanceDrawer('${r.id}')" style="cursor: pointer;">
+      <td>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div class="table-emp-avatar">${escapeHtml((r.employee_name || 'E').charAt(0))}</div>
+          <div>
+            <div style="font-weight: 600; color: var(--color-text-primary);">${escapeHtml(r.employee_name || 'Staff')}</div>
+            <div style="font-size: 11px; color: var(--color-text-muted); font-family: var(--font-mono);">${escapeHtml(r.employee_id || '')} · ${escapeHtml(r.department || 'CDER')}</div>
+            ${r.is_holiday_work ? `
+              <div style="margin-top: 3px;">
+                <span class="badge-compoff" style="font-size: 10px; padding: 1px 6px;" title="Comp-Off Earned: ${escapeHtml(r.holiday_name || 'Holiday Duty')}">
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                  <span>Comp-Off Credit</span>
+                </span>
+              </div>
+            ` : ''}
+            ${r.is_regularized ? `
+              <div style="margin-top: 3px;">
+                <span class="badge badge-regularized" style="font-size: 10px; padding: 1px 6px;" title="Regularized by Admin: ${escapeHtml(r.regularization_notes || '')}">
+                  <span>Regularized</span>
+                </span>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      </td>
+      <td>
+        ${teamTerritoryColumn}
+      </td>
+      <td style="font-family: var(--font-mono); font-size: 12px; white-space: nowrap;">${checkinTime}</td>
+      <td>${checkinPhoto}</td>
+      <td>${locationHtml}</td>
+      <td style="font-family: var(--font-mono); font-size: 12px; white-space: nowrap;">${checkoutTime}</td>
+      <td>${checkoutPhoto}</td>
+      <td>
+        ${(() => {
+          if (!r.checkout_server_timestamp) {
+            return '<span style="color: var(--color-text-muted); font-size: 12px;">--</span>';
+          }
+          const checkoutPinUrl = (r.checkout_lat != null && r.checkout_lng != null)
+            ? `https://www.google.com/maps?q=${Number(r.checkout_lat).toFixed(6)},${Number(r.checkout_lng).toFixed(6)}&t=k`
+            : '';
+          const checkoutPinHtml = checkoutPinUrl ? `
+            <div style="margin-top: 3px;">
+              <a href="${checkoutPinUrl}" target="_blank" rel="noopener noreferrer" class="exact-map-pin-link" onclick="event.stopPropagation();" title="View exact checkout GPS pin in Google Maps Satellite view">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                <span>${Number(r.checkout_lat).toFixed(5)}°, ${Number(r.checkout_lng).toFixed(5)}°</span>
+              </a>
+            </div>
+          ` : '';
+          const addrText = r.checkout_address || (r.checkout_lat != null ? `${Number(r.checkout_lat).toFixed(4)}°, ${Number(r.checkout_lng).toFixed(4)}°` : 'Checkout Recorded');
+          const accText = r.checkout_accuracy ? `±${r.checkout_accuracy}m accuracy` : 'Recorded';
+          return `
+            <span class="badge badge-neutral" style="font-size: 10px; margin-bottom: 2px;">Checkout Point</span>
+            <div style="font-size: 11px; color: var(--color-text-primary); font-weight: 500; max-width: 210px; white-space: normal; line-height: 1.3;">
+              ${escapeHtml(addrText)}
+            </div>
+            <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">${escapeHtml(accText)}</div>
+            ${checkoutPinHtml}
+          `;
+        })()}
+      </td>
+      <td style="white-space: nowrap;">
+        <div style="display: inline-flex; align-items: center; gap: 4px;">
+          ${hoursMeta.badgeHtml}
+          ${hoursMeta.variancePill || ''}
+        </div>
+      </td>
+      <td>${statusBadge}</td>
+      <td style="white-space: nowrap; text-align: right;">
+        <div style="display: inline-flex; align-items: center; gap: 4px;">
+          <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="event.stopPropagation(); openAttendanceDrawer('${r.id}')" title="Inspect full audit drawer">
+            View
+          </button>
+          <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="event.stopPropagation(); openAlterAttendanceModal('${escapeHtml(r.employee_id)}', '${escapeHtml(dateStr)}', '${r.id}')" title="Alter attendance details">
+            Alter
+          </button>
+          <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="event.stopPropagation(); openPersonTimesheet('${escapeHtml(r.employee_id)}')" title="View cumulative timesheet for this employee">
+            Timesheet
+          </button>
+          <button class="btn btn-danger" style="padding: 3px 8px; font-size: 11px;" onclick="event.stopPropagation(); handleDeleteAttendance('${r.id}', '${escapeHtml(r.employee_name)}')" title="Delete attendance record">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          </button>
+        </div>
+      </td>
+    </tr>
+  `;
+}
 
 /**
  * Render Day-by-Day Attendance Tables (Table 1: 16 Sept, Table 2: 17 Sept, etc.)
@@ -851,179 +1210,182 @@ function renderDailyAttendanceTables(records) {
       weekdayStr = dObj.toLocaleDateString('en-GB', { weekday: 'long' });
     } catch (e) {}
 
-    const rowsHtml = dayRecords.map(r => {
-      const checkinTime = new Date(r.checkin_server_timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const checkoutTime = r.checkout_server_timestamp
-        ? new Date(r.checkout_server_timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        : '--:--';
+    let dayContentHtml = '';
 
-      const hoursMeta = computeWorkingHoursMeta(r);
+    // Grouping & Perspective rendering:
+    if (attendancePerspective === 'TEAM') {
+      const dedicatedTeamMap = new Map();
+      const directRecords = [];
 
-      const statusBadge = r.attendance_status === 'COMPLETED'
-        ? '<span class="badge badge-neutral">Completed</span>'
-        : (r.attendance_status === 'ON_BREAK'
-          ? '<span class="badge badge-warning">On Break</span>'
-          : '<span class="badge badge-success">Working</span>');
-
-      const checkinPhoto = r.checkin_photo
-        ? `<img src="${r.checkin_photo}" class="table-photo-thumb" alt="Checkin" onclick="event.stopPropagation(); openPhotoLightbox('${r.checkin_photo}')" title="Click to view full photo">`
-        : '<span style="color: var(--color-text-muted);">None</span>';
-
-      const checkoutPhoto = r.checkout_photo
-        ? `<img src="${r.checkout_photo}" class="table-photo-thumb" alt="Checkout" onclick="event.stopPropagation(); openPhotoLightbox('${r.checkout_photo}')" title="Click to view full photo">`
-        : '<span style="color: var(--color-text-muted);">--</span>';
-
-      const isTravel = r.work_mode === 'TRAVEL';
-      const isField = r.work_mode === 'FIELD_WORK';
-      const isHotel = (r.punch_location_type === 'HOTEL_STAY') || Boolean(r.hotel_name);
-
-      const mapPinUrl = r.exact_coordinates_url || (r.checkin_lat != null && r.checkin_lng != null ? `https://www.google.com/maps?q=${Number(r.checkin_lat).toFixed(6)},${Number(r.checkin_lng).toFixed(6)}&t=k` : '');
-      const mapPinHtml = mapPinUrl ? `
-        <div style="margin-top: 3px;">
-          <a href="${mapPinUrl}" target="_blank" rel="noopener noreferrer" class="exact-map-pin-link" onclick="event.stopPropagation();" title="View exact GPS pin in Google Maps Satellite view">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-            <span>${Number(r.checkin_lat).toFixed(5)}°, ${Number(r.checkin_lng).toFixed(5)}°</span>
-          </a>
-        </div>
-      ` : '';
-
-      let locationHtml = '';
-      if (isHotel) {
-        locationHtml = `
-          <span class="badge-location-hotel" style="margin-bottom: 2px;">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M9 9h1m4 0h1M9 13h1m4 0h1M9 17h1m4 0h1"/></svg>
-            <span>Hotel: ${escapeHtml(r.hotel_name || 'Hotel Stay')} ${r.hotel_room ? '(Rm ' + escapeHtml(r.hotel_room) + ')' : ''}</span>
-          </span>
-          <div style="font-size: 11px; color: var(--color-text-primary); max-width: 220px; line-height: 1.3;">
-            ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Hotel Lodging'))}
-          </div>
-          ${r.hotel_phone ? `<div style="font-size: 10px; color: #4338ca; margin-top: 1px;">Reception: ${escapeHtml(r.hotel_phone)}</div>` : ''}
-          ${mapPinHtml}
-        `;
-      } else if (isTravel) {
-        locationHtml = `
-          <span class="badge" style="background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; font-size: 10px; margin-bottom: 2px; display: inline-flex; align-items: center; gap: 4px;">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
-            <span>Travel / Transit ${r.field_site_notes ? '· ' + escapeHtml(r.field_site_notes) : ''}</span>
-          </span>
-          <div style="font-size: 11px; color: var(--color-text-primary); max-width: 220px; line-height: 1.3;">
-            ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Transit Origin'))}
-          </div>
-          <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">Official Transit Duty</div>
-          ${mapPinHtml}
-        `;
-      } else if (isField) {
-        locationHtml = `
-          <span class="badge-location-field" style="margin-bottom: 2px;">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
-            <span>Field Site ${r.field_site_notes ? '· ' + escapeHtml(r.field_site_notes) : ''}</span>
-          </span>
-          <div style="font-size: 11px; color: var(--color-text-primary); max-width: 220px; line-height: 1.3;">
-            ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Premises'))}
-          </div>
-          <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">±${r.checkin_accuracy}m accuracy</div>
-          ${mapPinHtml}
-        `;
-      } else {
-        locationHtml = `
-          <span class="badge badge-neutral" style="font-size: 10px; margin-bottom: 2px;">Office Premises</span>
-          <div style="font-size: 11px; color: var(--color-text-secondary); max-width: 200px;">${escapeHtml(r.checkin_address || 'Office Premises')}</div>
-          ${mapPinHtml}
-        `;
+      for (const r of dayRecords) {
+        const isDedicated = Boolean(r.dedicated_team_id || (r.team_name && r.team_name !== 'Direct Assignment'));
+        if (isDedicated) {
+          const tName = r.team_name || 'Dedicated Team';
+          if (!dedicatedTeamMap.has(tName)) {
+            dedicatedTeamMap.set(tName, {
+              teamName: tName,
+              teamId: r.dedicated_team_id || r.team_id,
+              state: r.state || '',
+              district: r.district || '',
+              records: []
+            });
+          }
+          dedicatedTeamMap.get(tName).records.push(r);
+        } else {
+          directRecords.push(r);
+        }
       }
 
-      return `
-        <tr id="att-row-${r.id}" class="${hoursMeta.rowClass}" onclick="openAttendanceDrawer('${r.id}')" style="cursor: pointer;">
-          <td>
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <div class="table-emp-avatar">${escapeHtml((r.employee_name || 'E').charAt(0))}</div>
-              <div>
-                <div style="font-weight: 600; color: var(--color-text-primary);">${escapeHtml(r.employee_name || 'Staff')}</div>
-                <div style="font-size: 11px; color: var(--color-text-muted); font-family: var(--font-mono);">${escapeHtml(r.employee_id || '')} · ${escapeHtml(r.department || 'CDER')}</div>
-                ${r.is_holiday_work ? `
-                  <div style="margin-top: 3px;">
-                    <span class="badge-compoff" style="font-size: 10px; padding: 1px 6px;" title="Comp-Off Earned: ${escapeHtml(r.holiday_name || 'Holiday Duty')}">
-                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                      <span>Comp-Off Credit</span>
-                    </span>
-                  </div>
+      const teamCardsHtml = Array.from(dedicatedTeamMap.values()).map(tGroup => {
+        const tCompleted = tGroup.records.filter(r => r.checkout_server_timestamp || r.attendance_status === 'COMPLETED');
+        const tActive = tGroup.records.filter(r => r.attendance_status === 'CHECKED_IN' || r.attendance_status === 'ON_BREAK');
+        const tSec = tCompleted.reduce((acc, r) => acc + (Number(r.net_working_seconds) || 0), 0);
+        const tHrs = tSec / 3600;
+        const tAvgHrs = tCompleted.length > 0 ? (tHrs / tCompleted.length) : 0;
+        const tRowsHtml = tGroup.records.map(r => renderAttendanceDailyRow(r, dateStr, true)).join('');
+
+        return `
+          <div class="team-attendance-group dedicated-team" style="margin-top: 14px;">
+            <div class="team-group-header">
+              <div class="team-group-title">
+                <span class="badge badge-primary" style="font-size: 11px; padding: 2px 8px; display: inline-flex; align-items: center; gap: 4px;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                  <span>Dedicated Team</span>
+                </span>
+                <span class="team-group-name">${escapeHtml(tGroup.teamName)}</span>
+                <span class="team-group-meta">
+                  ${window.Icons ? window.Icons.render('mapPin', { size: 12 }) : ''}
+                  <span>${escapeHtml(tGroup.district ? `${tGroup.district}, ${tGroup.state}` : (tGroup.state || 'Assigned Territory'))}</span>
+                </span>
+              </div>
+              <div class="team-group-stats">
+                <span class="team-group-stat-pill" title="Staff logged in this team today">
+                  <strong>${tGroup.records.length}</strong> Staff
+                </span>
+                <span class="team-group-stat-pill" style="color: #059669;" title="Completed Shifts">
+                  <strong>${tCompleted.length}</strong> Done
+                </span>
+                ${tActive.length > 0 ? `
+                  <span class="team-group-stat-pill" style="color: #2563eb; background: #eff6ff;" title="Currently Working">
+                    <strong>${tActive.length}</strong> Working
+                  </span>
                 ` : ''}
-                ${r.is_regularized ? `
-                  <div style="margin-top: 3px;">
-                    <span class="badge badge-regularized" style="font-size: 10px; padding: 1px 6px;" title="Regularized by Admin: ${escapeHtml(r.regularization_notes || '')}">
-                      <span>Regularized</span>
-                    </span>
-                  </div>
+                <span class="team-group-stat-pill" title="Total hours worked by this team">
+                  ${tHrs.toFixed(1)}h Total · Avg ${tAvgHrs.toFixed(1)}h
+                </span>
+              </div>
+            </div>
+            <div class="table-responsive-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Field Worker</th>
+                    <th>Role &amp; Details</th>
+                    <th>Check-In</th>
+                    <th>Check-In Photo</th>
+                    <th>Check-In Location</th>
+                    <th>Checkout</th>
+                    <th>Checkout Photo</th>
+                    <th>Checkout Location</th>
+                    <th>Working Hours</th>
+                    <th>Status</th>
+                    <th style="text-align: right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${tRowsHtml}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      let directCardHtml = '';
+      if (directRecords.length > 0) {
+        const dCompleted = directRecords.filter(r => r.checkout_server_timestamp || r.attendance_status === 'COMPLETED');
+        const dActive = directRecords.filter(r => r.attendance_status === 'CHECKED_IN' || r.attendance_status === 'ON_BREAK');
+        const dRowsHtml = directRecords.map(r => renderAttendanceDailyRow(r, dateStr, false)).join('');
+
+        directCardHtml = `
+          <div class="team-attendance-group direct-assignment" style="margin-top: 14px;">
+            <div class="team-group-header">
+              <div class="team-group-title">
+                <span class="badge badge-neutral" style="font-size: 11px; padding: 2px 8px;">Direct Assignment</span>
+                <span class="team-group-name">Direct / Individual Field Personnel</span>
+                <span class="team-group-meta">Independent HQ Deployment</span>
+              </div>
+              <div class="team-group-stats">
+                <span class="team-group-stat-pill">
+                  <strong>${directRecords.length}</strong> Staff
+                </span>
+                <span class="team-group-stat-pill" style="color: #059669;">
+                  <strong>${dCompleted.length}</strong> Done
+                </span>
+                ${dActive.length > 0 ? `
+                  <span class="team-group-stat-pill" style="color: #2563eb;">
+                    <strong>${dActive.length}</strong> Working
+                  </span>
                 ` : ''}
               </div>
             </div>
-          </td>
-          <td>
-            <div style="font-weight: 600; font-size: 12px; color: var(--color-text-primary);">${escapeHtml(r.team_name || 'Direct Assignment')}</div>
-            <span class="team-chip-tag" style="margin-top: 3px; display: inline-flex; align-items: center; gap: 4px;">
-              ${window.Icons ? window.Icons.render('mapPin', { size: 10 }) : ''}
-              <span>${r.district ? `${escapeHtml(r.district)}, ${escapeHtml(r.state || '')}` : (escapeHtml(r.state) || 'Territory Unspecified')}</span>
-            </span>
-          </td>
-          <td style="font-family: var(--font-mono); font-size: 12px; white-space: nowrap;">${checkinTime}</td>
-          <td>${checkinPhoto}</td>
-          <td>${locationHtml}</td>
-          <td style="font-family: var(--font-mono); font-size: 12px; white-space: nowrap;">${checkoutTime}</td>
-          <td>${checkoutPhoto}</td>
-          <td>
-            ${(() => {
-              if (!r.checkout_server_timestamp) {
-                return '<span style="color: var(--color-text-muted); font-size: 12px;">--</span>';
-              }
-              const checkoutPinUrl = (r.checkout_lat != null && r.checkout_lng != null)
-                ? `https://www.google.com/maps?q=${Number(r.checkout_lat).toFixed(6)},${Number(r.checkout_lng).toFixed(6)}&t=k`
-                : '';
-              const checkoutPinHtml = checkoutPinUrl ? `
-                <div style="margin-top: 3px;">
-                  <a href="${checkoutPinUrl}" target="_blank" rel="noopener noreferrer" class="exact-map-pin-link" onclick="event.stopPropagation();" title="View exact checkout GPS pin in Google Maps Satellite view">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-                    <span>${Number(r.checkout_lat).toFixed(5)}°, ${Number(r.checkout_lng).toFixed(5)}°</span>
-                  </a>
-                </div>
-              ` : '';
-              const addrText = r.checkout_address || (r.checkout_lat != null ? `${Number(r.checkout_lat).toFixed(4)}°, ${Number(r.checkout_lng).toFixed(4)}°` : 'Checkout Recorded');
-              const accText = r.checkout_accuracy ? `±${r.checkout_accuracy}m accuracy` : 'Recorded';
-              return `
-                <span class="badge badge-neutral" style="font-size: 10px; margin-bottom: 2px;">Checkout Point</span>
-                <div style="font-size: 11px; color: var(--color-text-primary); font-weight: 500; max-width: 210px; white-space: normal; line-height: 1.3;">
-                  ${escapeHtml(addrText)}
-                </div>
-                <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">${escapeHtml(accText)}</div>
-                ${checkoutPinHtml}
-              `;
-            })()}
-          </td>
-          <td style="white-space: nowrap;">
-            <div style="display: inline-flex; align-items: center; gap: 4px;">
-              ${hoursMeta.badgeHtml}
-              ${hoursMeta.variancePill || ''}
+            <div class="table-responsive-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Field Worker</th>
+                    <th>Territory</th>
+                    <th>Check-In</th>
+                    <th>Check-In Photo</th>
+                    <th>Check-In Location</th>
+                    <th>Checkout</th>
+                    <th>Checkout Photo</th>
+                    <th>Checkout Location</th>
+                    <th>Working Hours</th>
+                    <th>Status</th>
+                    <th style="text-align: right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${dRowsHtml}
+                </tbody>
+              </table>
             </div>
-          </td>
-          <td>${statusBadge}</td>
-          <td style="white-space: nowrap; text-align: right;">
-            <div style="display: inline-flex; align-items: center; gap: 4px;">
-              <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="event.stopPropagation(); openAttendanceDrawer('${r.id}')" title="Inspect full audit drawer">
-                View
-              </button>
-              <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="event.stopPropagation(); openAlterAttendanceModal('${escapeHtml(r.employee_id)}', '${escapeHtml(dateStr)}', '${r.id}')" title="Alter attendance details">
-                Alter
-              </button>
-              <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="event.stopPropagation(); openPersonTimesheet('${escapeHtml(r.employee_id)}')" title="View cumulative timesheet for this employee">
-                Timesheet
-              </button>
-              <button class="btn btn-danger" style="padding: 3px 8px; font-size: 11px;" onclick="event.stopPropagation(); handleDeleteAttendance('${r.id}', '${escapeHtml(r.employee_name)}')" title="Delete attendance record">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-              </button>
-            </div>
-          </td>
-        </tr>
+          </div>
+        `;
+      }
+
+      dayContentHtml = (teamCardsHtml || '') + (directCardHtml || '');
+    } else {
+      // Individual View (flat chronological roster)
+      const rowsHtml = dayRecords.map(r => renderAttendanceDailyRow(r, dateStr, false)).join('');
+      dayContentHtml = `
+        <div class="table-responsive-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Field Worker</th>
+                <th>Team &amp; Territory</th>
+                <th>Check-In</th>
+                <th>Check-In Photo</th>
+                <th>Check-In Location</th>
+                <th>Checkout</th>
+                <th>Checkout Photo</th>
+                <th>Checkout Location</th>
+                <th>Working Hours</th>
+                <th>Status</th>
+                <th style="text-align: right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+        </div>
       `;
-    }).join('');
+    }
+
+    const dedicatedTeamsInDay = new Set(dayRecords.filter(r => Boolean(r.dedicated_team_id || (r.team_name && r.team_name !== 'Direct Assignment'))).map(r => r.team_name || 'Dedicated Team'));
 
     return `
       <div class="day-attendance-card" id="day-card-${escapeHtml(dateStr)}">
@@ -1049,13 +1411,20 @@ function renderDailyAttendanceTables(records) {
                 ` : ''}
               </div>
               <div style="font-size: 11px; color: var(--color-text-muted); margin-top: 2px;">
-                Daily field dispatch attendance verification log
+                Daily field dispatch attendance verification log · ${attendancePerspective === 'TEAM' ? 'Dedicated Team-Wise Grouping Active' : 'Individual Staff View'}
               </div>
             </div>
           </div>
 
           <!-- Right: Daily KPIs Strip -->
           <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            ${dedicatedTeamsInDay.size > 0 ? `
+              <span class="day-kpi-pill" style="background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe;" title="Dedicated Regional Teams Active">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <span><strong>${dedicatedTeamsInDay.size}</strong> Dedicated Team${dedicatedTeamsInDay.size === 1 ? '' : 's'}</span>
+              </span>
+            ` : ''}
+
             <span class="day-kpi-pill" title="Total Personnel Logged Today">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
               <span><strong>${totalWorkers}</strong> Staff Present</span>
@@ -1080,28 +1449,7 @@ function renderDailyAttendanceTables(records) {
           </div>
         </div>
 
-        <div class="table-responsive-wrap">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Field Worker</th>
-                <th>Team &amp; Territory</th>
-                <th>Check-In</th>
-                <th>Check-In Photo</th>
-                <th>Check-In Location</th>
-                <th>Checkout</th>
-                <th>Checkout Photo</th>
-                <th>Checkout Location</th>
-                <th>Working Hours</th>
-                <th>Status</th>
-                <th style="text-align: right;">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rowsHtml}
-            </tbody>
-          </table>
-        </div>
+        ${dayContentHtml}
       </div>
     `;
   }).join('');
@@ -1149,195 +1497,23 @@ function renderAttendanceTable(records) {
     return;
   }
 
-  tbody.innerHTML = records.map(r => {
-    const checkinTime = new Date(r.checkin_server_timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const checkoutTime = r.checkout_server_timestamp
-      ? new Date(r.checkout_server_timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      : '--:--';
+  let displayRecords = records;
+  if (attendancePerspective === 'TEAM') {
+    // When in team perspective, sort so dedicated team members are clustered together by team name
+    displayRecords = records.slice().sort((a, b) => {
+      const isDedA = Boolean(a.dedicated_team_id || (a.team_name && a.team_name !== 'Direct Assignment'));
+      const isDedB = Boolean(b.dedicated_team_id || (b.team_name && b.team_name !== 'Direct Assignment'));
+      if (isDedA && !isDedB) return -1;
+      if (!isDedA && isDedB) return 1;
+      const tComp = (a.team_name || '').localeCompare(b.team_name || '');
+      if (tComp !== 0) return tComp;
+      return (b.checkin_server_timestamp || '').localeCompare(a.checkin_server_timestamp || '');
+    });
+  }
 
-    const hoursMeta = computeWorkingHoursMeta(r);
-
-    const statusBadge = r.attendance_status === 'COMPLETED'
-      ? '<span class="badge badge-neutral">Completed</span>'
-      : (r.attendance_status === 'ON_BREAK'
-        ? '<span class="badge badge-warning">On Break</span>'
-        : '<span class="badge badge-success">Working</span>');
-
-    const checkinPhoto = r.checkin_photo
-      ? `<img src="${r.checkin_photo}" class="table-photo-thumb" alt="Checkin" onclick="event.stopPropagation(); openPhotoLightbox('${r.checkin_photo}')" title="Click to view full photo">`
-      : '<span style="color: var(--color-text-muted);">None</span>';
-
-    const checkoutPhoto = r.checkout_photo
-      ? `<img src="${r.checkout_photo}" class="table-photo-thumb" alt="Checkout" onclick="event.stopPropagation(); openPhotoLightbox('${r.checkout_photo}')" title="Click to view full photo">`
-      : '<span style="color: var(--color-text-muted);">--</span>';
-
-    const isTravel = r.work_mode === 'TRAVEL';
-    const isField = r.work_mode === 'FIELD_WORK';
-
-    return `
-      <tr id="att-row-${r.id}" class="${hoursMeta.rowClass}" onclick="openAttendanceDrawer('${r.id}')" style="cursor: pointer;">
-        <td>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <div class="table-emp-avatar">${r.employee_name.charAt(0)}</div>
-            <div>
-              <div style="font-weight: 600;">${r.employee_name}</div>
-              <div style="font-size: 11px; color: var(--color-text-muted);">${r.employee_id}</div>
-              ${r.is_holiday_work ? `
-                <div style="margin-top: 3px;">
-                  <span class="badge-compoff" title="Compensatory Off Day Earned: ${escapeHtml(r.holiday_name || 'Holiday Duty')}">
-                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                    <span>Comp-Off (${escapeHtml(r.holiday_name || 'Holiday')})</span>
-                  </span>
-                </div>
-              ` : ''}
-              ${r.is_regularized ? `
-                <div style="margin-top: 3px;">
-                  <span class="badge badge-regularized" style="font-size: 10px; padding: 1px 6px;" title="Regularized by Admin: ${escapeHtml(r.regularization_notes || '')}">
-                    <span>Regularized</span>
-                  </span>
-                </div>
-              ` : ''}
-            </div>
-          </div>
-        </td>
-        <td>
-          <div style="font-weight: 600; font-size: 13px; color: var(--color-text-primary);">${r.team_name || 'Direct Assignment'}</div>
-          <span class="team-chip-tag" style="margin-top: 3px; display: inline-flex; align-items: center; gap: 4px;">
-            ${window.Icons ? window.Icons.render('mapPin', { size: 10 }) : ''}
-            <span>${r.district ? `${r.district}, ${r.state}` : (r.state || 'Territory Unspecified')}</span>
-          </span>
-        </td>
-        <td style="color: var(--color-text-secondary);">${r.department}</td>
-        <td style="font-family: var(--font-mono);">${checkinTime}</td>
-        <td>${checkinPhoto}</td>
-        <td>
-          ${(() => {
-            const mapPinUrl = r.exact_coordinates_url || (r.checkin_lat != null && r.checkin_lng != null ? `https://www.google.com/maps?q=${Number(r.checkin_lat).toFixed(6)},${Number(r.checkin_lng).toFixed(6)}&t=k` : '');
-            const mapPinHtml = mapPinUrl ? `
-              <div style="margin-top: 3px;">
-                <a href="${mapPinUrl}" target="_blank" rel="noopener noreferrer" class="exact-map-pin-link" onclick="event.stopPropagation();" title="View exact GPS pin in Google Maps Satellite view">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-                  <span>${Number(r.checkin_lat).toFixed(5)}°, ${Number(r.checkin_lng).toFixed(5)}°</span>
-                </a>
-              </div>
-            ` : '';
-
-            if (r.punch_location_type === 'HOTEL_STAY' || r.hotel_name) {
-              return `
-                <span class="badge-location-hotel" style="margin-bottom: 3px;">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M9 9h1m4 0h1M9 13h1m4 0h1M9 17h1m4 0h1"/></svg>
-                  <span>Hotel: ${escapeHtml(r.hotel_name || 'Hotel Stay')} ${r.hotel_room ? '(Rm ' + escapeHtml(r.hotel_room) + ')' : ''}</span>
-                </span>
-                <div style="font-size: 11px; color: var(--color-text-primary); font-weight: 500; max-width: 210px; white-space: normal; line-height: 1.3;">
-                  ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Hotel Lodging'))}
-                </div>
-                ${r.hotel_phone ? `<div style="font-size: 10px; color: #4338ca; margin-top: 1px;">Reception: ${escapeHtml(r.hotel_phone)}</div>` : ''}
-                ${mapPinHtml}
-              `;
-            }
-
-            if (isTravel) {
-              return `
-                <span class="badge" style="background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; font-size: 10px; margin-bottom: 3px; display: inline-flex; align-items: center; gap: 4px;">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
-                  <span>Travel / Transit ${r.field_site_notes ? '· ' + escapeHtml(r.field_site_notes) : ''}</span>
-                </span>
-                <div style="font-size: 11px; color: var(--color-text-primary); font-weight: 500; max-width: 210px; white-space: normal; line-height: 1.3;">
-                  ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Transit Origin'))}
-                </div>
-                <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">Official Transit Duty</div>
-                ${mapPinHtml}
-              `;
-            }
-
-            if (isField) {
-              return `
-                <span class="badge-location-field" style="margin-bottom: 3px;">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
-                  <span>Field Work ${r.field_site_notes ? '· ' + escapeHtml(r.field_site_notes) : ''}</span>
-                </span>
-                <div style="font-size: 11px; color: var(--color-text-primary); font-weight: 500; max-width: 210px; white-space: normal; line-height: 1.3;">
-                  ${escapeHtml(r.checkin_address || (r.checkin_lat != null ? `${Number(r.checkin_lat).toFixed(4)}°, ${Number(r.checkin_lng).toFixed(4)}°` : 'Premises'))}
-                </div>
-                <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">±${r.checkin_accuracy}m accuracy</div>
-                ${mapPinHtml}
-              `;
-            }
-
-            return `
-              <span class="badge ${r.checkin_geofence_status === 'WITHIN_GEOFENCE' ? 'badge-neutral' : 'badge-warning'}" style="font-size: 10px; margin-bottom: 3px; display: inline-flex; align-items: center; gap: 4px;">
-                ${r.checkin_geofence_status === 'WITHIN_GEOFENCE' 
-                  ? `${window.Icons ? window.Icons.render('building', { size: 11 }) : ''} <span>In Office</span>` 
-                  : `${window.Icons ? window.Icons.render('alertTriangle', { size: 11 }) : ''} <span>Outside (${Math.round(r.checkin_geofence_distance || 0)}m)</span>`}
-              </span>
-              <div style="font-size: 11px; color: var(--color-text-secondary); max-width: 200px; white-space: normal; line-height: 1.3;">
-                ${escapeHtml(r.checkin_address || 'Office Premises')}
-              </div>
-              <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">±${r.checkin_accuracy}m accuracy</div>
-              ${mapPinHtml}
-            `;
-          })()}
-        </td>
-        <td style="font-family: var(--font-mono);">${checkoutTime}</td>
-        <td>${checkoutPhoto}</td>
-        <td>
-          ${(() => {
-            if (!r.checkout_server_timestamp) {
-              return '<span style="color: var(--color-text-muted); font-size: 12px;">--</span>';
-            }
-            const checkoutPinUrl = (r.checkout_lat != null && r.checkout_lng != null)
-              ? `https://www.google.com/maps?q=${Number(r.checkout_lat).toFixed(6)},${Number(r.checkout_lng).toFixed(6)}&t=k`
-              : '';
-            const checkoutPinHtml = checkoutPinUrl ? `
-              <div style="margin-top: 3px;">
-                <a href="${checkoutPinUrl}" target="_blank" rel="noopener noreferrer" class="exact-map-pin-link" onclick="event.stopPropagation();" title="View exact checkout GPS pin in Google Maps Satellite view">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-                  <span>${Number(r.checkout_lat).toFixed(5)}°, ${Number(r.checkout_lng).toFixed(5)}°</span>
-                </a>
-              </div>
-            ` : '';
-
-            const addrText = r.checkout_address || (r.checkout_lat != null ? `${Number(r.checkout_lat).toFixed(4)}°, ${Number(r.checkout_lng).toFixed(4)}°` : 'Checkout Recorded');
-            const accText = r.checkout_accuracy ? `±${r.checkout_accuracy}m accuracy` : 'Recorded';
-
-            return `
-              <span class="badge badge-neutral" style="font-size: 10px; margin-bottom: 2px;">Checkout Point</span>
-              <div style="font-size: 11px; color: var(--color-text-primary); font-weight: 500; max-width: 210px; white-space: normal; line-height: 1.3;">
-                ${escapeHtml(addrText)}
-              </div>
-              <div style="font-size: 10px; color: var(--color-text-muted); font-family: var(--font-mono);">${escapeHtml(accText)}</div>
-              ${checkoutPinHtml}
-            `;
-          })()}
-        </td>
-        <td style="white-space: nowrap;">
-          <div style="display: inline-flex; align-items: center; gap: 4px;">
-            ${hoursMeta.badgeHtml}
-            ${hoursMeta.variancePill || ''}
-          </div>
-        </td>
-        <td>${statusBadge}</td>
-        <td style="white-space: nowrap;">
-          <div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px;">
-            <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;" onclick="event.stopPropagation(); openAlterAttendanceModal('${escapeHtml(r.employee_id)}', '${r.checkin_server_timestamp ? r.checkin_server_timestamp.split('T')[0] : ''}', '${r.id}')" title="Alter attendance details">
-              <span>Alter</span>
-            </button>
-            <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;" onclick="event.stopPropagation(); openPersonTimesheet('${escapeHtml(r.employee_id)}')" title="View cumulative timesheet for this employee">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-              <span>Timesheet</span>
-            </button>
-            <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;" onclick="event.stopPropagation(); openAttendanceDrawer('${r.id}')">
-              <span>View</span>
-              <span class="ui-icon ui-icon-xs">${window.Icons ? window.Icons.raw('arrowRight') : ''}</span>
-            </button>
-            <button class="btn btn-danger" style="padding: 4px 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;" onclick="event.stopPropagation(); handleDeleteAttendance('${r.id}', '${escapeHtml(r.employee_name)}')" title="Delete attendance record">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-              <span>Delete</span>
-            </button>
-          </div>
-        </td>
-      </tr>
-    `;
+  tbody.innerHTML = displayRecords.map(r => {
+    const dStr = r.checkin_server_timestamp ? r.checkin_server_timestamp.split('T')[0] : '';
+    return renderAttendanceDailyRow(r, dStr, false);
   }).join('');
 }
 
@@ -1701,40 +1877,41 @@ async function loadEmployees() {
 window.handleDeleteAttendance = async function(recordId, employeeName) {
   if (!recordId) return;
 
-  const confirmed = window.confirm(
-    `Are you sure you want to delete this attendance record for "${employeeName || 'this employee'}" (${recordId})?\n\nThis will permanently delete the check-in and checkout timestamps, geofence logs, break records, and uploaded photos.\n\nThis action cannot be undone.`
-  );
-  if (!confirmed) return;
+  await showConfirmModal({
+    title: 'Delete Attendance Record',
+    message: 'Are you sure you want to permanently delete this attendance record? This will delete the check-in and checkout timestamps, geofence logs, break records, and uploaded photos.',
+    itemDetails: `${employeeName || 'Staff Member'} · Record #${recordId}`,
+    confirmText: 'Delete Record',
+    cancelText: 'Keep Record',
+    loadingText: 'Deleting Record...',
+    variant: 'danger',
+    onConfirm: async () => {
+      const res = await adminFetch(`/api/admin/attendance/${encodeURIComponent(recordId)}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Server error deleting attendance record');
+      }
 
-  try {
-    const res = await adminFetch(`/api/admin/attendance/${encodeURIComponent(recordId)}`, {
-      method: 'DELETE'
-    });
-    const data = await res.json();
-    if (!data.success) {
-      alert(`Could not delete attendance record: ${data.error || 'Server error'}`);
-      return;
+      // Close drawer if open
+      closeAttendanceDrawer();
+
+      // Optimistically remove table row immediately
+      const row = document.getElementById(`att-row-${recordId}`);
+      if (row) row.remove();
+
+      // Update in-memory cache if available
+      if (typeof cachedAttendanceRecords !== 'undefined' && Array.isArray(cachedAttendanceRecords)) {
+        cachedAttendanceRecords = cachedAttendanceRecords.filter(r => r.id !== recordId);
+        applyAttendanceFilters();
+      }
+
+      // Reload list and refresh dashboard metrics
+      await loadAttendanceRecords();
+      loadDashboardData();
     }
-
-    // Close drawer if open
-    closeAttendanceDrawer();
-
-    // Optimistically remove table row immediately
-    const row = document.getElementById(`att-row-${recordId}`);
-    if (row) row.remove();
-
-    // Update in-memory cache if available
-    if (typeof cachedAttendanceRecords !== 'undefined' && Array.isArray(cachedAttendanceRecords)) {
-      cachedAttendanceRecords = cachedAttendanceRecords.filter(r => r.id !== recordId);
-      applyAttendanceFilters();
-    }
-
-    // Reload list and refresh dashboard metrics
-    await loadAttendanceRecords();
-    loadDashboardData();
-  } catch (err) {
-    alert(`Error deleting attendance record: ${err.message}`);
-  }
+  });
 };
 
 /**
@@ -1743,31 +1920,32 @@ window.handleDeleteAttendance = async function(recordId, employeeName) {
 window.handleDeleteEmployee = async function(empId, empName) {
   if (!empId) return;
 
-  const confirmed = window.confirm(
-    `Are you sure you want to delete employee "${empName}" (${empId})?\n\nThis will permanently delete their profile, attendance logs, and active sessions.\n\nThis action cannot be undone.`
-  );
-  if (!confirmed) return;
+  await showConfirmModal({
+    title: 'Delete Employee Profile',
+    message: 'Are you sure you want to delete this employee? This will permanently delete their profile, attendance logs, leave records, and active sessions.',
+    itemDetails: `${empName || 'Employee'} · ID: ${empId}`,
+    confirmText: 'Delete Employee',
+    cancelText: 'Keep Employee',
+    loadingText: 'Deleting Employee...',
+    variant: 'danger',
+    onConfirm: async () => {
+      const res = await adminFetch(`/api/employees/${encodeURIComponent(empId)}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Server error deleting employee');
+      }
 
-  try {
-    const res = await adminFetch(`/api/employees/${encodeURIComponent(empId)}`, {
-      method: 'DELETE'
-    });
-    const data = await res.json();
-    if (!data.success) {
-      alert(`Could not delete employee: ${data.error || 'Server error'}`);
-      return;
+      // Optimistically remove table row immediately
+      const row = document.getElementById(`emp-row-${empId}`);
+      if (row) row.remove();
+
+      // Reload list and refresh dashboard counts
+      await loadEmployees();
+      loadDashboardData();
     }
-
-    // Optimistically remove table row immediately
-    const row = document.getElementById(`emp-row-${empId}`);
-    if (row) row.remove();
-
-    // Reload list and refresh dashboard counts
-    await loadEmployees();
-    loadDashboardData();
-  } catch (err) {
-    alert(`Error deleting employee: ${err.message}`);
-  }
+  });
 };
 
 /**
@@ -1821,6 +1999,7 @@ async function loadSettings() {
     document.getElementById('settingGeofencePolicy').value = s.geofence_policy;
     document.getElementById('settingShiftHours').value = s.shift_hours;
     document.getElementById('settingTimezone').value = s.timezone;
+    loadGeofences();
   } catch (err) {
     console.error('Error loading settings:', err);
   }
@@ -1859,6 +2038,307 @@ async function handleSettingsSubmit(e) {
     alert('Failed to save settings');
   }
 }
+
+/**
+ * ---------------------------------------------------------------------------
+ * Approved Workplace & Hotel Geofences Controller
+ * ---------------------------------------------------------------------------
+ */
+let cachedGeofences = [];
+let activeGeofenceFilter = 'ALL';
+let geofenceMap = null;
+let geofenceMarker = null;
+let geofenceCircle = null;
+
+function initGeofenceControls() {
+  const btnOpen = document.getElementById('btnOpenAddGeofence');
+  if (btnOpen) btnOpen.addEventListener('click', () => openGeofenceModal());
+
+  const btnClose = document.getElementById('btnCloseGeofenceModal');
+  if (btnClose) btnClose.addEventListener('click', closeGeofenceModal);
+
+  const btnCancel = document.getElementById('btnCancelGeofence');
+  if (btnCancel) btnCancel.addEventListener('click', closeGeofenceModal);
+
+  const form = document.getElementById('geofenceForm');
+  if (form) form.addEventListener('submit', handleGeofenceSubmit);
+
+  const filterBtns = document.querySelectorAll('.gf-filter-btn');
+  filterBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      filterBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeGeofenceFilter = btn.getAttribute('data-filter') || 'ALL';
+      renderGeofencesTable();
+    });
+  });
+
+  ['gfLat', 'gfLng', 'gfRadius'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', () => {
+        const lat = parseFloat(document.getElementById('gfLat').value);
+        const lng = parseFloat(document.getElementById('gfLng').value);
+        const radius = parseFloat(document.getElementById('gfRadius').value) || 150;
+        if (!isNaN(lat) && !isNaN(lng)) {
+          previewGeofenceOnMap(lat, lng, radius, document.getElementById('gfName').value || 'Current Geofence');
+        }
+      });
+    }
+  });
+}
+
+function initGeofenceMap(lat = 28.5672, lng = 77.2100, radius = 150) {
+  const container = document.getElementById('geofenceMapPreview');
+  if (!container || typeof L === 'undefined') return;
+
+  if (!geofenceMap) {
+    geofenceMap = L.map('geofenceMapPreview').setView([lat, lng], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 19
+    }).addTo(geofenceMap);
+
+    geofenceMarker = L.marker([lat, lng]).addTo(geofenceMap);
+    geofenceCircle = L.circle([lat, lng], {
+      color: '#4f46e5',
+      fillColor: '#818cf8',
+      fillOpacity: 0.25,
+      radius: radius
+    }).addTo(geofenceMap);
+  } else {
+    geofenceMap.invalidateSize();
+    geofenceMarker.setLatLng([lat, lng]);
+    geofenceCircle.setLatLng([lat, lng]);
+    geofenceCircle.setRadius(radius);
+    geofenceMap.setView([lat, lng], 15);
+  }
+}
+
+function previewGeofenceOnMap(lat, lng, radius = 150, name = '') {
+  if (isNaN(lat) || isNaN(lng)) return;
+  initGeofenceMap(lat, lng, radius);
+  if (geofenceMap) {
+    setTimeout(() => {
+      geofenceMap.invalidateSize();
+      geofenceMarker.setLatLng([lat, lng]);
+      geofenceCircle.setLatLng([lat, lng]);
+      geofenceCircle.setRadius(radius);
+      geofenceMap.setView([lat, lng], 15);
+      if (name) {
+        geofenceMarker.bindPopup(`<b>${escapeHtml(name)}</b><br>Radius: ${radius}m`).openPopup();
+      }
+      const label = document.getElementById('mapPreviewLabel');
+      if (label) label.textContent = `Viewing: ${name} (${radius}m radius)`;
+    }, 50);
+  }
+}
+
+async function loadGeofences() {
+  if (!currentEmployerSession) return;
+  const tbody = document.getElementById('geofencesTableBody');
+  if (!tbody) return;
+
+  try {
+    const res = await adminFetch(`/api/admin/geofences?employer_id=${encodeURIComponent(currentEmployerSession.employer_id)}`);
+    const data = await res.json();
+    if (!data.success) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--color-danger); padding: 20px;">Failed to load geofences: ${escapeHtml(data.error || 'Server error')}</td></tr>`;
+      return;
+    }
+
+    cachedGeofences = data.geofences || [];
+
+    if (cachedGeofences.length === 0 && data.organization && data.organization.office_lat != null) {
+      cachedGeofences.push({
+        id: 'primary-office-baseline',
+        isPrimaryOffice: true,
+        name: data.organization.office_name || 'Primary Office Base',
+        geofence_type: 'WORKPLACE',
+        latitude: data.organization.office_lat,
+        longitude: data.organization.office_lng,
+        radius_meters: data.organization.geofence_radius_m || 100,
+        policy: data.organization.geofence_policy || 'ALLOW_WITH_FLAG',
+        address: 'Default Organization Workplace Coordinates'
+      });
+    }
+
+    renderGeofencesTable();
+
+    if (cachedGeofences.length > 0) {
+      const first = cachedGeofences[0];
+      previewGeofenceOnMap(parseFloat(first.latitude), parseFloat(first.longitude), parseFloat(first.radius_meters || 150), first.name);
+    }
+  } catch (err) {
+    console.error('Failed to load geofences:', err);
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--color-danger); padding: 20px;">Error loading geofences: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+function renderGeofencesTable() {
+  const tbody = document.getElementById('geofencesTableBody');
+  if (!tbody) return;
+
+  let list = cachedGeofences;
+  if (activeGeofenceFilter !== 'ALL') {
+    list = list.filter(g => String(g.geofence_type).toUpperCase() === activeGeofenceFilter);
+  }
+
+  if (list.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--color-text-muted); padding: 24px;">No ${activeGeofenceFilter !== 'ALL' ? activeGeofenceFilter.toLowerCase() : ''} geofences configured. Click "Add Approved Geofence" to register one.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = list.map(g => {
+    const lat = parseFloat(g.latitude);
+    const lng = parseFloat(g.longitude);
+    const radius = parseFloat(g.radius_meters || 150);
+    const isHotel = String(g.geofence_type).toUpperCase() === 'HOTEL';
+    const typeBadge = isHotel
+      ? `<span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #d97706; font-weight: 600;">HOTEL</span>`
+      : `<span class="badge" style="background: rgba(59, 130, 246, 0.15); color: #2563eb; font-weight: 600;">WORKPLACE</span>`;
+
+    const isStrict = g.policy === 'STRICT_BLOCK';
+    const policyBadge = isStrict
+      ? `<span class="badge badge-danger">Strict Block</span>`
+      : `<span class="badge badge-warning">Allow & Flag</span>`;
+
+    return `
+      <tr>
+        <td>
+          <div style="font-weight: 600; color: var(--color-text-primary);">${escapeHtml(g.name)}</div>
+          ${g.address ? `<div style="font-size: 11px; color: var(--color-text-muted);">${escapeHtml(g.address)}</div>` : ''}
+          ${g.isPrimaryOffice ? `<span style="font-size: 10px; background: var(--color-surface-subtle); padding: 2px 6px; border-radius: 4px; color: var(--color-text-tertiary);">Primary Base</span>` : ''}
+        </td>
+        <td>${typeBadge}</td>
+        <td style="font-family: var(--font-mono); font-size: 12px;">${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E</td>
+        <td><span style="font-weight: 500;">${Math.round(radius)}m</span></td>
+        <td>${policyBadge}</td>
+        <td style="text-align: right; white-space: nowrap;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="previewGeofenceOnMap(${lat}, ${lng}, ${radius}, '${escapeHtml(g.name)}')">Preview</button>
+          ${!g.isPrimaryOffice ? `
+            <button type="button" class="btn btn-secondary btn-sm" onclick="openGeofenceModal('${g.id}')">Edit</button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="handleDeleteGeofence('${g.id}', '${escapeHtml(g.name)}')">Delete</button>
+          ` : ''}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function openGeofenceModal(geofenceId = null) {
+  const modal = document.getElementById('geofenceModal');
+  const title = document.getElementById('geofenceModalTitle');
+  const form = document.getElementById('geofenceForm');
+  if (!modal || !form) return;
+
+  form.reset();
+  document.getElementById('geofenceId').value = '';
+
+  if (geofenceId) {
+    const gf = cachedGeofences.find(g => g.id === geofenceId);
+    if (gf) {
+      title.textContent = 'Edit Approved Geofence';
+      document.getElementById('geofenceId').value = gf.id;
+      document.getElementById('gfName').value = gf.name || '';
+      document.getElementById('gfType').value = gf.geofence_type || 'WORKPLACE';
+      document.getElementById('gfPolicy').value = gf.policy || 'ALLOW_WITH_FLAG';
+      document.getElementById('gfLat').value = gf.latitude;
+      document.getElementById('gfLng').value = gf.longitude;
+      document.getElementById('gfRadius').value = gf.radius_meters || 150;
+      document.getElementById('gfAddress').value = gf.address || '';
+    }
+  } else {
+    title.textContent = 'Add Approved Geofence';
+    const defaultLat = document.getElementById('settingOfficeLat')?.value || '28.5672';
+    const defaultLng = document.getElementById('settingOfficeLng')?.value || '77.2100';
+    document.getElementById('gfLat').value = defaultLat;
+    document.getElementById('gfLng').value = defaultLng;
+    document.getElementById('gfRadius').value = '150';
+  }
+
+  modal.style.display = 'flex';
+}
+
+function closeGeofenceModal() {
+  const modal = document.getElementById('geofenceModal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function handleGeofenceSubmit(e) {
+  e.preventDefault();
+  if (!currentEmployerSession) return;
+
+  const id = document.getElementById('geofenceId').value;
+  const payload = {
+    name: document.getElementById('gfName').value.trim(),
+    geofence_type: document.getElementById('gfType').value,
+    policy: document.getElementById('gfPolicy').value,
+    latitude: parseFloat(document.getElementById('gfLat').value),
+    longitude: parseFloat(document.getElementById('gfLng').value),
+    radius_meters: parseFloat(document.getElementById('gfRadius').value),
+    address: document.getElementById('gfAddress').value.trim()
+  };
+
+  const btnSave = document.getElementById('btnSaveGeofence');
+  if (btnSave) {
+    btnSave.disabled = true;
+    btnSave.textContent = 'Saving...';
+  }
+
+  try {
+    const url = id ? `/api/admin/geofences/${encodeURIComponent(id)}` : '/api/admin/geofences';
+    const method = id ? 'PUT' : 'POST';
+
+    const res = await adminFetch(url, {
+      method,
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+
+    if (!res.ok || !data.success) {
+      alert(`Error saving geofence: ${data.error || 'Failed to save'}`);
+      return;
+    }
+
+    closeGeofenceModal();
+    await loadGeofences();
+    previewGeofenceOnMap(payload.latitude, payload.longitude, payload.radius_meters, payload.name);
+  } catch (err) {
+    alert(`Request error: ${err.message}`);
+  } finally {
+    if (btnSave) {
+      btnSave.disabled = false;
+      btnSave.textContent = 'Save Geofence';
+    }
+  }
+}
+
+async function handleDeleteGeofence(id, name) {
+  await showConfirmModal({
+    title: 'Delete Approved Geofence',
+    message: 'Are you sure you want to delete this geofence? Employees checking in at this location will no longer be verified against this perimeter.',
+    itemDetails: `Geofence: ${name || id}`,
+    confirmText: 'Delete Geofence',
+    cancelText: 'Cancel',
+    loadingText: 'Deleting...',
+    variant: 'danger',
+    onConfirm: async () => {
+      const res = await adminFetch(`/api/admin/geofences/${encodeURIComponent(id)}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to delete geofence');
+      }
+      await loadGeofences();
+    }
+  });
+}
+
+window.previewGeofenceOnMap = previewGeofenceOnMap;
+window.openGeofenceModal = openGeofenceModal;
+window.handleDeleteGeofence = handleDeleteGeofence;
 
 /**
  * Security Audit Logs
@@ -2666,22 +3146,19 @@ function applyTimesheetSearchFilter() {
   renderTimesheetSessions(filtered);
 }
 
-function exportPersonTimesheetCsv(empId) {
+async function exportPersonTimesheetCsv(empId) {
   if (!empId) return;
   const startDate = document.getElementById('timesheetStartDate')?.value || '';
   const endDate = document.getElementById('timesheetEndDate')?.value || '';
   const status = document.getElementById('timesheetStatusFilter')?.value || 'ALL';
+  const btn = document.getElementById('btnExportIndividualTimesheetCsv');
 
-  let url = `/api/admin/employees/${encodeURIComponent(empId)}/timesheet/export.csv?status=${encodeURIComponent(status)}`;
-  if (startDate) url += `&start_date=${encodeURIComponent(startDate)}`;
-  if (endDate) url += `&end_date=${encodeURIComponent(endDate)}`;
+  const params = new URLSearchParams();
+  if (status !== 'ALL') params.set('status', status);
+  if (startDate) params.set('start_date', startDate);
+  if (endDate) params.set('end_date', endDate);
 
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `timesheet_${empId}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  await downloadAdminCsv(`/api/admin/employees/${encodeURIComponent(empId)}/timesheet/export.csv?${params.toString()}`, `timesheet_${empId}.csv`, btn);
 }
 
 window.exportPersonTimesheetCsv = exportPersonTimesheetCsv;
@@ -2797,26 +3274,29 @@ async function handleAddHoliday() {
 }
 
 async function handleDeleteHoliday(id, name) {
-  if (!confirm(`Are you sure you want to remove "${name}" from the official holidays calendar?`)) return;
+  await showConfirmModal({
+    title: 'Remove Official Holiday',
+    message: 'Are you sure you want to remove this holiday from the official holidays calendar? Attendance marking and comp-off calculations for this date may be affected.',
+    itemDetails: `Holiday: ${name || 'Official Holiday'}`,
+    confirmText: 'Remove Holiday',
+    cancelText: 'Cancel',
+    loadingText: 'Removing...',
+    variant: 'danger',
+    onConfirm: async () => {
+      const res = await authFetch(`/api/admin/holidays/${encodeURIComponent(id)}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Server error removing holiday');
+      }
 
-  try {
-    const res = await authFetch(`/api/admin/holidays/${encodeURIComponent(id)}`, {
-      method: 'DELETE'
-    });
-    const data = await res.json();
-    if (!res.ok || !data.success) {
-      alert(`Failed to delete holiday: ${data.error || 'Server error'}`);
-      return;
+      await loadHolidaysList();
+      if (document.getElementById('viewAttendance') && document.getElementById('viewAttendance').style.display !== 'none') {
+        loadAttendanceRecords();
+      }
     }
-
-    await loadHolidaysList();
-    if (document.getElementById('viewAttendance') && document.getElementById('viewAttendance').style.display !== 'none') {
-      loadAttendanceRecords();
-    }
-  } catch (err) {
-    console.error('Error deleting holiday:', err);
-    alert(`Failed to delete holiday: ${err.message}`);
-  }
+  });
 }
 
 window.handleAddHoliday = handleAddHoliday;
@@ -2911,9 +3391,18 @@ function renderHotelStaysList(stays) {
               <span class="badge badge-neutral" style="font-size: 10px; font-family: var(--font-mono);">${escapeHtml(s.employee_id || '')}</span>
               <span style="font-size: 11px; color: var(--color-text-tertiary);">${escapeHtml(s.department || 'CDER')}</span>
             </div>
-            <span class="${s.stay_status === 'ACTIVE' ? 'badge badge-success' : 'badge badge-neutral'}" style="font-size: 10px;">
-              ${s.stay_status === 'ACTIVE' ? 'Active Lodging' : 'Past Stay'}
-            </span>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              ${s.verification_status === 'VERIFIED'
+                ? `<span class="badge badge-success" style="font-size: 10px;">GPS Verified (${Math.round(s.distance_meters || 0)}m)</span>`
+                : s.is_manual_override
+                  ? `<span class="badge badge-info" style="font-size: 10px; background: #e0f2fe; color: #0284c7;">Admin Approved</span>`
+                  : s.verification_status === 'MANUAL_REVIEW'
+                    ? `<span class="badge badge-warning" style="font-size: 10px; background: #fef3c7; color: #b45309;">Review Requested</span>`
+                    : `<span class="badge badge-neutral" style="font-size: 10px;">${escapeHtml(s.verification_status || 'Unverified')}</span>`}
+              <span class="${s.stay_status === 'ACTIVE' ? 'badge badge-success' : 'badge badge-neutral'}" style="font-size: 10px;">
+                ${s.stay_status === 'ACTIVE' ? 'Active Lodging' : 'Past Stay'}
+              </span>
+            </div>
           </div>
 
           <!-- Hotel Name & Room -->
@@ -2933,6 +3422,14 @@ function renderHotelStaysList(stays) {
           ${s.hotel_address ? `
             <div style="font-size: 12px; color: var(--color-text-secondary); margin-bottom: 4px; line-height: 1.3;">
               ${escapeHtml(s.hotel_address)}
+            </div>
+          ` : ''}
+
+          <!-- Verified Match Details if present -->
+          ${s.verified_place_name ? `
+            <div style="font-size: 11px; color: #16a34a; margin-bottom: 4px; display: flex; align-items: center; gap: 4px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 12 2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+              <span>Map Match: <strong>${escapeHtml(s.verified_place_name)}</strong></span>
             </div>
           ` : ''}
 
@@ -2971,6 +3468,11 @@ function renderHotelStaysList(stays) {
           ` : `
             <span style="font-size: 11px; color: var(--color-text-muted);">No GPS coordinates</span>
           `}
+          ${s.verification_status === 'MANUAL_REVIEW' ? `
+            <button type="button" class="btn btn-primary" style="padding: 4px 10px; font-size: 11px; background: #0284c7;" onclick="adminApproveHotelStay('${escapeHtml(s.id)}')">
+              Approve Review
+            </button>
+          ` : ''}
           <button type="button" class="btn btn-secondary" style="padding: 4px 10px; font-size: 11px;" onclick="closeHotelStaysModal(); openPersonTimesheet('${escapeHtml(s.employee_id)}')">
             Timesheet &rarr;
           </button>
@@ -3507,39 +4009,42 @@ async function handleSyncUnmarkedLeaves() {
   const btn = document.getElementById('btnSyncUnmarkedLeaves');
   const origText = btn ? btn.innerHTML : '';
 
-  if (!confirm(`Add all field workers without marked check-in / check-out on ${targetDate} to the Leave Roster?`)) {
-    return;
-  }
+  await showConfirmModal({
+    title: 'Sync Unmarked Absences',
+    message: `Add all field workers without marked check-in / check-out on ${targetDate} to the official Leave Roster as pending regularization?`,
+    itemDetails: `Roster Date: ${targetDate} · Auto-detected unmarked staff`,
+    confirmText: 'Sync to Leave Roster',
+    cancelText: 'Cancel',
+    loadingText: 'Syncing to Roster...',
+    variant: 'warning',
+    onConfirm: async () => {
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span class="ui-icon ui-icon-xs">${window.Icons ? window.Icons.raw('loader') : ''}</span> <span>Adding to Leaves...</span>`;
+      }
+      try {
+        const res = await adminFetch('/api/admin/leaves/sync-unmarked', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            date: targetDate,
+            leave_type: 'UNMARKED_ABSENCE',
+            reason: 'Unmarked Field Check-In/Check-Out (Pending Regularization)'
+          })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'Failed to sync leaves');
 
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = `<span class="ui-icon ui-icon-xs">${window.Icons ? window.Icons.raw('loader') : ''}</span> <span>Adding to Leaves...</span>`;
-  }
-
-  try {
-    const res = await adminFetch('/api/admin/leaves/sync-unmarked', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        date: targetDate,
-        leave_type: 'UNMARKED_ABSENCE',
-        reason: 'Unmarked Field Check-In/Check-Out (Pending Regularization)'
-      })
-    });
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error || 'Failed to sync leaves');
-
-    alert(data.message || `Successfully added unmarked workers to leave list.`);
-    await loadLeavesView(targetDate);
-    switchLeaveTab('RECORDED');
-  } catch (err) {
-    alert(`Could not add to leaves: ${err.message}`);
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = origText;
+        await loadLeavesView(targetDate);
+        switchLeaveTab('RECORDED');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = origText;
+        }
+      }
     }
-  }
+  });
 }
 
 function openAlterAttendanceModal(employeeId, defaultDate, attendanceId, leaveId) {
@@ -3821,15 +4326,21 @@ async function handleApproveLeave(leaveId, newStatus) {
 }
 
 async function handleDeleteLeave(leaveId, empName) {
-  if (!confirm(`Remove leave record for ${empName}?`)) return;
-  try {
-    const res = await adminFetch(`/api/admin/leaves/${leaveId}`, { method: 'DELETE' });
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error || 'Failed to delete leave');
-    await loadLeavesView(currentLeaveDate);
-  } catch (err) {
-    alert(`Could not delete leave: ${err.message}`);
-  }
+  await showConfirmModal({
+    title: 'Remove Leave Record',
+    message: `Are you sure you want to permanently remove this leave record from the roster? This action cannot be undone.`,
+    itemDetails: `Employee: ${empName || 'Staff Member'} · Record #${leaveId}`,
+    confirmText: 'Remove Leave',
+    cancelText: 'Keep Record',
+    loadingText: 'Removing...',
+    variant: 'danger',
+    onConfirm: async () => {
+      const res = await adminFetch(`/api/admin/leaves/${encodeURIComponent(leaveId)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Failed to delete leave');
+      await loadLeavesView(currentLeaveDate);
+    }
+  });
 }
 
 window.openAlterAttendanceModal = openAlterAttendanceModal;

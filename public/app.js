@@ -138,7 +138,21 @@ const DOM = {
   inputHotelCheckinDate: document.getElementById('inputHotelCheckinDate'),
   inputHotelCheckoutDate: document.getElementById('inputHotelCheckoutDate'),
   btnCaptureHotelGps: document.getElementById('btnCaptureHotelGps'),
+  btnCaptureHotelGpsText: document.getElementById('btnCaptureHotelGpsText'),
+  btnVerifyHotelGps: document.getElementById('btnVerifyHotelGps'),
+  btnVerifyHotelGpsText: document.getElementById('btnVerifyHotelGpsText'),
   textHotelGpsDisplay: document.getElementById('textHotelGpsDisplay'),
+  textHotelGpsAccuracy: document.getElementById('textHotelGpsAccuracy'),
+  hotelStayMapContainer: document.getElementById('hotelStayMapContainer'),
+  hotelStayMap: document.getElementById('hotelStayMap'),
+  textMapCoordsSummary: document.getElementById('textMapCoordsSummary'),
+  boxHotelVerificationStatus: document.getElementById('boxHotelVerificationStatus'),
+  hotelVerificationTitle: document.getElementById('hotelVerificationTitle'),
+  badgeHotelVerificationStatus: document.getElementById('badgeHotelVerificationStatus'),
+  hotelVerificationMessage: document.getElementById('hotelVerificationMessage'),
+  hotelVerificationMatchedDetails: document.getElementById('hotelVerificationMatchedDetails'),
+  hotelVerificationActions: document.getElementById('hotelVerificationActions'),
+  btnRequestManualReview: document.getElementById('btnRequestManualReview'),
   inputHotelNotes: document.getElementById('inputHotelNotes'),
   btnSaveHotelStay: document.getElementById('btnSaveHotelStay'),
 
@@ -186,6 +200,19 @@ function getEmployeeAuthHeaders(extraHeaders = {}) {
     headers['x-session-token'] = state.sessionToken;
   }
   return headers;
+}
+
+/**
+ * Safe HTML escaping to prevent DOM-based XSS injection
+ */
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 /**
@@ -244,14 +271,16 @@ async function fetchResolvedAddress(lat, lng) {
   state.isResolvingAddress = true;
 
   try {
-    const res = await fetch(`/api/location/preview?lat=${lat}&lng=${lng}`);
+    const res = await fetch(`/api/location/preview?lat=${lat}&lng=${lng}`, {
+      headers: getEmployeeAuthHeaders()
+    });
     const data = await res.json();
     if (data.success && data.address) {
       state.resolvedAddress = data.address;
       lastGeocodedLat = lat;
       lastGeocodedLng = lng;
       if (DOM.hudAddressBadge) {
-        DOM.hudAddressBadge.innerHTML = `${window.Icons ? window.Icons.render('mapPin', { size: 12 }) : ''} <span>${data.address}</span>`;
+        DOM.hudAddressBadge.innerHTML = `${window.Icons ? window.Icons.render('mapPin', { size: 12 }) : ''} <span>${escapeHtml(data.address)}</span>`;
       }
 
       // Auto-set location classification if lodging establishment detected
@@ -546,6 +575,32 @@ let enrolledSignupFace = { photo: null, descriptor: null };
 let currentAuthTab = 'signin';
 let currentSignInMethod = 'creds';
 
+let currentSignupPreIssued = { employee_id: '', id_token: '' };
+
+async function prepareSignupEmployeeId(forceRefresh = false) {
+  const empIdInput = document.getElementById('signupEmployeeId');
+  if (!empIdInput) return;
+  if (!forceRefresh && currentSignupPreIssued.employee_id && empIdInput.value === currentSignupPreIssued.employee_id) {
+    return;
+  }
+  empIdInput.value = '';
+  empIdInput.placeholder = 'Generating Employee ID...';
+  try {
+    const res = await fetch('/api/auth/employee/next-id');
+    const data = await res.json();
+    if (data && data.success && data.employee_id) {
+      currentSignupPreIssued.employee_id = data.employee_id;
+      currentSignupPreIssued.id_token = data.id_token || '';
+      empIdInput.value = data.employee_id;
+      empIdInput.placeholder = data.employee_id;
+    } else {
+      empIdInput.placeholder = 'Auto-assigned upon registration';
+    }
+  } catch (err) {
+    empIdInput.placeholder = 'Auto-assigned upon registration';
+  }
+}
+
 // Switch between Sign In and Sign Up tabs
 window.switchAuthTab = function(tab) {
   currentAuthTab = tab;
@@ -569,6 +624,7 @@ window.switchAuthTab = function(tab) {
     panelSignIn.style.display = 'none';
     stopFaceLoginCamera();
     initSignupDropdowns();
+    prepareSignupEmployeeId();
   }
 };
 
@@ -752,7 +808,7 @@ async function triggerFaceRecognition() {
       `;
     }
 
-    if (statusText) statusText.innerHTML = `<strong>Face ID Verified!</strong> Welcome, ${data.employee.name}`;
+    if (statusText) statusText.innerHTML = `<strong>Face ID Verified!</strong> Welcome, ${escapeHtml(data.employee.name)}`;
     if (window.FaceBiometric) window.FaceBiometric.playUnlockSound();
 
     const sessionData = {
@@ -781,13 +837,23 @@ async function triggerFaceRecognition() {
 }
 
 // Global State Change handler for Duty State / UT -> Duty District cascade
-window.handleStateChange = function(selectedState) {
+window.handleStateChange = function(selectedState, selectedDistrict = '') {
   const distEl = document.getElementById('signupDistrict');
+  const stateEl = document.getElementById('signupState');
   if (!distEl) return;
   distEl.innerHTML = '';
   if (!selectedState) {
     distEl.innerHTML = '<option value="">Select State First</option>';
+    distEl.disabled = true;
     return;
+  }
+
+  const canonicalState = (typeof window.normalizeIndianStateName === 'function')
+    ? (window.normalizeIndianStateName(selectedState) || selectedState)
+    : selectedState;
+
+  if (stateEl && stateEl.value !== canonicalState) {
+    stateEl.value = canonicalState;
   }
 
   const placeholder = document.createElement('option');
@@ -795,21 +861,17 @@ window.handleStateChange = function(selectedState) {
   placeholder.textContent = 'Select District';
   distEl.appendChild(placeholder);
 
-  const dict = window.INDIA_STATES_DISTRICTS || {};
-  let districts = dict[selectedState] || [];
-  if ((!districts || districts.length === 0) && typeof window.getDistrictsForIndianState === 'function') {
-    districts = window.getDistrictsForIndianState(selectedState);
-  }
-  if (!districts || districts.length === 0) {
-    const norm = selectedState.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const foundKey = Object.keys(dict).find(k => k.toLowerCase().replace(/[^a-z0-9]/g, '') === norm);
-    if (foundKey) districts = dict[foundKey];
-  }
+  const districts = (typeof window.getDistrictsForIndianState === 'function')
+    ? window.getDistrictsForIndianState(canonicalState)
+    : [];
 
-  (districts || []).forEach(d => {
+  districts.forEach(d => {
     const opt = document.createElement('option');
     opt.value = d;
     opt.textContent = d;
+    if (selectedDistrict && selectedDistrict.toLowerCase() === d.toLowerCase()) {
+      opt.selected = true;
+    }
     distEl.appendChild(opt);
   });
   distEl.disabled = false;
@@ -818,6 +880,7 @@ window.handleStateChange = function(selectedState) {
 // Global State Change handler for Field Work Duty State / UT -> Duty District cascade
 window.handleFieldStateChange = function(selectedState, selectedDistrict = '') {
   const distEl = document.getElementById('selectFieldDistrict');
+  const stateEl = document.getElementById('selectFieldState');
   if (!distEl) return;
   distEl.innerHTML = '';
   if (!selectedState || selectedState === 'ALL') {
@@ -826,23 +889,24 @@ window.handleFieldStateChange = function(selectedState, selectedDistrict = '') {
     return;
   }
 
+  const canonicalState = (typeof window.normalizeIndianStateName === 'function')
+    ? (window.normalizeIndianStateName(selectedState) || selectedState)
+    : selectedState;
+
+  if (stateEl && stateEl.value !== canonicalState && stateEl.value !== 'ALL') {
+    stateEl.value = canonicalState;
+  }
+
   const placeholder = document.createElement('option');
   placeholder.value = '';
   placeholder.textContent = 'Select District';
   distEl.appendChild(placeholder);
 
-  const dict = window.INDIA_STATES_DISTRICTS || {};
-  let districts = dict[selectedState] || [];
-  if ((!districts || districts.length === 0) && typeof window.getDistrictsForIndianState === 'function') {
-    districts = window.getDistrictsForIndianState(selectedState);
-  }
-  if (!districts || districts.length === 0) {
-    const norm = selectedState.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const foundKey = Object.keys(dict).find(k => k.toLowerCase().replace(/[^a-z0-9]/g, '') === norm);
-    if (foundKey) districts = dict[foundKey];
-  }
+  const districts = (typeof window.getDistrictsForIndianState === 'function')
+    ? window.getDistrictsForIndianState(canonicalState)
+    : [];
 
-  (districts || []).forEach(d => {
+  districts.forEach(d => {
     const opt = document.createElement('option');
     opt.value = d;
     opt.textContent = d;
@@ -867,8 +931,12 @@ function initFieldWorkDropdowns(initialState = '', initialDistrict = '') {
   const distEl = document.getElementById('selectFieldDistrict');
   if (!stateEl || !distEl) return;
 
+  // Always ensure canonical 36 States/UTs are populated
   if (stateEl.options.length <= 1) {
-    const states = (window.INDIA_STATES_DISTRICTS ? Object.keys(window.INDIA_STATES_DISTRICTS).sort() : []);
+    stateEl.innerHTML = '<option value="">Select State / UT</option>';
+    const states = (typeof window.getAllIndianStates === 'function')
+      ? window.getAllIndianStates()
+      : (window.INDIA_STATES_DISTRICTS ? Object.keys(window.INDIA_STATES_DISTRICTS).sort() : []);
     states.forEach(st => {
       const opt = document.createElement('option');
       opt.value = st;
@@ -879,11 +947,12 @@ function initFieldWorkDropdowns(initialState = '', initialDistrict = '') {
 
   if (!stateEl.dataset.cascadeAttached) {
     stateEl.dataset.cascadeAttached = 'true';
-    stateEl.addEventListener('change', () => window.handleFieldStateChange(stateEl.value));
-    stateEl.addEventListener('input', () => window.handleFieldStateChange(stateEl.value));
+    stateEl.addEventListener('change', () => window.handleFieldStateChange(stateEl.value, ''));
+    stateEl.addEventListener('input', () => window.handleFieldStateChange(stateEl.value, ''));
   }
 
-  const targetState = initialState || stateEl.value || '';
+  const rawState = initialState || stateEl.value || '';
+  const targetState = rawState ? (window.normalizeIndianStateName(rawState) || rawState) : '';
   const targetDist = initialDistrict || (distEl.value && distEl.value !== 'Select District' ? distEl.value : '') || '';
 
   if (targetState) {
@@ -898,9 +967,12 @@ function initSignupDropdowns() {
   const distEl = document.getElementById('signupDistrict');
   if (!stateEl || !distEl) return;
 
-  // Ensure states are populated if not already present
+  // Ensure states are populated with canonical list if empty
   if (stateEl.options.length <= 1) {
-    const states = (window.INDIA_STATES_DISTRICTS ? Object.keys(window.INDIA_STATES_DISTRICTS).sort() : []);
+    stateEl.innerHTML = '<option value="">Select State / UT</option>';
+    const states = (typeof window.getAllIndianStates === 'function')
+      ? window.getAllIndianStates()
+      : (window.INDIA_STATES_DISTRICTS ? Object.keys(window.INDIA_STATES_DISTRICTS).sort() : []);
     states.forEach(st => {
       const opt = document.createElement('option');
       opt.value = st;
@@ -912,28 +984,15 @@ function initSignupDropdowns() {
   // Bind change and input listeners
   if (!stateEl.dataset.cascadeAttached) {
     stateEl.dataset.cascadeAttached = 'true';
-    stateEl.addEventListener('change', () => window.handleStateChange(stateEl.value));
-    stateEl.addEventListener('input', () => window.handleStateChange(stateEl.value));
+    stateEl.addEventListener('change', () => window.handleStateChange(stateEl.value, ''));
+    stateEl.addEventListener('input', () => window.handleStateChange(stateEl.value, ''));
   }
 
   // If a state is already selected, populate its districts immediately
   if (stateEl.value) {
-    window.handleStateChange(stateEl.value);
-  }
-
-  // Fallback API load if dictionary was missing
-  if (!window.INDIA_STATES_DISTRICTS || Object.keys(window.INDIA_STATES_DISTRICTS).length === 0) {
-    fetch('/api/geo/states-districts')
-      .then(r => r.ok ? r.json() : null)
-      .then(res => {
-        if (res && res.data) {
-          window.INDIA_STATES_DISTRICTS = res.data;
-          if (stateEl.value) {
-            window.handleStateChange(stateEl.value);
-          }
-        }
-      })
-      .catch(() => {});
+    const canonical = window.normalizeIndianStateName(stateEl.value) || stateEl.value;
+    stateEl.value = canonical;
+    window.handleStateChange(canonical);
   }
 }
 
@@ -1260,25 +1319,93 @@ window.togglePasswordVisibility = function(inputId, btn) {
 // Sign Up Form Handler (Basic Enquiries + Face Enrollment)
 const employeeSignUpForm = document.getElementById('employeeSignUpForm');
 if (employeeSignUpForm) {
+  // Prevent future dates on date input
+  const dobInput = document.getElementById('signupDob');
+  if (dobInput) {
+    const todayStr = new Date().toISOString().split('T')[0];
+    dobInput.setAttribute('max', todayStr);
+  }
+
   employeeSignUpForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     DOM.loginErrorBanner.style.display = 'none';
 
-    const empIdInput = document.getElementById('signupEmployeeId');
-    const employee_id = empIdInput ? empIdInput.value.trim() : '';
-
-    if (!employee_id) {
-      DOM.loginErrorMessage.textContent = 'Please enter your Employee ID.';
+    function showSignupError(msg) {
+      DOM.loginErrorMessage.textContent = msg;
       DOM.loginErrorBanner.style.display = 'flex';
+      DOM.loginErrorBanner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    const name = document.getElementById('signupName')?.value.trim();
+    if (!name) {
+      showSignupError('Please enter your Full Name.');
       return;
     }
 
+    // 1. Mandatory Date of Birth (DOB) Validation
+    const dob = document.getElementById('signupDob')?.value.trim();
+    if (!dob) {
+      showSignupError('Date of Birth is required.');
+      return;
+    }
+    const dobMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dob);
+    if (!dobMatch) {
+      showSignupError('Date of Birth must be in YYYY-MM-DD format.');
+      return;
+    }
+    const year = parseInt(dobMatch[1], 10);
+    const month = parseInt(dobMatch[2], 10);
+    const day = parseInt(dobMatch[3], 10);
+    if (year < 1900 || month < 1 || month > 12 || day < 1 || day > 31) {
+      showSignupError('Please enter a valid Date of Birth.');
+      return;
+    }
+    const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    if (day > daysInMonth) {
+      showSignupError('Date of Birth contains an impossible calendar date.');
+      return;
+    }
+    const dobDate = new Date(Date.UTC(year, month - 1, day));
+    const now = new Date();
+    const todayUtc = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+    if (dobDate > todayUtc) {
+      showSignupError('Date of Birth cannot be in the future.');
+      return;
+    }
+
+    // 2. Mandatory Mobile Number Validation (10 digits)
+    const rawPhone = document.getElementById('signupPhone')?.value.trim() || '';
+    if (!rawPhone) {
+      showSignupError('Mobile number is required.');
+      return;
+    }
+    let cleanedPhone = rawPhone.replace(/[\s\-\(\)\.]/g, '');
+    if (cleanedPhone.startsWith('+91')) cleanedPhone = cleanedPhone.slice(3);
+    else if (cleanedPhone.startsWith('0') && cleanedPhone.length === 11) cleanedPhone = cleanedPhone.slice(1);
+    else if (cleanedPhone.startsWith('91') && cleanedPhone.length === 12) cleanedPhone = cleanedPhone.slice(2);
+    if (!/^[6-9]\d{9}$/.test(cleanedPhone)) {
+      showSignupError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+
+    // 3. Mandatory Email Validation
+    const email = document.getElementById('signupEmail')?.value.trim() || '';
+    if (!email) {
+      showSignupError('Email address is required.');
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      showSignupError('Please enter a valid email address.');
+      return;
+    }
+
+    // 4. Passwords
     const pass = document.getElementById('signupPassword').value;
     const confirmPass = document.getElementById('signupConfirmPassword').value;
 
     if (pass !== confirmPass) {
-      DOM.loginErrorMessage.textContent = 'Passwords do not match. Please re-enter your password.';
-      DOM.loginErrorBanner.style.display = 'flex';
+      showSignupError('Passwords do not match. Please re-enter your password.');
       return;
     }
 
@@ -1286,10 +1413,17 @@ if (employeeSignUpForm) {
     submitBtn.disabled = true;
     submitBtn.textContent = 'Creating Account...';
 
+    const empIdField = document.getElementById('signupEmployeeId');
+    const chosenEmpId = (empIdField && empIdField.value.trim()) || currentSignupPreIssued.employee_id || null;
+    const chosenIdToken = currentSignupPreIssued.id_token || null;
+
     const payload = {
-      name: document.getElementById('signupName').value.trim(),
-      employee_id: employee_id,
-      phone: document.getElementById('signupPhone').value.trim(),
+      name,
+      dob,
+      email,
+      phone: cleanedPhone,
+      employee_id: chosenEmpId,
+      id_token: chosenIdToken,
       employer_id: document.getElementById('signupEmployerSelect').value,
       department: document.getElementById('signupDepartment').value,
       designation: document.getElementById('signupDesignation').value.trim(),
@@ -1314,8 +1448,7 @@ if (employeeSignUpForm) {
       } catch (fetchErr) {}
 
       if (!isOk || !data || !data.success) {
-        DOM.loginErrorMessage.textContent = (data && data.error) || 'Registration failed.';
-        DOM.loginErrorBanner.style.display = 'flex';
+        showSignupError((data && data.error) || 'Registration failed.');
         submitBtn.disabled = false;
         submitBtn.textContent = 'Create Account & Enter Workspace';
         return;
@@ -1334,108 +1467,39 @@ if (employeeSignUpForm) {
       stopFaceLoginCamera();
       DOM.loginModal.classList.remove('active');
 
+      // Seamless login without popup modal
+      currentSignupPreIssued = { employee_id: '', id_token: '' };
       setupLoggedInState(sessionData);
-      showAlert(`Welcome to ${data.employer.name}, ${data.employee.name}! Your workspace account is ready.`, 'success');
+      showAlert(`Welcome to ${data.employer.name}, ${data.employee.name}! Your assigned Employee ID is ${data.employee.id}.`, 'success');
 
     } catch (err) {
-      DOM.loginErrorMessage.textContent = 'Connection error during registration: ' + err.message;
-      DOM.loginErrorBanner.style.display = 'flex';
+      showSignupError('Connection error during registration: ' + err.message);
       submitBtn.disabled = false;
       submitBtn.textContent = 'Create Account & Enter Workspace';
     }
   });
 }
 
-// Real-time Employee ID availability check (debounced, triggers on input)
-(function wireSignupIdCheck() {
-  const idInput = document.getElementById('signupEmployeeId');
-  const iconEl = document.getElementById('signupIdStatusIcon');
-  const msgEl = document.getElementById('signupIdStatusMsg');
-  const submitBtn = document.getElementById('btnSubmitSignup');
-  if (!idInput || !iconEl || !msgEl) return;
-
-  let debounceTimer = null;
-  let lastCheckedId = '';
-  let idAvailable = null; // null = unknown, true = ok, false = taken
-
-  function setIdStatus(status, message) {
-    // status: 'checking' | 'available' | 'taken' | 'reset'
-    iconEl.style.display = 'none';
-    msgEl.style.display = 'none';
-    if (status === 'reset') {
-      idAvailable = null;
-      return;
-    }
-    if (status === 'checking') {
-      iconEl.innerHTML = '';
-      iconEl.style.display = 'none';
-      msgEl.textContent = 'Checking availability...';
-      msgEl.style.color = '#94a3b8';
-      msgEl.style.display = 'block';
-      idAvailable = null;
-      return;
-    }
-    if (status === 'available') {
-      iconEl.innerHTML = window.Icons ? window.Icons.render('check', { size: 14 }) : '';
-      iconEl.style.color = '#22c55e';
-      iconEl.style.display = 'inline-flex';
-      msgEl.textContent = message || 'ID is available';
-      msgEl.style.color = '#22c55e';
-      msgEl.style.display = 'block';
-      idAvailable = true;
-      return;
-    }
-    if (status === 'taken') {
-      iconEl.innerHTML = window.Icons ? window.Icons.render('x', { size: 14 }) : '';
-      iconEl.style.color = '#ef4444';
-      iconEl.style.display = 'inline-flex';
-      msgEl.textContent = message || 'ID already registered';
-      msgEl.style.color = '#ef4444';
-      msgEl.style.display = 'block';
-      idAvailable = false;
-      return;
-    }
+window.showEmployeeProfileModal = function() {
+  const emp = state.currentEmployee;
+  const org = state.currentEmployer;
+  if (!emp) {
+    showAlert('No active employee session. Please sign in.', 'info');
+    return;
   }
-
-  idInput.addEventListener('input', () => {
-    clearTimeout(debounceTimer);
-    const val = idInput.value.trim();
-    if (!val || val.length < 2) {
-      setIdStatus('reset');
-      return;
-    }
-    if (val === lastCheckedId) return;
-    setIdStatus('checking');
-    debounceTimer = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/auth/employee/check-id?employee_id=${encodeURIComponent(val)}`);
-        const data = await res.json().catch(() => null);
-        lastCheckedId = val;
-        if (data && data.available === true) {
-          setIdStatus('available', `ID '${val}' is available`);
-        } else if (data && data.available === false) {
-          setIdStatus('taken', data.error || `ID '${val}' is already registered`);
-        } else {
-          setIdStatus('reset');
-        }
-      } catch (e) {
-        setIdStatus('reset');
-      }
-    }, 500);
-  });
-
-  // Block form submission if ID is confirmed taken
-  if (employeeSignUpForm) {
-    employeeSignUpForm.addEventListener('submit', (e) => {
-      if (idAvailable === false) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        DOM.loginErrorMessage.textContent = `Employee ID '${idInput.value.trim()}' is already registered. Please use a different ID.`;
-        DOM.loginErrorBanner.style.display = 'flex';
-      }
-    }, true); // capture phase so it runs before the main handler
-  }
-})();
+  const details = [
+    `Employee ID: ${emp.id}`,
+    `Name: ${emp.name}`,
+    `Organization: ${org?.name || 'AIIMS'}`,
+    `Department: ${emp.department || 'CDER'}`,
+    `Designation: ${emp.designation || 'PRS-1'}`,
+    `Email: ${emp.email || 'N/A'}`,
+    `Mobile: ${emp.phone || 'N/A'}`,
+    emp.dob ? `DOB: ${emp.dob.split('T')[0]}` : null,
+    emp.state ? `Territory: ${[emp.district, emp.state].filter(Boolean).join(', ')}` : null
+  ].filter(Boolean).join('\n');
+  alert('--- Fieldworker Profile ---\n\n' + details);
+};
 
 // Bind Screenlock Face & Signup buttons
 document.getElementById('btnTriggerFaceScan')?.addEventListener('click', () => triggerFaceRecognition());
@@ -1490,17 +1554,22 @@ function setupLoggedInState(sessionData) {
   DOM.displayGreetingName.textContent = `Good ${timeOfDay}, ${firstName}`;
   DOM.displayGreetingDate.textContent = `${now.toLocaleDateString('en-US', { weekday: 'long' })} · ${now.toLocaleDateString('en-US', { day: '2-digit', month: 'long', year: 'numeric' })}`;
 
+  const empIdText = document.getElementById('displayEmployeeIdText');
+  if (empIdText && sessionData.employee?.id) {
+    empIdText.textContent = `ID: ${sessionData.employee.id}`;
+  }
+
   // Display assigned Regional Team & Indian Territory
   if (DOM.displayEmployeeTeam) {
     const teamTitle = sessionData.employee.team_name && sessionData.employee.team_name !== 'Unassigned'
       ? sessionData.employee.team_name
       : 'General Field Ops';
-    DOM.displayEmployeeTeam.innerHTML = `${window.Icons ? window.Icons.render('users', { size: 12 }) : ''} <span>Team: ${teamTitle}</span>`;
+    DOM.displayEmployeeTeam.innerHTML = `${window.Icons ? window.Icons.render('users', { size: 12 }) : ''} <span>Team: ${escapeHtml(teamTitle)}</span>`;
   }
   if (DOM.displayEmployeeTerritory) {
     const terrParts = [sessionData.employee.district, sessionData.employee.state].filter(Boolean);
     DOM.displayEmployeeTerritory.innerHTML = terrParts.length > 0
-      ? `${window.Icons ? window.Icons.render('mapPin', { size: 12 }) : ''} <span>Territory: ${terrParts.join(', ')}</span>`
+      ? `${window.Icons ? window.Icons.render('mapPin', { size: 12 }) : ''} <span>Territory: ${escapeHtml(terrParts.join(', '))}</span>`
       : `${window.Icons ? window.Icons.render('mapPin', { size: 12 }) : ''} <span>Pan-India Territory</span>`;
   }
 
@@ -1650,33 +1719,533 @@ if (DOM.btnModeTravel) {
  * Field Operations View Switcher (Attendance Punch vs Individual Hotel Page)
  */
 function switchEmployeeView(viewName) {
+  const isPunch = viewName === 'punch';
   const isHotel = viewName === 'hotel';
+  const isEms   = viewName === 'ems';
 
-  if (DOM.panelAttendancePunch) DOM.panelAttendancePunch.style.display = isHotel ? 'none' : 'block';
-  if (DOM.panelHotelStay) DOM.panelHotelStay.style.display = isHotel ? 'block' : 'none';
+  const panelPunch = document.getElementById('panelAttendancePunch') || DOM.panelAttendancePunch;
+  const panelHotel = document.getElementById('panelHotelStay') || DOM.panelHotelStay;
+  const panelEms   = document.getElementById('panelEmployeeManagement');
 
-  if (DOM.tabNavPunch) {
-    DOM.tabNavPunch.classList.toggle('active', !isHotel);
-    DOM.tabNavPunch.setAttribute('aria-selected', !isHotel ? 'true' : 'false');
+  if (panelPunch) panelPunch.style.display = isPunch ? 'block' : 'none';
+  if (panelHotel) panelHotel.style.display = isHotel ? 'block' : 'none';
+  if (panelEms)   panelEms.style.display   = isEms   ? 'block' : 'none';
+
+  const tabPunch = document.getElementById('tabNavPunch') || DOM.tabNavPunch;
+  const tabHotel = document.getElementById('tabNavHotel') || DOM.tabNavHotel;
+  const tabEms   = document.getElementById('tabNavEms');
+
+  if (tabPunch) {
+    tabPunch.classList.toggle('active', isPunch);
+    tabPunch.setAttribute('aria-selected', isPunch ? 'true' : 'false');
   }
-  if (DOM.tabNavHotel) {
-    DOM.tabNavHotel.classList.toggle('active', isHotel);
-    DOM.tabNavHotel.setAttribute('aria-selected', isHotel ? 'true' : 'false');
+  if (tabHotel) {
+    tabHotel.classList.toggle('active', isHotel);
+    tabHotel.setAttribute('aria-selected', isHotel ? 'true' : 'false');
+  }
+  if (tabEms) {
+    tabEms.classList.toggle('active', isEms);
+    tabEms.setAttribute('aria-selected', isEms ? 'true' : 'false');
   }
 
-  if (DOM.bnavToday) DOM.bnavToday.classList.toggle('active', !isHotel);
-  if (DOM.bnavHotel) DOM.bnavHotel.classList.toggle('active', isHotel);
+  const bnavPunch = document.getElementById('bnavToday') || DOM.bnavToday;
+  const bnavHotel = document.getElementById('bnavHotel') || DOM.bnavHotel;
+  const bnavEms   = document.getElementById('bnavEms');
+
+  if (bnavPunch) bnavPunch.classList.toggle('active', isPunch);
+  if (bnavHotel) bnavHotel.classList.toggle('active', isHotel);
+  if (bnavEms)   bnavEms.classList.toggle('active', isEms);
 
   if (isHotel) {
     renderHotelStayPage();
+    setTimeout(() => {
+      if (hotelLeafletMap && typeof hotelLeafletMap.invalidateSize === 'function') {
+        hotelLeafletMap.invalidateSize();
+      }
+    }, 200);
+  } else if (isEms) {
+    if (typeof window.renderEmployeeEmsPage === 'function') {
+      window.renderEmployeeEmsPage();
+    }
   }
 }
 
 window.switchEmployeeView = switchEmployeeView;
 
-if (DOM.tabNavPunch) DOM.tabNavPunch.addEventListener('click', () => switchEmployeeView('punch'));
-if (DOM.tabNavHotel) DOM.tabNavHotel.addEventListener('click', () => switchEmployeeView('hotel'));
-if (DOM.bnavHotel) DOM.bnavHotel.addEventListener('click', () => switchEmployeeView('hotel'));
+const tabPunchEl = document.getElementById('tabNavPunch') || DOM.tabNavPunch;
+const tabHotelEl = document.getElementById('tabNavHotel') || DOM.tabNavHotel;
+const tabEmsEl   = document.getElementById('tabNavEms');
+const bnavHotelEl = document.getElementById('bnavHotel') || DOM.bnavHotel;
+const bnavEmsEl   = document.getElementById('bnavEms');
+
+if (tabPunchEl) tabPunchEl.addEventListener('click', () => switchEmployeeView('punch'));
+if (tabHotelEl) tabHotelEl.addEventListener('click', () => switchEmployeeView('hotel'));
+if (tabEmsEl)   tabEmsEl.addEventListener('click', () => switchEmployeeView('ems'));
+if (bnavHotelEl) bnavHotelEl.addEventListener('click', () => switchEmployeeView('hotel'));
+if (bnavEmsEl)   bnavEmsEl.addEventListener('click', () => switchEmployeeView('ems'));
+
+let hotelLeafletMap = null;
+let hotelGpsMarker = null;
+let hotelAccuracyCircle = null;
+let hotelPlaceMarker = null;
+
+let hotelGpsData = {
+  latitude: null,
+  longitude: null,
+  accuracy: null,
+  timestamp: null,
+  captured: false
+};
+
+let hotelVerificationState = {
+  status: 'PENDING',
+  verified: false,
+  token: null,
+  distanceMeters: null,
+  matchedPlace: null,
+  manualReviewRequested: false
+};
+
+/**
+ * Initialize or update the interactive Leaflet map inside the Hotel Stay section
+ */
+function initOrUpdateHotelMap(lat, lng, accuracy, matchedPlace = null) {
+  if (typeof L === 'undefined') {
+    console.warn('Leaflet.js is not loaded yet.');
+    return;
+  }
+
+  const mapContainer = DOM.hotelStayMapContainer || document.getElementById('hotelStayMapContainer');
+  const mapElement = DOM.hotelStayMap || document.getElementById('hotelStayMap');
+  if (!mapElement) return;
+
+  if (mapContainer) mapContainer.style.display = 'block';
+
+  const latitude = parseFloat(lat);
+  const longitude = parseFloat(lng);
+  if (isNaN(latitude) || isNaN(longitude)) return;
+
+  if (DOM.textMapCoordsSummary) {
+    DOM.textMapCoordsSummary.textContent = `${latitude.toFixed(5)}°, ${longitude.toFixed(5)}°`;
+  }
+
+  if (!hotelLeafletMap) {
+    try {
+      hotelLeafletMap = L.map('hotelStayMap', {
+        zoomControl: true,
+        scrollWheelZoom: true
+      }).setView([latitude, longitude], 16);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>'
+      }).addTo(hotelLeafletMap);
+    } catch (e) {
+      console.warn('Failed to initialize Leaflet map:', e);
+      return;
+    }
+  } else {
+    hotelLeafletMap.setView([latitude, longitude], 16);
+  }
+
+  // Update or create employee GPS marker
+  const timeStr = hotelGpsData.timestamp ? new Date(hotelGpsData.timestamp).toLocaleTimeString() : 'Current';
+  const accText = accuracy != null ? `&plusmn;${Math.round(accuracy)}m` : 'Fresh';
+
+  const gpsPopupContent = `
+    <div style="font-size: 12px; line-height: 1.4; color: #0f172a;">
+      <div style="font-weight: 700; color: #0284c7; margin-bottom: 2px;">Your Captured Location</div>
+      <div><strong>${latitude.toFixed(5)}°, ${longitude.toFixed(5)}°</strong></div>
+      <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Accuracy: ${accText} · ${timeStr}</div>
+    </div>
+  `;
+
+  if (hotelGpsMarker) {
+    hotelGpsMarker.setLatLng([latitude, longitude]);
+    hotelGpsMarker.setPopupContent(gpsPopupContent);
+  } else {
+    hotelGpsMarker = L.marker([latitude, longitude], {
+      title: 'Captured GPS Position'
+    }).addTo(hotelLeafletMap).bindPopup(gpsPopupContent);
+  }
+
+  // Accuracy radius circle
+  const radius = Math.max(10, accuracy || 25);
+  if (hotelAccuracyCircle) {
+    hotelAccuracyCircle.setLatLng([latitude, longitude]);
+    hotelAccuracyCircle.setRadius(radius);
+  } else {
+    hotelAccuracyCircle = L.circle([latitude, longitude], {
+      radius: radius,
+      color: '#0284c7',
+      fillColor: '#38bdf8',
+      fillOpacity: 0.18,
+      weight: 1.5
+    }).addTo(hotelLeafletMap);
+  }
+
+  // Matched Hotel Place Marker
+  if (matchedPlace && matchedPlace.lat != null && matchedPlace.lng != null) {
+    const hotelLat = parseFloat(matchedPlace.lat);
+    const hotelLng = parseFloat(matchedPlace.lng);
+
+    const placePopup = `
+      <div style="font-size: 12px; line-height: 1.4; color: #0f172a;">
+        <div style="font-weight: 700; color: #16a34a; margin-bottom: 2px;">${escapeHtml(matchedPlace.name || 'Verified Hotel')}</div>
+        <div style="font-size: 11px; color: #475569;">${escapeHtml(matchedPlace.address || '')}</div>
+        <div style="font-size: 11px; font-weight: 600; color: #1e40af; margin-top: 3px;">Distance from GPS: ${Math.round(matchedPlace.distance_meters || 0)}m</div>
+      </div>
+    `;
+
+    if (hotelPlaceMarker) {
+      hotelPlaceMarker.setLatLng([hotelLat, hotelLng]);
+      hotelPlaceMarker.setPopupContent(placePopup);
+    } else {
+      hotelPlaceMarker = L.marker([hotelLat, hotelLng], {
+        title: matchedPlace.name || 'Matched Hotel'
+      }).addTo(hotelLeafletMap).bindPopup(placePopup);
+    }
+
+    try {
+      const bounds = L.latLngBounds([
+        [latitude, longitude],
+        [hotelLat, hotelLng]
+      ]);
+      hotelLeafletMap.fitBounds(bounds, { padding: [35, 35], maxZoom: 17 });
+    } catch (_) {}
+  } else if (hotelPlaceMarker) {
+    hotelLeafletMap.removeLayer(hotelPlaceMarker);
+    hotelPlaceMarker = null;
+  }
+
+  setTimeout(() => {
+    if (hotelLeafletMap) hotelLeafletMap.invalidateSize();
+  }, 100);
+}
+
+/**
+ * Capture fresh high-accuracy GPS coordinates using browser Geolocation API
+ */
+function captureHotelGpsLocation() {
+  if (!navigator.geolocation) {
+    showAlert('Geolocation is not supported by your browser.', 'danger');
+    return;
+  }
+
+  const btnCapture = DOM.btnCaptureHotelGps;
+  const btnText = DOM.btnCaptureHotelGpsText || btnCapture;
+  const originalText = btnText ? btnText.textContent : 'Capture Current GPS';
+
+  if (btnCapture) btnCapture.disabled = true;
+  if (btnText) btnText.textContent = 'Acquiring GPS...';
+
+  const options = {
+    enableHighAccuracy: true,
+    timeout: 12000,
+    maximumAge: 0 // Fresh reading, no cached positions
+  };
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const acc = pos.coords.accuracy;
+      const timestamp = pos.timestamp || Date.now();
+
+      hotelGpsData.latitude = lat;
+      hotelGpsData.longitude = lng;
+      hotelGpsData.accuracy = acc;
+      hotelGpsData.timestamp = timestamp;
+      hotelGpsData.captured = true;
+
+      // Invalidate any previous verification since new coordinates were captured
+      hotelVerificationState.token = null;
+      hotelVerificationState.status = 'PENDING';
+      hotelVerificationState.verified = false;
+      hotelVerificationState.manualReviewRequested = false;
+
+      // Update UI displays
+      if (DOM.textHotelGpsDisplay) {
+        DOM.textHotelGpsDisplay.textContent = `${lat.toFixed(5)}°, ${lng.toFixed(5)}°`;
+      }
+
+      const accM = Math.round(acc);
+      if (DOM.textHotelGpsAccuracy) {
+        DOM.textHotelGpsAccuracy.style.display = 'block';
+        let accColor = '#16a34a';
+        let accNote = 'Good signal';
+        if (accM > 150) {
+          accColor = '#dc2626';
+          accNote = 'Low accuracy - step near a window/outdoors';
+        } else if (accM > 50) {
+          accColor = '#d97706';
+          accNote = 'Moderate accuracy';
+        }
+        DOM.textHotelGpsAccuracy.innerHTML = `Location accuracy: <strong style="color: ${accColor};">&plusmn;${accM} metres</strong> (${accNote}) &middot; ${new Date(timestamp).toLocaleTimeString()}`;
+      }
+
+      // Initialize map & pins
+      initOrUpdateHotelMap(lat, lng, acc);
+
+      // Show Verify Hotel Location button
+      if (DOM.btnVerifyHotelGps) {
+        DOM.btnVerifyHotelGps.style.display = 'inline-flex';
+      }
+
+      // Reset Save button requirement
+      if (DOM.btnSaveHotelStay) {
+        DOM.btnSaveHotelStay.disabled = true;
+        DOM.btnSaveHotelStay.textContent = 'Verify Location First';
+      }
+
+      // Reset verification status box
+      if (DOM.boxHotelVerificationStatus) {
+        DOM.boxHotelVerificationStatus.style.display = 'none';
+      }
+
+      if (btnCapture) btnCapture.disabled = false;
+      if (btnText) btnText.textContent = 'Re-capture GPS';
+
+      showAlert(`High-accuracy GPS acquired (±${accM}m). Please verify hotel location.`, accM > 150 ? 'warning' : 'success');
+
+      // If hotel name and address are already typed, automatically trigger verification
+      const name = DOM.inputHotelName?.value.trim();
+      const address = DOM.inputHotelAddress?.value.trim();
+      if (name && address) {
+        verifyHotelLocation();
+      }
+    },
+    (err) => {
+      if (btnCapture) btnCapture.disabled = false;
+      if (btnText) btnText.textContent = originalText;
+
+      let msg = 'Failed to acquire GPS location.';
+      if (err.code === 1) { // PERMISSION_DENIED
+        msg = 'Location permission denied. Please allow location access in your browser settings to verify your hotel stay.';
+      } else if (err.code === 2) { // POSITION_UNAVAILABLE
+        msg = 'Location unavailable. Please check that GPS/Location Services are turned ON and retry near a window.';
+      } else if (err.code === 3) { // TIMEOUT
+        msg = 'GPS signal acquisition timed out. Please retry outdoors or in an open area with good reception.';
+      }
+
+      if (DOM.textHotelGpsDisplay) {
+        DOM.textHotelGpsDisplay.textContent = 'Capture failed';
+      }
+      showAlert(msg, 'danger');
+    },
+    options
+  );
+}
+
+/**
+ * Verify hotel name and address against captured GPS coordinates
+ */
+async function verifyHotelLocation() {
+  if (!hotelGpsData.captured || hotelGpsData.latitude == null) {
+    showAlert('Please capture your current GPS location first.', 'warning');
+    return;
+  }
+
+  const name = DOM.inputHotelName?.value.trim();
+  const address = DOM.inputHotelAddress?.value.trim();
+
+  if (!name) {
+    showAlert('Please enter the Hotel / Guest House Name to verify.', 'warning');
+    DOM.inputHotelName?.focus();
+    return;
+  }
+
+  if (!address) {
+    showAlert('Please enter the Full Hotel Address & Landmark to verify.', 'warning');
+    DOM.inputHotelAddress?.focus();
+    return;
+  }
+
+  const btnVerify = DOM.btnVerifyHotelGps;
+  const btnText = DOM.btnVerifyHotelGpsText || btnVerify;
+  if (btnVerify) btnVerify.disabled = true;
+  if (btnText) btnText.textContent = 'Verifying Location...';
+
+  try {
+    const res = await fetch('/api/employee/hotel-stay/verify-location', {
+      method: 'POST',
+      headers: getEmployeeAuthHeaders(),
+      body: JSON.stringify({
+        hotel_name: name,
+        hotel_address: address,
+        latitude: hotelGpsData.latitude,
+        longitude: hotelGpsData.longitude,
+        accuracy: hotelGpsData.accuracy,
+        timestamp: hotelGpsData.timestamp
+      })
+    });
+
+    const data = await res.json();
+    const statusBox = DOM.boxHotelVerificationStatus;
+    const badge = DOM.badgeHotelVerificationStatus;
+    const title = DOM.hotelVerificationTitle;
+    const message = DOM.hotelVerificationMessage;
+    const matchedBox = DOM.hotelVerificationMatchedDetails;
+    const actionsBox = DOM.hotelVerificationActions;
+
+    if (statusBox) statusBox.style.display = 'block';
+
+    if (data.status === 'VERIFIED') {
+      hotelVerificationState.status = 'VERIFIED';
+      hotelVerificationState.verified = true;
+      hotelVerificationState.token = data.verification_token;
+      hotelVerificationState.distanceMeters = data.distance_meters;
+      hotelVerificationState.matchedPlace = data.matched_place;
+      hotelVerificationState.manualReviewRequested = false;
+
+      if (statusBox) {
+        statusBox.style.background = '#f0fdf4';
+        statusBox.style.border = '1px solid #bbf7d0';
+      }
+      if (badge) {
+        badge.className = 'badge badge-success';
+        badge.textContent = 'VERIFIED';
+      }
+      if (title) title.textContent = 'Hotel Location Verified';
+      if (message) message.textContent = data.reason;
+
+      if (matchedBox) {
+        matchedBox.style.display = 'block';
+        matchedBox.innerHTML = `
+          <strong>Matched Place:</strong> ${escapeHtml(data.matched_place.name)} (${Math.round(data.distance_meters)}m from GPS)<br>
+          <span style="color: #64748b;">${escapeHtml(data.matched_place.address)}</span>
+        `;
+      }
+      if (actionsBox) actionsBox.style.display = 'none';
+
+      // Update map with candidate pin
+      initOrUpdateHotelMap(hotelGpsData.latitude, hotelGpsData.longitude, hotelGpsData.accuracy, data.matched_place);
+
+      // Enable Save Button
+      if (DOM.btnSaveHotelStay) {
+        DOM.btnSaveHotelStay.disabled = false;
+        DOM.btnSaveHotelStay.textContent = 'Save Hotel Details';
+      }
+
+      showAlert('Hotel location successfully verified with current GPS coordinates.', 'success');
+
+    } else {
+      // Failed or unverified status
+      hotelVerificationState.verified = false;
+      hotelVerificationState.token = null;
+      hotelVerificationState.status = data.status || 'UNVERIFIABLE';
+
+      let badgeClass = 'badge badge-neutral';
+      let bg = '#fff7ed';
+      let border = '#fed7aa';
+
+      if (data.status === 'LOCATION_MISMATCH') {
+        badgeClass = 'badge badge-danger';
+        bg = '#fef2f2';
+        border = '#fecaca';
+      } else if (data.status === 'NAME_MISMATCH' || data.status === 'LOW_ACCURACY') {
+        badgeClass = 'badge badge-warning';
+        bg = '#fffbeb';
+        border = '#fde68a';
+      }
+
+      if (statusBox) {
+        statusBox.style.background = bg;
+        statusBox.style.border = `1px solid ${border}`;
+      }
+      if (badge) {
+        badge.className = badgeClass;
+        badge.textContent = data.status ? data.status.replace('_', ' ') : 'FAILED';
+      }
+      if (title) title.textContent = 'Verification Notice';
+      if (message) message.textContent = data.reason || 'Verification could not be completed.';
+
+      if (data.matched_place && matchedBox) {
+        matchedBox.style.display = 'block';
+        matchedBox.innerHTML = `
+          <strong>Detected Place:</strong> ${escapeHtml(data.matched_place.name)} (${Math.round(data.matched_place.distance_meters || 0)}m away)<br>
+          <span style="color: #64748b;">${escapeHtml(data.matched_place.address)}</span>
+        `;
+        initOrUpdateHotelMap(hotelGpsData.latitude, hotelGpsData.longitude, hotelGpsData.accuracy, data.matched_place);
+      } else if (matchedBox) {
+        matchedBox.style.display = 'none';
+      }
+
+      // Allow manual review if unverifiable
+      if (data.status === 'UNVERIFIABLE' && actionsBox) {
+        actionsBox.style.display = 'block';
+      } else if (actionsBox) {
+        actionsBox.style.display = 'none';
+      }
+
+      if (DOM.btnSaveHotelStay) {
+        DOM.btnSaveHotelStay.disabled = true;
+        DOM.btnSaveHotelStay.textContent = 'Verification Required';
+      }
+
+      showAlert(data.reason || 'Hotel location verification did not succeed.', 'warning');
+    }
+  } catch (err) {
+    showAlert('Network error while verifying hotel location: ' + err.message, 'danger');
+  } finally {
+    if (btnVerify) btnVerify.disabled = false;
+    if (btnText) btnText.textContent = 'Verify Hotel Location';
+  }
+}
+
+/**
+ * Invalidate previous verification whenever hotel name or address changes
+ */
+function invalidateHotelVerificationOnEdit() {
+  if (hotelVerificationState.token || hotelVerificationState.verified) {
+    hotelVerificationState.token = null;
+    hotelVerificationState.verified = false;
+    hotelVerificationState.status = 'PENDING';
+    hotelVerificationState.manualReviewRequested = false;
+
+    if (DOM.boxHotelVerificationStatus) {
+      DOM.boxHotelVerificationStatus.style.display = 'block';
+      DOM.boxHotelVerificationStatus.style.background = '#f8fafc';
+      DOM.boxHotelVerificationStatus.style.border = '1px solid var(--color-border-default)';
+      if (DOM.badgeHotelVerificationStatus) {
+        DOM.badgeHotelVerificationStatus.className = 'badge badge-neutral';
+        DOM.badgeHotelVerificationStatus.textContent = 'RE-VERIFY REQUIRED';
+      }
+      if (DOM.hotelVerificationTitle) DOM.hotelVerificationTitle.textContent = 'Details Modified';
+      if (DOM.hotelVerificationMessage) DOM.hotelVerificationMessage.textContent = 'Hotel details were edited. Please click "Verify Hotel Location" to update verification.';
+      if (DOM.hotelVerificationMatchedDetails) DOM.hotelVerificationMatchedDetails.style.display = 'none';
+      if (DOM.hotelVerificationActions) DOM.hotelVerificationActions.style.display = 'none';
+    }
+
+    if (DOM.btnSaveHotelStay) {
+      DOM.btnSaveHotelStay.disabled = true;
+      DOM.btnSaveHotelStay.textContent = 'Re-verification Required';
+    }
+  }
+}
+
+/**
+ * Handle manual review request for unverifiable lodging
+ */
+function requestManualReviewWorkflow() {
+  hotelVerificationState.manualReviewRequested = true;
+
+  if (DOM.badgeHotelVerificationStatus) {
+    DOM.badgeHotelVerificationStatus.className = 'badge badge-warning';
+    DOM.badgeHotelVerificationStatus.textContent = 'MANUAL REVIEW';
+  }
+  if (DOM.hotelVerificationMessage) {
+    DOM.hotelVerificationMessage.textContent = 'Administrative review requested. You may now save your lodging details for supervisor audit.';
+  }
+  if (DOM.hotelVerificationActions) {
+    DOM.hotelVerificationActions.style.display = 'none';
+  }
+  if (DOM.btnSaveHotelStay) {
+    DOM.btnSaveHotelStay.disabled = false;
+    DOM.btnSaveHotelStay.textContent = 'Submit for Administrative Review';
+  }
+  showAlert('Manual review requested. You can now save your stay details.', 'info');
+}
 
 /**
  * Hotel / Accommodation Stay Management (Dedicated Employee Page)
@@ -1732,6 +2301,18 @@ function renderHotelStayPage() {
       const hasGps = stay.hotel_lat != null && stay.hotel_lng != null;
       const mapPinUrl = hasGps ? `https://www.google.com/maps?q=${Number(stay.hotel_lat).toFixed(6)},${Number(stay.hotel_lng).toFixed(6)}&t=k` : null;
 
+      let vStatusBadge = '';
+      if (stay.verification_status === 'VERIFIED') {
+        const dText = stay.distance_meters != null ? ` (${Math.round(stay.distance_meters)}m)` : '';
+        vStatusBadge = `<span class="badge badge-success" style="font-size: 11px;">GPS Verified${dText}</span>`;
+      } else if (stay.is_manual_override) {
+        vStatusBadge = `<span class="badge badge-warning" style="font-size: 11px;">Admin Approved</span>`;
+      } else if (stay.verification_status === 'MANUAL_REVIEW') {
+        vStatusBadge = `<span class="badge badge-neutral" style="font-size: 11px;">Pending Admin Review</span>`;
+      } else {
+        vStatusBadge = `<span class="badge badge-neutral" style="font-size: 11px;">${escapeHtml(stay.verification_status || 'Unverified')}</span>`;
+      }
+
       container.innerHTML = `
         <div style="background: #f8fafc; border: 1px solid var(--color-border-default); border-radius: 8px; padding: 14px 16px;">
           <!-- Hotel Name & Room -->
@@ -1740,17 +2321,27 @@ function renderHotelStayPage() {
               <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg></span>
               <span>${escapeHtml(stay.hotel_name)}</span>
             </div>
-            ${stay.room_number ? `
-              <span style="font-weight: 700; font-size: 12px; padding: 3px 8px; background: #dbeafe; color: #1e40af; border-radius: 4px;">
-                Room ${escapeHtml(stay.room_number)}
-              </span>
-            ` : ''}
+            <div style="display: flex; align-items: center; gap: 6px;">
+              ${vStatusBadge}
+              ${stay.room_number ? `
+                <span style="font-weight: 700; font-size: 12px; padding: 3px 8px; background: #dbeafe; color: #1e40af; border-radius: 4px;">
+                  Room ${escapeHtml(stay.room_number)}
+                </span>
+              ` : ''}
+            </div>
           </div>
 
           <!-- Address -->
           <div style="font-size: 12px; color: var(--color-text-secondary); margin-bottom: 8px; line-height: 1.4;">
             ${escapeHtml(stay.hotel_address)}
           </div>
+
+          ${stay.verified_place_name ? `
+            <div style="font-size: 11px; color: #15803d; margin-bottom: 8px; display: inline-flex; align-items: center; gap: 4px;">
+              <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 12 2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg></span>
+              <span>Verified Match: <strong>${escapeHtml(stay.verified_place_name)}</strong></span>
+            </div>
+          ` : ''}
 
           <!-- Phone & Dates -->
           <div style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--color-text-secondary); margin-bottom: 12px;">
@@ -1810,23 +2401,25 @@ function renderHotelStayPage() {
     if (DOM.inputHotelCheckoutDate) DOM.inputHotelCheckoutDate.value = stay.checkout_date ? stay.checkout_date.split('T')[0] : '';
     if (DOM.inputHotelNotes) DOM.inputHotelNotes.value = stay.notes || '';
 
-    state.capturedHotelLat = stay.hotel_lat != null ? Number(stay.hotel_lat) : null;
-    state.capturedHotelLng = stay.hotel_lng != null ? Number(stay.hotel_lng) : null;
-    if (DOM.textHotelGpsDisplay) {
-      DOM.textHotelGpsDisplay.textContent = (state.capturedHotelLat && state.capturedHotelLng)
-        ? `${state.capturedHotelLat.toFixed(5)}°, ${state.capturedHotelLng.toFixed(5)}° (Verified)`
-        : 'Not captured yet';
+    if (stay.hotel_lat != null && stay.hotel_lng != null) {
+      hotelGpsData.latitude = Number(stay.hotel_lat);
+      hotelGpsData.longitude = Number(stay.hotel_lng);
+      hotelGpsData.accuracy = stay.hotel_accuracy != null ? Number(stay.hotel_accuracy) : 15;
+      hotelGpsData.captured = true;
+      if (DOM.textHotelGpsDisplay) {
+        DOM.textHotelGpsDisplay.textContent = `${hotelGpsData.latitude.toFixed(5)}°, ${hotelGpsData.longitude.toFixed(5)}°`;
+      }
+      initOrUpdateHotelMap(hotelGpsData.latitude, hotelGpsData.longitude, hotelGpsData.accuracy, {
+        name: stay.verified_place_name || stay.hotel_name,
+        address: stay.verified_address || stay.hotel_address,
+        lat: hotelGpsData.latitude,
+        lng: hotelGpsData.longitude,
+        distance_meters: stay.distance_meters || 0
+      });
     }
   } else {
     if (DOM.inputHotelCheckinDate && !DOM.inputHotelCheckinDate.value) {
       DOM.inputHotelCheckinDate.value = todayStr;
-    }
-    if (state.currentGps.latitude && state.currentGps.longitude && !state.capturedHotelLat) {
-      state.capturedHotelLat = state.currentGps.latitude;
-      state.capturedHotelLng = state.currentGps.longitude;
-      if (DOM.textHotelGpsDisplay) {
-        DOM.textHotelGpsDisplay.textContent = `${state.capturedHotelLat.toFixed(5)}°, ${state.capturedHotelLng.toFixed(5)}° (Current GPS fix)`;
-      }
     }
   }
 }
@@ -1842,6 +2435,16 @@ async function handleSaveHotelStay() {
 
   if (!name || !address) {
     showAlert('Hotel name and full address are required.', 'danger');
+    return;
+  }
+
+  if (!hotelGpsData.captured || hotelGpsData.latitude == null) {
+    showAlert('Please capture your current GPS location before saving.', 'warning');
+    return;
+  }
+
+  if (!hotelVerificationState.token && !hotelVerificationState.manualReviewRequested) {
+    showAlert('Please verify hotel location using the GPS map verification before saving.', 'warning');
     return;
   }
 
@@ -1862,8 +2465,12 @@ async function handleSaveHotelStay() {
         checkin_date: checkinDate,
         checkout_date: checkoutDate || null,
         notes,
-        hotel_lat: state.capturedHotelLat,
-        hotel_lng: state.capturedHotelLng
+        hotel_lat: hotelGpsData.latitude,
+        hotel_lng: hotelGpsData.longitude,
+        hotel_accuracy: hotelGpsData.accuracy,
+        gps_capture_timestamp: hotelGpsData.timestamp ? new Date(hotelGpsData.timestamp).toISOString() : new Date().toISOString(),
+        verification_token: hotelVerificationState.token,
+        manual_review_requested: hotelVerificationState.manualReviewRequested
       })
     });
 
@@ -1873,7 +2480,7 @@ async function handleSaveHotelStay() {
       state.punchLocationType = 'HOTEL_STAY';
       if (DOM.tabHotelStayIndicator) DOM.tabHotelStayIndicator.style.display = 'inline-block';
       renderHotelStayPage();
-      showAlert('Hotel accommodation details recorded successfully.', 'success');
+      showAlert(data.message || 'Hotel accommodation details recorded successfully.', 'success');
     } else {
       showAlert(`Error saving hotel details: ${data.error || 'Server error'}`, 'danger');
     }
@@ -1888,39 +2495,53 @@ async function handleSaveHotelStay() {
 }
 
 async function handleCheckoutHotelStay() {
-  if (!confirm('Are you sure you want to mark this hotel stay as completed?')) return;
+  const stayInfo = state.activeHotelStay ? `${state.activeHotelStay.hotel_name || 'Hotel'} · Room ${state.activeHotelStay.room_number || 'N/A'}` : 'Current Outstation Stay';
 
-  try {
-    const res = await fetch('/api/employee/hotel-stay/checkout', {
-      method: 'POST',
-      headers: getEmployeeAuthHeaders()
-    });
-    const data = await res.json();
-    if (data.success) {
+  await showConfirmModal({
+    title: 'Complete Hotel Stay',
+    message: 'Are you sure you want to mark this hotel stay as completed? Your check-in location mode will return to standard Field Site.',
+    itemDetails: stayInfo,
+    confirmText: 'Complete Stay',
+    cancelText: 'Keep Active',
+    loadingText: 'Checking out...',
+    variant: 'warning',
+    onConfirm: async () => {
+      const res = await fetch('/api/employee/hotel-stay/checkout', {
+        method: 'POST',
+        headers: getEmployeeAuthHeaders()
+      });
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Server error checking out');
+      }
+
       state.activeHotelStay = null;
       state.punchLocationType = 'FIELD_SITE';
       if (DOM.tabHotelStayIndicator) DOM.tabHotelStayIndicator.style.display = 'none';
 
-      // Clear form
+      // Clear form & verification state
       if (DOM.inputHotelName) DOM.inputHotelName.value = '';
       if (DOM.inputHotelRoom) DOM.inputHotelRoom.value = '';
       if (DOM.inputHotelPhone) DOM.inputHotelPhone.value = '';
       if (DOM.inputHotelAddress) DOM.inputHotelAddress.value = '';
       if (DOM.inputHotelNotes) DOM.inputHotelNotes.value = '';
-      state.capturedHotelLat = null;
-      state.capturedHotelLng = null;
+      hotelGpsData.captured = false;
+      hotelGpsData.latitude = null;
+      hotelGpsData.longitude = null;
+      hotelVerificationState = { status: 'PENDING', verified: false, token: null, distanceMeters: null, matchedPlace: null, manualReviewRequested: false };
+
       if (DOM.textHotelGpsDisplay) DOM.textHotelGpsDisplay.textContent = 'Not captured yet';
+      if (DOM.textHotelGpsAccuracy) DOM.textHotelGpsAccuracy.style.display = 'none';
+      if (DOM.boxHotelVerificationStatus) DOM.boxHotelVerificationStatus.style.display = 'none';
+      if (DOM.hotelStayMapContainer) DOM.hotelStayMapContainer.style.display = 'none';
 
       renderHotelStayPage();
       showAlert('Hotel stay checked out successfully.', 'success');
-    } else {
-      showAlert(`Error checking out: ${data.error || 'Server error'}`, 'danger');
     }
-  } catch (err) {
-    showAlert(`Failed to checkout hotel stay: ${err.message}`, 'danger');
-  }
+  });
 }
 
+// Attach event listeners for Hotel Stay section
 if (DOM.formHotelStayDetails) {
   DOM.formHotelStayDetails.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -1929,18 +2550,23 @@ if (DOM.formHotelStayDetails) {
 }
 
 if (DOM.btnCaptureHotelGps) {
-  DOM.btnCaptureHotelGps.addEventListener('click', () => {
-    if (state.currentGps.latitude && state.currentGps.longitude) {
-      state.capturedHotelLat = state.currentGps.latitude;
-      state.capturedHotelLng = state.currentGps.longitude;
-      if (DOM.textHotelGpsDisplay) {
-        DOM.textHotelGpsDisplay.textContent = `${state.capturedHotelLat.toFixed(5)}°, ${state.capturedHotelLng.toFixed(5)}° (Captured)`;
-      }
-      showAlert('Current GPS position captured for hotel location.', 'success');
-    } else {
-      showAlert('Acquiring GPS fix... please wait a moment.', 'warning');
-    }
-  });
+  DOM.btnCaptureHotelGps.addEventListener('click', captureHotelGpsLocation);
+}
+
+if (DOM.btnVerifyHotelGps) {
+  DOM.btnVerifyHotelGps.addEventListener('click', verifyHotelLocation);
+}
+
+if (DOM.btnRequestManualReview) {
+  DOM.btnRequestManualReview.addEventListener('click', requestManualReviewWorkflow);
+}
+
+if (DOM.inputHotelName) {
+  DOM.inputHotelName.addEventListener('input', invalidateHotelVerificationOnEdit);
+}
+
+if (DOM.inputHotelAddress) {
+  DOM.inputHotelAddress.addEventListener('input', invalidateHotelVerificationOnEdit);
 }
 
 function renderReadyToCheckInState() {
@@ -2008,7 +2634,7 @@ function renderWorkingState() {
     if (DOM.fieldWorkNotesContainer) DOM.fieldWorkNotesContainer.style.display = 'block';
     if (DOM.inputFieldSiteNotes) DOM.inputFieldSiteNotes.value = state.activeSession.field_site_notes || '';
     DOM.tlDescCheckin.textContent = `Official Travel Check-in (${state.activeSession.field_site_notes || 'Transit Duty'})`;
-    DOM.tlBadgeCheckin.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg> <span>Travel Duty · ${state.activeSession.checkin_address || 'Transit Point Verified'}</span>`;
+    DOM.tlBadgeCheckin.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg> <span>Travel Duty · ${escapeHtml(state.activeSession.checkin_address || 'Transit Point Verified')}</span>`;
   } else if (isField) {
     setDutyMode('FIELD_WORK');
     if (DOM.btnModeField) DOM.btnModeField.disabled = true;
@@ -2016,7 +2642,7 @@ function renderWorkingState() {
     if (DOM.fieldWorkNotesContainer) DOM.fieldWorkNotesContainer.style.display = 'block';
     if (DOM.inputFieldSiteNotes) DOM.inputFieldSiteNotes.value = state.activeSession.field_site_notes || '';
     DOM.tlDescCheckin.textContent = `Field Work Check-in (${state.activeSession.field_site_notes || 'On-Site Visit'})`;
-    DOM.tlBadgeCheckin.innerHTML = `${window.Icons ? window.Icons.render('car', { size: 11 }) : ''} <span>Field Duty · ${state.activeSession.checkin_address || 'Location Verified'}</span>`;
+    DOM.tlBadgeCheckin.innerHTML = `${window.Icons ? window.Icons.render('car', { size: 11 }) : ''} <span>Field Duty · ${escapeHtml(state.activeSession.checkin_address || 'Location Verified')}</span>`;
   } else {
     DOM.tlDescCheckin.textContent = `Checked in at ${state.activeSession.checkin_geofence_status === 'WITHIN_GEOFENCE' ? 'Office' : 'Outside Office'}`;
     DOM.tlBadgeCheckin.textContent = `GPS: ±${state.activeSession.checkin_accuracy}m · Server verified`;

@@ -189,19 +189,10 @@ const STATE_DISTRICTS_MAP = {
     "Central Delhi", "East Delhi", "New Delhi", "North Delhi", "North East Delhi",
     "North West Delhi", "Shahdara", "South Delhi", "South East Delhi", "South West Delhi", "West Delhi"
   ],
-  "NCT of Delhi": [
-    "Central Delhi", "East Delhi", "New Delhi", "North Delhi", "North East Delhi",
-    "North West Delhi", "Shahdara", "South Delhi", "South East Delhi", "South West Delhi", "West Delhi"
-  ],
   "Jammu & Kashmir": [
     "Anantnag", "Bandipora", "Baramulla", "Budgam", "Doda", "Ganderbal", "Jammu",
     "Kathua", "Kishtwar", "Kulgam", "Kupwara", "Poonch", "Pulwama", "Rajouri",
     "Ramban", "Reasi", "Samba", "Shopian", "Srinagar", "Udhampur"
-  ],
-  "Jammu & Kashmir and Ladakh": [
-    "Anantnag", "Bandipora", "Baramulla", "Budgam", "Doda", "Ganderbal", "Jammu",
-    "Kathua", "Kishtwar", "Kulgam", "Kupwara", "Poonch", "Pulwama", "Rajouri",
-    "Ramban", "Reasi", "Samba", "Shopian", "Srinagar", "Udhampur", "Kargil", "Leh"
   ],
   "Ladakh": [
     "Kargil", "Leh"
@@ -214,25 +205,123 @@ const STATE_DISTRICTS_MAP = {
   ]
 };
 
+// Aliases and legacy naming variations mapped to canonical State/UT names
+const STATE_ALIASES = {
+  'nct of delhi': 'Delhi',
+  'national capital territory of delhi': 'Delhi',
+  'nct delhi': 'Delhi',
+  'nct': 'Delhi',
+  'new delhi': 'Delhi',
+  'delhi': 'Delhi',
+  'jammu and kashmir': 'Jammu & Kashmir',
+  'j&k': 'Jammu & Kashmir',
+  'jammu & kashmir and ladakh': 'Jammu & Kashmir',
+  'dadra and nagar haveli and daman and diu': 'Dadra & Nagar Haveli and Daman & Diu',
+  'dadra & nagar haveli': 'Dadra & Nagar Haveli and Daman & Diu',
+  'daman & diu': 'Dadra & Nagar Haveli and Daman & Diu',
+  'andaman and nicobar islands': 'Andaman & Nicobar Islands',
+  'andaman & nicobar': 'Andaman & Nicobar Islands',
+  'orissa': 'Odisha',
+  'pondicherry': 'Puducherry',
+  'uttaranchal': 'Uttarakhand'
+};
+
+/**
+ * Return canonical State/UT name
+ * Always returns 'Delhi' for any Delhi variation.
+ */
+function normalizeStateName(stateName) {
+  if (!stateName || typeof stateName !== 'string') return null;
+  const trimmed = stateName.trim();
+  const lower = trimmed.toLowerCase();
+
+  // Any variation of Delhi or NCT maps strictly to canonical 'Delhi'
+  if (lower === 'dl' || lower.includes('delhi') || lower.includes('nct')) {
+    return 'Delhi';
+  }
+
+  if (STATE_ALIASES[lower]) {
+    return STATE_ALIASES[lower];
+  }
+
+  // Exact match in map
+  if (STATE_DISTRICTS_MAP[trimmed]) {
+    return trimmed;
+  }
+
+  // Case-insensitive match in map
+  const cleanNorm = lower.replace(/[^a-z0-9]/g, '');
+  for (const key of Object.keys(STATE_DISTRICTS_MAP)) {
+    if (key.toLowerCase() === lower || key.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanNorm) {
+      return key;
+    }
+  }
+
+  return trimmed;
+}
+
 function getAllStates() {
   return Object.keys(STATE_DISTRICTS_MAP).sort();
 }
 
 function getDistrictsForState(stateName) {
   if (!stateName) return [];
-  
-  // Exact match
-  if (STATE_DISTRICTS_MAP[stateName]) {
-    return STATE_DISTRICTS_MAP[stateName];
+  const canonical = normalizeStateName(stateName);
+  if (canonical && STATE_DISTRICTS_MAP[canonical]) {
+    return STATE_DISTRICTS_MAP[canonical];
   }
-  
-  // Case-insensitive / normalized lookup
-  const normalized = stateName.trim().toLowerCase();
-  const key = Object.keys(STATE_DISTRICTS_MAP).find(
-    (k) => k.toLowerCase() === normalized || k.toLowerCase().replace(/[^a-z0-9]/g, "") === normalized.replace(/[^a-z0-9]/g, "")
-  );
-  
-  return key ? STATE_DISTRICTS_MAP[key] : [];
+  return [];
+}
+
+/**
+ * Independent backend validation of State & District relationship
+ */
+function validateStateAndDistrict(stateName, districtName) {
+  if (!stateName || !String(stateName).trim()) {
+    return { valid: false, error: 'State / UT is required.' };
+  }
+
+  const canonicalState = normalizeStateName(stateName);
+  if (!canonicalState || !STATE_DISTRICTS_MAP[canonicalState]) {
+    return {
+      valid: false,
+      error: `Unrecognized Indian State or Union Territory: "${stateName}". Please select a valid state.`
+    };
+  }
+
+  if (districtName && String(districtName).trim()) {
+    const cleanDistrict = String(districtName).trim();
+    const validDistricts = STATE_DISTRICTS_MAP[canonicalState];
+    const cleanNorm = cleanDistrict.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    const matchedDist = validDistricts.find(
+      d => d.toLowerCase() === cleanDistrict.toLowerCase() ||
+           d.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanNorm
+    );
+
+    if (!matchedDist) {
+      return {
+        valid: false,
+        error: `District "${districtName}" does not belong to State "${canonicalState}". Please select a valid district.`
+      };
+    }
+
+    return {
+      valid: true,
+      state: canonicalState,
+      district: matchedDist,
+      normalizedState: canonicalState,
+      normalizedDistrict: matchedDist
+    };
+  }
+
+  return {
+    valid: true,
+    state: canonicalState,
+    district: null,
+    normalizedState: canonicalState,
+    normalizedDistrict: null
+  };
 }
 
 /**
@@ -302,8 +391,10 @@ function matchStateAndDistrict(input) {
     }
   }
 
+  const finalState = matchedState ? normalizeStateName(matchedState) : null;
+
   return {
-    state: matchedState || null,
+    state: finalState || null,
     district: matchedDistrict || null
   };
 }
@@ -312,5 +403,7 @@ module.exports = {
   STATE_DISTRICTS_MAP,
   getAllStates,
   getDistrictsForState,
+  normalizeStateName,
+  validateStateAndDistrict,
   matchStateAndDistrict
 };

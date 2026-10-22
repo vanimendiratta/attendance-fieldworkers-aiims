@@ -6,6 +6,7 @@
   <title>Attendance Operations | AIIMS</title>
   <meta name="description" content="AIIMS verified real-time photo and geolocation attendance monitoring dashboard.">
   <link rel="stylesheet" href="/admin.css?v=5">
+  <link rel="stylesheet" href="/ems.css?v=1">
   <!-- Dynamic Indian States & Districts Map -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -13,6 +14,7 @@
   <script src="/states_districts_client.js?v=6"></script>
   <!-- Unified SVG Iconography System -->
   <script src="/icons.js?v=2"></script>
+  <script src="/ems_client.js?v=1"></script>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%232563eb%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><path d=%22M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z%22/><path d=%22m9 12 2 2 4-4%22/></svg>">
 </head>
 <body class="admin-body">
@@ -69,6 +71,12 @@
               <a class="nav-link" data-view="viewLeave" id="navLeave">
                 <span class="nav-icon"><span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span></span>
                 <span>Leave</span>
+              </a>
+            </li>
+            <li>
+              <a class="nav-link" data-view="viewEmsAdmin" id="navEmsAdmin">
+                <span class="nav-icon"><span class="ui-icon ui-icon-sm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span></span>
+                <span>Employee Management</span>
               </a>
             </li>
             <li>
@@ -354,14 +362,32 @@
                 </span>
               </div>
 
-              <!-- View mode switcher -->
-              <div style="display: inline-flex; background: #e2e8f0; border-radius: 6px; padding: 2px;">
-                <button type="button" id="btnViewModeDaily" class="btn" style="font-size: 11px; padding: 5px 12px; border: none; background: #fff; color: var(--color-text-primary); box-shadow: 0 1px 2px rgba(0,0,0,0.08); font-weight: 600; border-radius: 4px;">
-                  Daily Tables (By Date)
-                </button>
-                <button type="button" id="btnViewModeUnified" class="btn" style="font-size: 11px; padding: 5px 12px; border: none; background: transparent; color: var(--color-text-secondary); box-shadow: none; font-weight: 500; border-radius: 4px;">
-                  Combined Flat Table
-                </button>
+              <!-- Attendance Perspectives & View mode switcher -->
+              <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <!-- Perspective: Individual vs Dedicated Team -->
+                <div style="display: inline-flex; align-items: center; gap: 6px;">
+                  <span style="font-size: 11px; font-weight: 700; color: var(--color-text-secondary); text-transform: uppercase;">View By:</span>
+                  <div style="display: inline-flex; background: #e2e8f0; border-radius: 6px; padding: 2px;">
+                    <button type="button" id="btnPerspectiveIndividual" class="btn" style="font-size: 11px; padding: 5px 12px; border: none; background: #fff; color: var(--color-text-primary); box-shadow: 0 1px 2px rgba(0,0,0,0.08); font-weight: 600; border-radius: 4px; display: inline-flex; align-items: center; gap: 5px;" title="View individual staff attendance records">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                      <span>Individual</span>
+                    </button>
+                    <button type="button" id="btnPerspectiveTeam" class="btn" style="font-size: 11px; padding: 5px 12px; border: none; background: transparent; color: var(--color-text-secondary); box-shadow: none; font-weight: 500; border-radius: 4px; display: inline-flex; align-items: center; gap: 5px;" title="Group attendance by Dedicated Team and show team-wise summary">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                      <span>Dedicated Team-Wise</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- View mode switcher -->
+                <div style="display: inline-flex; background: #e2e8f0; border-radius: 6px; padding: 2px;">
+                  <button type="button" id="btnViewModeDaily" class="btn" style="font-size: 11px; padding: 5px 12px; border: none; background: #fff; color: var(--color-text-primary); box-shadow: 0 1px 2px rgba(0,0,0,0.08); font-weight: 600; border-radius: 4px;">
+                    Daily Tables (By Date)
+                  </button>
+                  <button type="button" id="btnViewModeUnified" class="btn" style="font-size: 11px; padding: 5px 12px; border: none; background: transparent; color: var(--color-text-secondary); box-shadow: none; font-weight: 500; border-radius: 4px;">
+                    Combined Flat Table
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -478,10 +504,16 @@
                 <h3 style="font-size: 15px; font-weight: 600;">Organization Employees</h3>
                 <p style="font-size: 12px; color: var(--color-text-tertiary);">Active accounts registered under this employer</p>
               </div>
-              <button class="btn btn-primary" style="font-size: 12px; display: inline-flex; align-items: center; gap: 6px;">
-                <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
-                <span>Add Employee</span>
-              </button>
+              <div style="display: flex; gap: 10px; align-items: center;">
+                <button id="btnExportEmployeesCsv" class="btn btn-secondary" style="font-size: 12px; display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; font-weight: 500; cursor: pointer; white-space: nowrap;" title="Export all employee records as Excel-compatible CSV">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  <span>Download Employees CSV</span>
+                </button>
+                <button class="btn btn-primary" style="font-size: 12px; display: inline-flex; align-items: center; gap: 6px;">
+                  <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+                  <span>Add Employee</span>
+                </button>
+              </div>
             </div>
 
             <table class="data-table">
@@ -568,6 +600,10 @@
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                   <span>+ Record Leave</span>
                 </button>
+                <button type="button" id="btnExportLeavesCsv" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 7px 14px;" title="Download leave records as Excel-compatible CSV">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  <span>Download Leaves CSV</span>
+                </button>
                 <button type="button" id="btnRefreshLeaves" class="btn btn-secondary" style="font-size: 13px; padding: 7px 12px; display: inline-flex; align-items: center; gap: 5px;">
                   <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg></span>
                   <span>Refresh</span>
@@ -650,6 +686,9 @@
           </div>
         </section>
 
+        <!-- VIEW: EMPLOYEE MANAGEMENT & LEAVE GOVERNANCE (EMS Integration) -->
+        <section id="viewEmsAdmin" class="admin-view-panel" style="display: none;"></section>
+
         <!-- VIEW: HOTEL STAYS (Dedicated Field Worker Lodging Directory) -->
         <section id="viewHotelStays" class="admin-view-panel" style="display: none;">
           <!-- Top Metric Cards -->
@@ -689,6 +728,10 @@
                 </div>
               </div>
               <div style="display: flex; gap: 10px;">
+                <button id="btnExportHotelStaysCsv" class="btn btn-secondary" style="font-size: 13px; padding: 7px 14px; display: inline-flex; align-items: center; gap: 6px;" title="Export hotel stays as Excel-compatible CSV">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  <span>Download Hotel Stays CSV</span>
+                </button>
                 <button type="button" id="btnRefreshHotelStays" class="btn btn-secondary" style="font-size: 13px; padding: 7px 14px; display: inline-flex; align-items: center; gap: 6px;">
                   <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg></span>
                   <span>Refresh</span>
@@ -1005,6 +1048,62 @@
               </form>
             </div>
           </div>
+
+          <!-- Multi-Location & Hotel Geofences Management -->
+          <div class="surface-card" style="max-width: 960px; margin-top: 24px;">
+            <div class="surface-card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+              <div>
+                <h3 class="surface-card-title">Approved Workplace & Hotel Geofences</h3>
+                <p style="font-size: 12px; color: var(--color-text-tertiary);">Configured perimeters for offices, field sites, and authorized hotel stays</p>
+              </div>
+              <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                <button id="btnExportGeofencesCsv" class="btn btn-secondary" style="font-size: 13px; display: inline-flex; align-items: center; gap: 6px;" title="Download geofences configuration as Excel-compatible CSV">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  <span>Download Geofences CSV</span>
+                </button>
+                <button id="btnOpenAddGeofence" class="btn btn-primary" style="font-size: 13px; display: inline-flex; align-items: center; gap: 6px;">
+                  <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+                  <span>Add Approved Geofence</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="surface-card-body">
+              <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+                <button type="button" class="btn btn-secondary btn-sm gf-filter-btn active" data-filter="ALL" id="gfFilterAll">All Geofences</button>
+                <button type="button" class="btn btn-secondary btn-sm gf-filter-btn" data-filter="WORKPLACE" id="gfFilterWorkplace">Workplaces & Sites</button>
+                <button type="button" class="btn btn-secondary btn-sm gf-filter-btn" data-filter="HOTEL" id="gfFilterHotel">Approved Hotels</button>
+              </div>
+
+              <!-- Geofences List Table -->
+              <div class="table-container" style="margin-bottom: 24px;">
+                <table class="data-table" id="geofencesTable">
+                  <thead>
+                    <tr>
+                      <th>Name / Location</th>
+                      <th>Type</th>
+                      <th>Coordinates (Lat, Lng)</th>
+                      <th>Radius</th>
+                      <th>Policy</th>
+                      <th style="text-align: right;">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="geofencesTableBody">
+                    <tr><td colspan="6" style="text-align: center; color: var(--color-text-muted); padding: 20px;">Loading geofences...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Map Preview Container -->
+              <div style="margin-top: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <h4 style="font-size: 14px; font-weight: 600;">Geofence Perimeter Map Preview</h4>
+                  <span id="mapPreviewLabel" style="font-size: 12px; color: var(--color-text-muted);">Click "Preview" on any geofence to inspect perimeter</span>
+                </div>
+                <div id="geofenceMapPreview" style="height: 320px; width: 100%; border-radius: var(--radius-md); border: 1px solid var(--color-border); background: var(--color-surface-subtle); z-index: 1;"></div>
+              </div>
+            </div>
+          </div>
         </section>
 
         <!-- VIEW 6: SECURITY AUDIT LOGS -->
@@ -1015,10 +1114,16 @@
                 <h3 style="font-size: 15px; font-weight: 600;">Immutable Security Audit Logs</h3>
                 <p style="font-size: 12px; color: var(--color-text-tertiary);">Tamper-proof log of check-in events, accuracy rejections, and geofence evaluations</p>
               </div>
-              <button id="btnRefreshAudit" class="btn btn-secondary" style="font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">
-                <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg></span>
-                <span>Refresh Logs</span>
-              </button>
+              <div style="display: flex; gap: 10px; align-items: center;">
+                <button id="btnExportAuditLogsCsv" class="btn btn-secondary" style="font-size: 12px; display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; white-space: nowrap;" title="Download audit log events as Excel-compatible CSV">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  <span>Download Audit Logs CSV</span>
+                </button>
+                <button id="btnRefreshAudit" class="btn btn-secondary" style="font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">
+                  <span class="ui-icon ui-icon-xs"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg></span>
+                  <span>Refresh Logs</span>
+                </button>
+              </div>
             </div>
 
             <table class="data-table" id="auditTable">
@@ -1134,8 +1239,14 @@
                     <option value="ALL">All Districts</option>
                   </select>
                 </div>
-                <div style="font-size: 12px; color: var(--color-text-tertiary);" id="teamCountLabel">
-                  Showing all teams
+                <div style="display: flex; gap: 10px; align-items: center;">
+                  <div style="font-size: 12px; color: var(--color-text-tertiary);" id="teamCountLabel">
+                    Showing all teams
+                  </div>
+                  <button id="btnExportTeamsCsv" class="btn btn-secondary" style="font-size: 12px; display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; white-space: nowrap;" title="Download team directory as Excel-compatible CSV">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span>Download Teams CSV</span>
+                  </button>
                 </div>
               </div>
 
@@ -1587,10 +1698,72 @@
           Sign In to AIIMS Operations
         </button>
       </form>
-
     </div>
   </div>
 
+  <!-- ADD / EDIT GEOFENCE MODAL -->
+  <div class="auth-modal-backdrop" id="geofenceModal" style="display: none;">
+    <div class="auth-modal-dialog" style="max-width: 520px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 id="geofenceModalTitle" style="font-size: 17px; font-weight: 700; margin: 0; color: var(--color-text-primary);">Add Approved Geofence</h3>
+        <button type="button" id="btnCloseGeofenceModal" class="btn btn-secondary" style="padding: 4px 10px; font-size: 14px;">&times;</button>
+      </div>
+
+      <form id="geofenceForm">
+        <input type="hidden" id="geofenceId" value="">
+
+        <div style="margin-bottom: 14px;">
+          <label class="form-label" for="gfName">Geofence Name</label>
+          <input type="text" id="gfName" class="form-input" placeholder="e.g. AIIMS Main Campus or Grand Residency Hotel" required>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+          <div>
+            <label class="form-label" for="gfType">Geofence Type</label>
+            <select id="gfType" class="form-select" required>
+              <option value="WORKPLACE">Workplace / Field Base</option>
+              <option value="HOTEL">Hotel / Outstation Stay</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label" for="gfPolicy">Policy</label>
+            <select id="gfPolicy" class="form-select" required>
+              <option value="ALLOW_WITH_FLAG">Allow & Flag For Review</option>
+              <option value="STRICT_BLOCK">Strictly Block Outside</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+          <div>
+            <label class="form-label" for="gfLat">Latitude (°N)</label>
+            <input type="number" step="any" id="gfLat" class="form-input" placeholder="e.g. 28.5672" required>
+          </div>
+          <div>
+            <label class="form-label" for="gfLng">Longitude (°E)</label>
+            <input type="number" step="any" id="gfLng" class="form-input" placeholder="e.g. 77.2100" required>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 14px;">
+          <label class="form-label" for="gfRadius">Radius (meters)</label>
+          <input type="number" id="gfRadius" class="form-input" min="10" max="10000" value="150" required>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+          <label class="form-label" for="gfAddress">Address / Description (Optional)</label>
+          <input type="text" id="gfAddress" class="form-input" placeholder="Full address or landmark">
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" id="btnCancelGeofence" class="btn btn-secondary">Cancel</button>
+          <button type="submit" id="btnSaveGeofence" class="btn btn-primary">Save Geofence</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/confirm_modal.js?v=1"></script>
   <script src="/admin.js?v=12"></script>
 
   <!-- Photo Lightbox Overlay -->

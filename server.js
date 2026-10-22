@@ -20,7 +20,7 @@ app.use((req, res, next) => {
   }
   res.setHeader(
     'Content-Security-Policy',
-    "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self';"
+    "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://tile.openstreetmap.org; connect-src 'self'; frame-ancestors 'none';"
   );
   next();
 });
@@ -68,8 +68,21 @@ if (!isServerless) {
 // Static assets
 app.use('/uploads', express.static(uploadsDir));
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/ems', express.static(path.join(__dirname, 'ems/public')));
+
+// Ensure EMS database is migrated and master policies are seeded
+try {
+  const { runMigrations } = require('./ems/server/database/migrate');
+  const { seedMasterPolicies } = require('./ems/server/database/seed');
+  runMigrations();
+  seedMasterPolicies();
+} catch (emsDbErr) {
+  console.warn('[SERVER] EMS Database startup warning:', emsDbErr.message);
+}
 
 // API routes
+const emsApiRouter = require('./ems/server/routes/api');
+app.use('/api/ems', emsApiRouter);
 app.use('/api', apiRouter);
 
 // Fallback to employee portal

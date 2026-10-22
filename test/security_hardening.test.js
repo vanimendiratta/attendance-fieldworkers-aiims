@@ -192,19 +192,21 @@ async function runSecurityVerification() {
   console.log('✓ Signup enforces state requirement when district is provided');
 
   // Valid signup with state & district
-  const validSignupId = `EMP-SEC-${Date.now().toString().slice(-4)}`;
   const validSignup = await request('POST', '/api/auth/employee/signup', {
     name: 'Security Test Worker',
-    employee_id: validSignupId,
+    dob: '1995-05-15',
+    email: `sec_test_${Date.now()}_cder@aiims.edu`,
+    phone: '98765' + String(Math.floor(10000 + Math.random() * 90000)),
     state: 'Delhi',
     district: 'New Delhi',
     password: 'ValidSecure@123'
   });
   assert.strictEqual(validSignup.statusCode, 201);
   assert.strictEqual(validSignup.json.success, true);
-  
+  const createdEmpId = validSignup.json.employee.id;
+
   // Verify password was stored hashed, NOT plaintext
-  const storedEmpRes = await db.query('SELECT password FROM employees WHERE id = $1', [validSignupId]);
+  const storedEmpRes = await db.query('SELECT password FROM employees WHERE id = $1', [createdEmpId]);
   const storedEmp = storedEmpRes.rows[0];
   assert.ok(storedEmp.password.startsWith('scrypt$'), 'Stored employee password must be a salted scrypt hash');
   assert.strictEqual(authService.verifyPassword('ValidSecure@123', storedEmp.password), true);
@@ -343,10 +345,13 @@ async function runSecurityVerification() {
 
   // Simulate 20 simultaneous concurrent signups from distinct client network sources
   const concurrentSignups = [];
+  const baseEpoch = Date.now();
   for (let i = 0; i < 20; i++) {
     const p = request('POST', '/api/auth/employee/signup', {
       name: `Concurrent User ${i}`,
-      email: `concurrent_${Date.now()}_${i}@aiims.internal`,
+      dob: '1992-05-10',
+      email: `concurrent_${baseEpoch}_${i}_cder@aiims.internal`,
+      phone: `98110${String(10000 + i)}`,
       password: 'ValidSecure@123'
     }, {
       'x-forwarded-for': `10.10.1.${i + 1}`

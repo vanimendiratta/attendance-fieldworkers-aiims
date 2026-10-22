@@ -184,19 +184,11 @@ window.INDIA_STATES_DISTRICTS = {
   "Dadra & Nagar Haveli and Daman & Diu": [
     "Dadra and Nagar Haveli", "Daman", "Diu"
   ],
-  "Dadra and Nagar Haveli and Daman and Diu": [
-    "Dadra and Nagar Haveli", "Daman", "Diu"
-  ],
   "Delhi": [
     "Central Delhi", "East Delhi", "New Delhi", "North Delhi", "North East Delhi",
     "North West Delhi", "Shahdara", "South Delhi", "South East Delhi", "South West Delhi", "West Delhi"
   ],
   "Jammu & Kashmir": [
-    "Anantnag", "Bandipora", "Baramulla", "Budgam", "Doda", "Ganderbal", "Jammu",
-    "Kathua", "Kishtwar", "Kulgam", "Kupwara", "Poonch", "Pulwama", "Rajouri",
-    "Ramban", "Reasi", "Samba", "Shopian", "Srinagar", "Udhampur"
-  ],
-  "Jammu and Kashmir": [
     "Anantnag", "Bandipora", "Baramulla", "Budgam", "Doda", "Ganderbal", "Jammu",
     "Kathua", "Kishtwar", "Kulgam", "Kupwara", "Poonch", "Pulwama", "Rajouri",
     "Ramban", "Reasi", "Samba", "Shopian", "Srinagar", "Udhampur"
@@ -212,20 +204,65 @@ window.INDIA_STATES_DISTRICTS = {
   ]
 };
 
+const STATE_ALIASES = {
+  'nct of delhi': 'Delhi',
+  'national capital territory of delhi': 'Delhi',
+  'nct delhi': 'Delhi',
+  'nct': 'Delhi',
+  'new delhi': 'Delhi',
+  'delhi': 'Delhi',
+  'jammu and kashmir': 'Jammu & Kashmir',
+  'j&k': 'Jammu & Kashmir',
+  'jammu & kashmir and ladakh': 'Jammu & Kashmir',
+  'dadra and nagar haveli and daman and diu': 'Dadra & Nagar Haveli and Daman & Diu',
+  'dadra & nagar haveli': 'Dadra & Nagar Haveli and Daman & Diu',
+  'daman & diu': 'Dadra & Nagar Haveli and Daman & Diu',
+  'andaman and nicobar islands': 'Andaman & Nicobar Islands',
+  'andaman & nicobar': 'Andaman & Nicobar Islands',
+  'orissa': 'Odisha',
+  'pondicherry': 'Puducherry',
+  'uttaranchal': 'Uttarakhand'
+};
+
+window.normalizeIndianStateName = function(stateName) {
+  if (!stateName || typeof stateName !== 'string') return '';
+  const trimmed = stateName.trim();
+  const lower = trimmed.toLowerCase();
+
+  // Any variation of Delhi or NCT maps strictly to canonical 'Delhi'
+  if (lower === 'dl' || lower.includes('delhi') || lower.includes('nct')) {
+    return 'Delhi';
+  }
+
+  if (STATE_ALIASES[lower]) {
+    return STATE_ALIASES[lower];
+  }
+
+  if (window.INDIA_STATES_DISTRICTS[trimmed]) {
+    return trimmed;
+  }
+
+  const cleanNorm = lower.replace(/[^a-z0-9]/g, '');
+  for (const key of Object.keys(window.INDIA_STATES_DISTRICTS)) {
+    if (key.toLowerCase() === lower || key.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanNorm) {
+      return key;
+    }
+  }
+
+  return trimmed;
+};
+
 window.getAllIndianStates = function() {
   return Object.keys(window.INDIA_STATES_DISTRICTS).sort();
 };
 
 window.getDistrictsForIndianState = function(stateName) {
   if (!stateName || typeof stateName !== 'string') return [];
-  if (window.INDIA_STATES_DISTRICTS[stateName]) {
-    return window.INDIA_STATES_DISTRICTS[stateName];
+  const canonical = window.normalizeIndianStateName(stateName);
+  if (canonical && window.INDIA_STATES_DISTRICTS[canonical]) {
+    return window.INDIA_STATES_DISTRICTS[canonical];
   }
-  const norm = stateName.trim().toLowerCase();
-  const key = Object.keys(window.INDIA_STATES_DISTRICTS).find(
-    k => k.toLowerCase() === norm || k.toLowerCase().replace(/[^a-z0-9]/g, "") === norm.replace(/[^a-z0-9]/g, "")
-  );
-  return key ? window.INDIA_STATES_DISTRICTS[key] : [];
+  return [];
 };
 
 /**
@@ -269,8 +306,9 @@ window.setupStateDistrictCascade = function(stateSelectEl, districtSelectEl, opt
       return;
     }
 
+    const canonicalState = window.normalizeIndianStateName(selectedState) || selectedState;
     districtSelectEl.disabled = false;
-    const districts = window.getDistrictsForIndianState(selectedState);
+    const districts = window.getDistrictsForIndianState(canonicalState);
     districts.forEach(dist => {
       const opt = document.createElement('option');
       opt.value = dist;
@@ -286,13 +324,21 @@ window.setupStateDistrictCascade = function(stateSelectEl, districtSelectEl, opt
   if (!stateSelectEl.dataset.cascadeBound) {
     stateSelectEl.dataset.cascadeBound = 'true';
     stateSelectEl.addEventListener('change', (e) => {
-      updateDistricts(e.target.value);
+      const rawVal = e.target.value;
+      const canonical = rawVal && rawVal !== 'ALL' ? (window.normalizeIndianStateName(rawVal) || rawVal) : rawVal;
+      if (rawVal && rawVal !== 'ALL' && canonical !== rawVal) {
+        e.target.value = canonical;
+      }
+      // On interactive user state change, reset district
+      updateDistricts(canonical, '');
       if (typeof options.onStateChange === 'function') {
-        options.onStateChange(e.target.value);
+        options.onStateChange(canonical);
       }
     });
     stateSelectEl.addEventListener('input', (e) => {
-      updateDistricts(e.target.value);
+      const rawVal = e.target.value;
+      const canonical = rawVal && rawVal !== 'ALL' ? (window.normalizeIndianStateName(rawVal) || rawVal) : rawVal;
+      updateDistricts(canonical, '');
     });
   }
 
@@ -305,10 +351,12 @@ window.setupStateDistrictCascade = function(stateSelectEl, districtSelectEl, opt
 
   // Apply initial values
   if (options.initialState) {
-    stateSelectEl.value = options.initialState;
-    updateDistricts(options.initialState, options.initialDistrict || '');
+    const canonicalInit = window.normalizeIndianStateName(options.initialState) || options.initialState;
+    stateSelectEl.value = canonicalInit;
+    updateDistricts(canonicalInit, options.initialDistrict || '');
   } else if (stateSelectEl.value) {
-    updateDistricts(stateSelectEl.value, options.initialDistrict || districtSelectEl.value || '');
+    const canonicalCurrent = window.normalizeIndianStateName(stateSelectEl.value) || stateSelectEl.value;
+    updateDistricts(canonicalCurrent, options.initialDistrict || districtSelectEl.value || '');
   } else {
     updateDistricts('', '');
   }
@@ -316,8 +364,9 @@ window.setupStateDistrictCascade = function(stateSelectEl, districtSelectEl, opt
   return {
     setValues: (state, district) => {
       if (state) {
-        stateSelectEl.value = state;
-        updateDistricts(state, district);
+        const canonical = window.normalizeIndianStateName(state) || state;
+        stateSelectEl.value = canonical;
+        updateDistricts(canonical, district || '');
       } else {
         stateSelectEl.value = allowAll ? 'ALL' : '';
         updateDistricts('', '');

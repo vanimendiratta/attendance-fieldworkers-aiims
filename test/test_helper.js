@@ -16,7 +16,8 @@
 const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
+types.setTypeParser(1082, (val) => val);
 
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
 
@@ -104,7 +105,25 @@ async function applySchema() {
     const migration2Sql = fs.readFileSync(migration2Path, 'utf8');
     await pool.query(migration2Sql);
   }
-  console.log('✓ Applied schema migrations (001, 002) to test database');
+
+  const migration3Path = path.join(__dirname, '../supabase/migrations/003_secure_signup_fields.sql');
+  if (fs.existsSync(migration3Path)) {
+    const migration3Sql = fs.readFileSync(migration3Path, 'utf8');
+    await pool.query(migration3Sql);
+  }
+
+  const migration4Path = path.join(__dirname, '../supabase/migrations/004_hotel_gps_verification.sql');
+  if (fs.existsSync(migration4Path)) {
+    const migration4Sql = fs.readFileSync(migration4Path, 'utf8');
+    await pool.query(migration4Sql);
+  }
+
+  const migration5Path = path.join(__dirname, '../supabase/migrations/005_standardize_delhi_and_geofencing.sql');
+  if (fs.existsSync(migration5Path)) {
+    const migration5Sql = fs.readFileSync(migration5Path, 'utf8');
+    await pool.query(migration5Sql);
+  }
+  console.log('✓ Applied schema migrations (001, 002, 003, 004, 005) to test database');
 }
 
 /**

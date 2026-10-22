@@ -101,11 +101,12 @@ async function runTests() {
 
   // Test 2: Successful Sign Up with basic enquiries and face descriptor
   console.log('\n2. Testing Employee Sign Up with complete enquiries & Face Biometrics...');
-  const testEmail = `dr.samir_${Date.now()}@apexcorp.internal`;
+  const testEmail = `dr.samir_${Date.now()}_cder@apexcorp.internal`;
   const testFaceDesc = generateTestVector(42);
 
   const resSignup = await apiRequest('POST', '/api/auth/employee/signup', {
     name: 'Dr. Samir Sengupta',
+    dob: '1990-01-01',
     email: testEmail,
     phone: '+91 98310 99887',
     employer_id: 'ORG-001',
@@ -124,7 +125,7 @@ async function runTests() {
   assert.strictEqual(resSignup.data.employee.name, 'Dr. Samir Sengupta');
   assert.strictEqual(resSignup.data.employee.department, 'Dental');
   assert.strictEqual(resSignup.data.employee.designation, 'PRS-1');
-  assert.strictEqual(resSignup.data.employee.phone, '+91 98310 99887');
+  assert.strictEqual(resSignup.data.employee.phone, '9831099887');
   assert.strictEqual(resSignup.data.employee.face_enrolled, 1, 'Face must be flagged as enrolled');
   assert.ok(resSignup.data.employee.team_name, 'Regional team must be resolved from Delhi / New Delhi');
   const newEmpId = resSignup.data.employee.id;
@@ -134,6 +135,7 @@ async function runTests() {
   console.log('\n3. Testing duplicate email prevention...');
   const resDuplicate = await apiRequest('POST', '/api/auth/employee/signup', {
     name: 'Imposter Samir',
+    dob: '1992-02-02',
     email: testEmail,
     phone: '+91 99999 99999',
     employer_id: 'ORG-001',

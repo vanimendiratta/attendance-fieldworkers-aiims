@@ -39,7 +39,7 @@ function validatePasswordPolicy(password) {
   if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
     return { valid: false, error: 'Password must contain at least one special character (!@#$%^&* etc.).' };
   }
-  return { valid: true };
+   return { valid: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -58,18 +58,6 @@ function verifyPassword(password, storedHash) {
   const rawStored  = String(storedHash);
   const cleanPass  = rawPass.trim();
   const cleanStored = rawStored.trim();
-
-  // Institutional default password support (backward compat)
-  const institutionalDefaults = [
-    'aiims@123', 'password@123', 'aiimsadmin@123',
-    'aiims', 'admin@123'
-  ];
-  if (
-    institutionalDefaults.includes(cleanPass.toLowerCase()) &&
-    institutionalDefaults.includes(cleanStored.toLowerCase())
-  ) {
-    return true;
-  }
 
   if (cleanStored.startsWith('scrypt$')) {
     const parts = cleanStored.split('$');

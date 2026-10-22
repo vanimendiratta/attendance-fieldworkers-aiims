@@ -1,0 +1,913 @@
+{
+  "title": "CENTRE FOR DENTAL EDUCATION AND RESEARCH - Staff Details & Leave Rules | 2026\u20132027",
+  "tenure_start": "2026-04-01",
+  "tenure_end": "2027-03-31",
+  "record_snapshot_date": "2026-10-01",
+  "joining_date_cutoff_day": 25,
+  "rules": [
+    {
+      "leave_type": "Casual Leave (CL)",
+      "entitlement": "08 days per year",
+      "rule_provision": "Calculated proportionately according to eligible months of service."
+    },
+    {
+      "leave_type": "Earned Leave (EL)",
+      "entitlement": "2.5 days per completed month",
+      "rule_provision": "Credited at 2.5 days for each completed eligible month."
+    },
+    {
+      "leave_type": "Restricted Holiday (RH)",
+      "entitlement": "02 per year / 01 per six months",
+      "rule_provision": "02 RH during one year and 01 RH during six months."
+    },
+    {
+      "leave_type": "Compensatory Off",
+      "entitlement": "For Sunday/Gazetted Holiday duty",
+      "rule_provision": "Eligible when staff work on Sundays or Gazetted Holidays; to be availed within one month of accumulation."
+    }
+  ],
+  "staff": [
+    {
+      "sno": 1,
+      "name": "Dr. Abhishek Jangra",
+      "designation": "PRS-I (BDS)",
+      "contact": "9992833011",
+      "email": "abhishekcder@gmail.com",
+      "joining_date": "01/04/2026"
+    },
+    {
+      "sno": 2,
+      "name": "Dr. Avishek Singh",
+      "designation": "PRS-I (BDS)",
+      "contact": "9622338053",
+      "email": "avishek.cder@gmail.com",
+      "joining_date": "01/04/2026"
+    },
+    {
+      "sno": 3,
+      "name": "Dr. Prashant Panchal",
+      "designation": "PRS-I (BDS)",
+      "contact": "9819980968",
+      "email": "prashantpanchalcder@gmail.com",
+      "joining_date": "01/04/2026"
+    },
+    {
+      "sno": 4,
+      "name": "Dr. Neha Chaudhary",
+      "designation": "PRS-I (BDS)",
+      "contact": "9119344568",
+      "email": "nehacder@gmail.com",
+      "joining_date": "01/04/2026"
+    },
+    {
+      "sno": 5,
+      "name": "Dr. Anuj Sharma",
+      "designation": "PRS-I (BDS)",
+      "contact": "9855368772",
+      "email": "anujattricder@gmail.com",
+      "joining_date": "01/04/2026"
+    },
+    {
+      "sno": 6,
+      "name": "Dr. Sushma Verma",
+      "designation": "PRS-I (BDS)",
+      "contact": "7310117476",
+      "email": "sushmacder009@gmail.com",
+      "joining_date": "01/04/2026"
+    },
+    {
+      "sno": 7,
+      "name": "Ansh Handa",
+      "designation": "PRS-I (Programmer)",
+      "contact": "9560368998",
+      "email": "anshhandacder@gmail.com",
+      "joining_date": "01/04/2026"
+    },
+    {
+      "sno": 8,
+      "name": "Shiv Shankar",
+      "designation": "PTS-III",
+      "contact": "9540373986",
+      "email": "shivshankar633nohp@gmail.com",
+      "joining_date": "01/04/2026"
+    },
+    {
+      "sno": 9,
+      "name": "Bipin Kumar",
+      "designation": "PTS-III",
+      "contact": "9905558913",
+      "email": "bipincder@gmail.com",
+      "joining_date": "01/04/2026"
+    },
+    {
+      "sno": 10,
+      "name": "Vinay Kumar",
+      "designation": "PTS-III",
+      "contact": "9653286281",
+      "email": "vinay.nodbs.nohp.cder@gmail.com",
+      "joining_date": "01/04/2026"
+    },
+    {
+      "sno": 11,
+      "name": "Aditya Kumar Jha",
+      "designation": "DEO",
+      "contact": "8102621141",
+      "email": "aadityacder@gmail.com",
+      "joining_date": "01/04/2026"
+    },
+    {
+      "sno": 12,
+      "name": "Sakshi Sunariya",
+      "designation": "DEO",
+      "contact": "9650331585",
+      "email": "sakshicder@gmail.com",
+      "joining_date": "01/04/2026"
+    },
+    {
+      "sno": 13,
+      "name": "Lokesh",
+      "designation": "MTS",
+      "contact": "8750614450",
+      "email": "lokeshcder@gmail.com",
+      "joining_date": "01/04/2026"
+    },
+    {
+      "sno": 14,
+      "name": "Ajay",
+      "designation": "MTS",
+      "contact": "9560139529",
+      "email": "ajaycder.nohp@gmail.com",
+      "joining_date": "01/04/2026"
+    },
+    {
+      "sno": 15,
+      "name": "Harsh Meena",
+      "designation": "MTS",
+      "contact": "8791376605",
+      "email": "hmcdernohp3942@gmail.com",
+      "joining_date": "01/04/2026"
+    },
+    {
+      "sno": 16,
+      "name": "Sanjeev Kumar Kushwah",
+      "designation": "MTS",
+      "contact": "9887899673",
+      "email": "sanjivsaini988@gmail.com",
+      "joining_date": "01/04/2026"
+    },
+    {
+      "sno": 17,
+      "name": "Madhusoodan",
+      "designation": "MTS",
+      "contact": "9098624910",
+      "email": "madhusoodan032001@gmail.com",
+      "joining_date": "01/04/2026"
+    },
+    {
+      "sno": 18,
+      "name": "Hariram Kushwah",
+      "designation": "MTS",
+      "contact": "7689984233",
+      "email": "hariramkushwah7689@gmail.com",
+      "joining_date": "01/04/2026"
+    },
+    {
+      "sno": 19,
+      "name": "Dr. Dushyant",
+      "designation": "PRS-III (Social Scientist)",
+      "contact": "9555999697",
+      "email": "drdushyantaiims.cder@gmail.com",
+      "joining_date": "24/08/2026"
+    },
+    {
+      "sno": 20,
+      "name": "Dr. N. Sri Priya",
+      "designation": "PRS-II (Medical)",
+      "contact": "9676365683",
+      "email": "sripriya.cder@gmail.com",
+      "joining_date": "01/09/2026"
+    },
+    {
+      "sno": 21,
+      "name": "Dr. Anudarsh PK",
+      "designation": "PRS-II (Medical)",
+      "contact": "9361413518",
+      "email": "anudarshpkcder@gmail.com",
+      "joining_date": "03/09/2026"
+    },
+    {
+      "sno": 22,
+      "name": "Dr. F. Andlin Sahaya Sowmiya",
+      "designation": "PRS-II (Medical)",
+      "contact": "8637471937",
+      "email": "andlinsahayasowmiyacder@gmail.com",
+      "joining_date": "03/09/2026"
+    },
+    {
+      "sno": 23,
+      "name": "Dr. Sundram Kumar",
+      "designation": "PRS-I (Medical)",
+      "contact": "8076582453",
+      "email": "sundramcder@gmail.com",
+      "joining_date": "21/08/2026"
+    },
+    {
+      "sno": 24,
+      "name": "Dr. Tarun Sharma",
+      "designation": "PRS-I (Medical)",
+      "contact": "7597592535",
+      "email": "tarun.aiimsdelhi@gmail.com",
+      "joining_date": "22/08/2026"
+    },
+    {
+      "sno": 25,
+      "name": "Dr. Srijani Sarkar",
+      "designation": "PRS-I (Medical)",
+      "contact": "7890785114",
+      "email": "sarkar.nohp@gmail.com",
+      "joining_date": "24/08/2026"
+    },
+    {
+      "sno": 26,
+      "name": "Dr. Akshat Thakur",
+      "designation": "PRS-I (Medical)",
+      "contact": "9156166036",
+      "email": "akshat.aiimsdelhi@gmail.com",
+      "joining_date": "24/08/2026"
+    },
+    {
+      "sno": 27,
+      "name": "Dr. Debjyoti Sikder",
+      "designation": "PRS-I (Medical)",
+      "contact": "7896887602",
+      "email": "debjyoti.cder.nohp@gmail.com",
+      "joining_date": "27/08/2026"
+    },
+    {
+      "sno": 28,
+      "name": "Sunayana Sharma",
+      "designation": "PRS-I (Medical)",
+      "contact": "8427140998",
+      "email": "sunayana27cder@gmail.com",
+      "joining_date": "28/08/2026"
+    },
+    {
+      "sno": 29,
+      "name": "Sonaxi Gokhru",
+      "designation": "PRS-I (Medical)",
+      "contact": "7737770250",
+      "email": "sonaxigokhru.cder@gmail.com",
+      "joining_date": "01/09/2026"
+    },
+    {
+      "sno": 30,
+      "name": "Dr. Trupti B. Gawande",
+      "designation": "PRS-I (Medical)",
+      "contact": "7760447169",
+      "email": "trupticder@gmail.com",
+      "joining_date": "01/09/2026"
+    },
+    {
+      "sno": 31,
+      "name": "Dr. Geetanjali",
+      "designation": "PRS-I (Medical)",
+      "contact": "9953968185",
+      "email": "drgeetanjalicder@gmail.com",
+      "joining_date": "01/09/2026"
+    },
+    {
+      "sno": 32,
+      "name": "Naveen Dhyani",
+      "designation": "PRS-I  (Non-Medical)",
+      "contact": "9045986099",
+      "email": "naveencder1@gmail.com",
+      "joining_date": "01/09/2026"
+    },
+    {
+      "sno": 33,
+      "name": "Vani Mendiratta",
+      "designation": "PRS-I Programmer",
+      "contact": "8010903100",
+      "email": "vanicder01@gmail.com",
+      "joining_date": "21/08/2026"
+    },
+    {
+      "sno": 34,
+      "name": "Vandita Srivastava",
+      "designation": "PRS-I (Non-Medical)",
+      "contact": "7985753215",
+      "email": "vandita.cder@gmail.com",
+      "joining_date": "01/09/2026"
+    },
+    {
+      "sno": 35,
+      "name": "Gaurav Kushwah",
+      "designation": "PTS-III",
+      "contact": "7239910238",
+      "email": "gaurav.cder72@gmail.com",
+      "joining_date": "31/08/2026"
+    },
+    {
+      "sno": 36,
+      "name": "Vinay Kumar",
+      "designation": "PTS-III",
+      "contact": "9528358222",
+      "email": "vinaykumarcder@gmail.com",
+      "joining_date": "02/09/2026"
+    },
+    {
+      "sno": 37,
+      "name": "Sameer Shakya",
+      "designation": "PTS-III",
+      "contact": "7838022204",
+      "email": "sameershakyacder@gmail.com",
+      "joining_date": "02/09/2026"
+    },
+    {
+      "sno": 38,
+      "name": "Mohd. Zakir",
+      "designation": "PTS-III",
+      "contact": "7054161604",
+      "email": "mohdzakiraiimscder64@gmail.com",
+      "joining_date": "05/09/2026"
+    },
+    {
+      "sno": 39,
+      "name": "Suraj",
+      "designation": "MTS",
+      "contact": "7210932856",
+      "email": "suraj.cder.kumar.7@gmail.com",
+      "joining_date": "25/08/2026"
+    },
+    {
+      "sno": 40,
+      "name": "Jagvir Singh",
+      "designation": "MTS",
+      "contact": "8800511807",
+      "email": "jagvirsinghcder07@gmail.com",
+      "joining_date": "24/08/2026"
+    },
+    {
+      "sno": 41,
+      "name": "Manish Kumar",
+      "designation": "MTS",
+      "contact": "9717934931",
+      "email": "manish.cder.kumar9@gmail.com",
+      "joining_date": "28/08/2026"
+    },
+    {
+      "sno": 42,
+      "name": "Akhilesh Das",
+      "designation": "MTS",
+      "contact": "9265089744",
+      "email": "akhilesh.cder.das7@gmail.com",
+      "joining_date": "31/08/2026"
+    },
+    {
+      "sno": 43,
+      "name": "Ritik Kumar Mehra",
+      "designation": "MTS",
+      "contact": "7428129429",
+      "email": "ritikcder74@gmail.com",
+      "joining_date": "01/09/2026"
+    },
+    {
+      "sno": 44,
+      "name": "Harender Kumar",
+      "designation": "MTS",
+      "contact": "8708236578",
+      "email": "harender.cder77@gmail.com",
+      "joining_date": "03/09/2026"
+    }
+  ],
+  "leave_records": [
+    {
+      "sno": 1,
+      "name": "Dr. Abhishek Jangra",
+      "designation": "PRS-I (BDS)",
+      "cl_entitled": 8.0,
+      "cl_balance": 5.0,
+      "el_availed_raw": 15.0,
+      "el_balance": 14.0,
+      "rh_entitled": 2.0,
+      "rh_balance": 2.0,
+      "co_balance": 0.0
+    },
+    {
+      "sno": 2,
+      "name": "Dr. Avishek Singh",
+      "designation": "PRS-I (BDS)",
+      "cl_entitled": 8.0,
+      "cl_balance": 5.5,
+      "el_availed_raw": 15.0,
+      "el_balance": 12.0,
+      "rh_entitled": 2.0,
+      "rh_balance": 2.0,
+      "co_balance": 6.0
+    },
+    {
+      "sno": 3,
+      "name": "Dr. Prashant Panchal",
+      "designation": "PRS-I (BDS)",
+      "cl_entitled": 8.0,
+      "cl_balance": 8.0,
+      "el_availed_raw": 15.0,
+      "el_balance": 15.0,
+      "rh_entitled": 2.0,
+      "rh_balance": 2.0,
+      "co_balance": 2.0
+    },
+    {
+      "sno": 4,
+      "name": "Dr. Neha Chaudhary",
+      "designation": "PRS-I (BDS)",
+      "cl_entitled": 8.0,
+      "cl_balance": 7.0,
+      "el_availed_raw": 15.0,
+      "el_balance": 15.0,
+      "rh_entitled": 2.0,
+      "rh_balance": 2.0,
+      "co_balance": 0.0
+    },
+    {
+      "sno": 5,
+      "name": "Dr. Anuj Sharma",
+      "designation": "PRS-I (BDS)",
+      "cl_entitled": 8.0,
+      "cl_balance": 6.0,
+      "el_availed_raw": 15.0,
+      "el_balance": 15.0,
+      "rh_entitled": 2.0,
+      "rh_balance": 1.0,
+      "co_balance": 0.0
+    },
+    {
+      "sno": 6,
+      "name": "Dr. Sushma Verma",
+      "designation": "PRS-I (BDS)",
+      "cl_entitled": 8.0,
+      "cl_balance": 8.0,
+      "el_availed_raw": 15.0,
+      "el_balance": 12.0,
+      "rh_entitled": 2.0,
+      "rh_balance": 2.0,
+      "co_balance": 1.0
+    },
+    {
+      "sno": 7,
+      "name": "Ansh Handa",
+      "designation": "PRS-I (Programmer)",
+      "cl_entitled": 8.0,
+      "cl_balance": 3.0,
+      "el_availed_raw": 15.0,
+      "el_balance": 11.0,
+      "rh_entitled": 2.0,
+      "rh_balance": 1.0,
+      "co_balance": 0.0
+    },
+    {
+      "sno": 8,
+      "name": "Shiv Shankar",
+      "designation": "PTS-III",
+      "cl_entitled": 8.0,
+      "cl_balance": 8.0,
+      "el_availed_raw": 15.0,
+      "el_balance": 15.0,
+      "rh_entitled": 2.0,
+      "rh_balance": 2.0,
+      "co_balance": 5.0
+    },
+    {
+      "sno": 9,
+      "name": "Bipin Kumar",
+      "designation": "PTS-III",
+      "cl_entitled": 8.0,
+      "cl_balance": 8.0,
+      "el_availed_raw": 15.0,
+      "el_balance": 9.0,
+      "rh_entitled": 2.0,
+      "rh_balance": 2.0,
+      "co_balance": 5.0
+    },
+    {
+      "sno": 10,
+      "name": "Vinay Kumar",
+      "designation": "PTS-III",
+      "cl_entitled": 8.0,
+      "cl_balance": 6.5,
+      "el_availed_raw": 15.0,
+      "el_balance": 15.0,
+      "rh_entitled": 2.0,
+      "rh_balance": 1.0,
+      "co_balance": 2.0
+    },
+    {
+      "sno": 11,
+      "name": "Aditya Kumar Jha",
+      "designation": "DEO",
+      "cl_entitled": 8.0,
+      "cl_balance": 5.0,
+      "el_availed_raw": 15.0,
+      "el_balance": 15.0,
+      "rh_entitled": 2.0,
+      "rh_balance": 1.0,
+      "co_balance": 0.0
+    },
+    {
+      "sno": 12,
+      "name": "Sakshi Sunariya",
+      "designation": "DEO",
+      "cl_entitled": 8.0,
+      "cl_balance": 5.5,
+      "el_availed_raw": 15.0,
+      "el_balance": 14.0,
+      "rh_entitled": 2.0,
+      "rh_balance": 2.0,
+      "co_balance": 0.0
+    },
+    {
+      "sno": 13,
+      "name": "Lokesh",
+      "designation": "MTS",
+      "cl_entitled": 8.0,
+      "cl_balance": 4.5,
+      "el_availed_raw": 15.0,
+      "el_balance": 10.0,
+      "rh_entitled": 2.0,
+      "rh_balance": 1.0,
+      "co_balance": 2.0
+    },
+    {
+      "sno": 14,
+      "name": "Ajay",
+      "designation": "MTS",
+      "cl_entitled": 8.0,
+      "cl_balance": 4.5,
+      "el_availed_raw": 15.0,
+      "el_balance": 15.0,
+      "rh_entitled": 2.0,
+      "rh_balance": 2.0,
+      "co_balance": 0.0
+    },
+    {
+      "sno": 15,
+      "name": "Harsh Meena",
+      "designation": "MTS",
+      "cl_entitled": 8.0,
+      "cl_balance": 6.0,
+      "el_availed_raw": 15.0,
+      "el_balance": 15.0,
+      "rh_entitled": 2.0,
+      "rh_balance": 2.0,
+      "co_balance": 7.0
+    },
+    {
+      "sno": 16,
+      "name": "Sanjeev Kumar Kushwah",
+      "designation": "MTS",
+      "cl_entitled": 8.0,
+      "cl_balance": 8.0,
+      "el_availed_raw": 15.0,
+      "el_balance": 15.0,
+      "rh_entitled": 2.0,
+      "rh_balance": 1.0,
+      "co_balance": 3.0
+    },
+    {
+      "sno": 17,
+      "name": "Madhusoodan",
+      "designation": "MTS",
+      "cl_entitled": 8.0,
+      "cl_balance": 6.0,
+      "el_availed_raw": 15.0,
+      "el_balance": 15.0,
+      "rh_entitled": 2.0,
+      "rh_balance": 2.0,
+      "co_balance": 6.0
+    },
+    {
+      "sno": 18,
+      "name": "Hariram Kushwah",
+      "designation": "MTS",
+      "cl_entitled": 8.0,
+      "cl_balance": 4.5,
+      "el_availed_raw": 15.0,
+      "el_balance": 14.0,
+      "rh_entitled": 2.0,
+      "rh_balance": 1.0,
+      "co_balance": 2.0
+    },
+    {
+      "sno": 19,
+      "name": "Dr. Dushyant",
+      "designation": "PRS-III (Social Scientist)",
+      "cl_entitled": 4.5,
+      "cl_balance": 4.5,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 1.0,
+      "co_balance": 1.0
+    },
+    {
+      "sno": 20,
+      "name": "Dr. N. Sri Priya",
+      "designation": "PRS-II (Medical)",
+      "cl_entitled": 4.5,
+      "cl_balance": 4.5,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 1.0,
+      "co_balance": 2.0
+    },
+    {
+      "sno": 21,
+      "name": "Dr. Anudarsh PK",
+      "designation": "PRS-II (Medical)",
+      "cl_entitled": 4.5,
+      "cl_balance": 4.5,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 1.0,
+      "co_balance": 2.0
+    },
+    {
+      "sno": 22,
+      "name": "Dr. F. Andlin Sahaya Sowmiya",
+      "designation": "PRS-II (Medical)",
+      "cl_entitled": 4.5,
+      "cl_balance": 4.5,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 1.0,
+      "co_balance": 2.0
+    },
+    {
+      "sno": 23,
+      "name": "Dr. Sundram Kumar",
+      "designation": "PRS-I (Medical)",
+      "cl_entitled": 4.5,
+      "cl_balance": 4.5,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 1.0,
+      "co_balance": 2.0
+    },
+    {
+      "sno": 24,
+      "name": "Dr. Tarun Sharma",
+      "designation": "PRS-I (Medical)",
+      "cl_entitled": 4.5,
+      "cl_balance": 4.5,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 1.0,
+      "co_balance": 1.0
+    },
+    {
+      "sno": 25,
+      "name": "Dr. Srijani Sarkar",
+      "designation": "PRS-I (Medical)",
+      "cl_entitled": 4.5,
+      "cl_balance": 3.0,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 0.0,
+      "co_balance": 2.0
+    },
+    {
+      "sno": 26,
+      "name": "Dr. Akshat Thakur",
+      "designation": "PRS-I (Medical)",
+      "cl_entitled": 4.5,
+      "cl_balance": 4.5,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 1.0,
+      "co_balance": 2.0
+    },
+    {
+      "sno": 27,
+      "name": "Dr. Debjyoti Sikder",
+      "designation": "PRS-I (Medical)",
+      "cl_entitled": 4.5,
+      "cl_balance": 4.5,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 1.0,
+      "co_balance": 2.0
+    },
+    {
+      "sno": 28,
+      "name": "Dr. Sunayana Sharma",
+      "designation": "PRS-I (Medical)",
+      "cl_entitled": 4.5,
+      "cl_balance": 4.5,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 1.0,
+      "co_balance": 0.0
+    },
+    {
+      "sno": 29,
+      "name": "Dr. Sonaxi Gokhru",
+      "designation": "PRS-I (Medical)",
+      "cl_entitled": 4.5,
+      "cl_balance": 4.5,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 1.0,
+      "co_balance": 2.0
+    },
+    {
+      "sno": 30,
+      "name": "Dr. Trupti B. Gawande",
+      "designation": "PRS-I (Medical)",
+      "cl_entitled": 4.5,
+      "cl_balance": 4.5,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 1.0,
+      "co_balance": 2.0
+    },
+    {
+      "sno": 31,
+      "name": "Dr. Geetanjali",
+      "designation": "PRS-I (Medical)",
+      "cl_entitled": 4.5,
+      "cl_balance": 4.5,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 1.0,
+      "co_balance": 0.0
+    },
+    {
+      "sno": 32,
+      "name": "Naveen Dhyani",
+      "designation": "PRS-I  (Non-Medical)",
+      "cl_entitled": 4.5,
+      "cl_balance": 4.5,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 1.0,
+      "co_balance": 0.0
+    },
+    {
+      "sno": 33,
+      "name": "Vani Mendiratta",
+      "designation": "PRS-I Programmer",
+      "cl_entitled": 4.5,
+      "cl_balance": 3.0,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 1.0,
+      "co_balance": 0.0
+    },
+    {
+      "sno": 34,
+      "name": "Vandita Srivastava",
+      "designation": "PRS-I (Non-Medical)",
+      "cl_entitled": 4.5,
+      "cl_balance": 4.0,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 1.0,
+      "co_balance": 0.0
+    },
+    {
+      "sno": 35,
+      "name": "Gaurav Kushwah",
+      "designation": "PTS-III",
+      "cl_entitled": 4.5,
+      "cl_balance": 4.5,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 1.0,
+      "co_balance": 5.0
+    },
+    {
+      "sno": 36,
+      "name": "Vinay Kumar II",
+      "designation": "PTS-III",
+      "cl_entitled": 4.5,
+      "cl_balance": 4.5,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 1.0,
+      "co_balance": 0.0
+    },
+    {
+      "sno": 37,
+      "name": "Sameer Shakya",
+      "designation": "PTS-III",
+      "cl_entitled": 4.5,
+      "cl_balance": 4.5,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 1.0,
+      "co_balance": 4.0
+    },
+    {
+      "sno": 38,
+      "name": "Mohd. Zakir",
+      "designation": "PTS-III",
+      "cl_entitled": 4.5,
+      "cl_balance": 4.5,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 1.0,
+      "co_balance": 0.0
+    },
+    {
+      "sno": 39,
+      "name": "Suraj",
+      "designation": "MTS",
+      "cl_entitled": 4.5,
+      "cl_balance": 4.5,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 1.0,
+      "co_balance": 5.0
+    },
+    {
+      "sno": 40,
+      "name": "Jagvir Singh",
+      "designation": "MTS",
+      "cl_entitled": 4.5,
+      "cl_balance": 3.5,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 1.0,
+      "co_balance": 0.0
+    },
+    {
+      "sno": 41,
+      "name": "Manish Kumar",
+      "designation": "MTS",
+      "cl_entitled": 4.5,
+      "cl_balance": 4.5,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 1.0,
+      "co_balance": 5.0
+    },
+    {
+      "sno": 42,
+      "name": "Akhilesh Das",
+      "designation": "MTS",
+      "cl_entitled": 4.5,
+      "cl_balance": 4.5,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 1.0,
+      "co_balance": 1.0
+    },
+    {
+      "sno": 43,
+      "name": "Ritik Kumar Mehra",
+      "designation": "MTS",
+      "cl_entitled": 4.5,
+      "cl_balance": 4.5,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 1.0,
+      "co_balance": 2.0
+    },
+    {
+      "sno": 44,
+      "name": "Harender Kumar",
+      "designation": "MTS",
+      "cl_entitled": 4.5,
+      "cl_balance": 4.5,
+      "el_availed_raw": 2.5,
+      "el_balance": 2.5,
+      "rh_entitled": 1.0,
+      "rh_balance": 1.0,
+      "co_balance": 0.0
+    }
+  ]
+}

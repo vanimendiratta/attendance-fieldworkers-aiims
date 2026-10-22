@@ -14,7 +14,9 @@
 
 'use strict';
 
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
+// Return PostgreSQL DATE columns (OID 1082) as exact 'YYYY-MM-DD' strings to prevent timezone shifts
+types.setTypeParser(1082, (val) => val);
 const crypto   = require('crypto');
 const path     = require('path');
 
@@ -107,6 +109,16 @@ async function ensureSchema() {
             booking_ref TEXT,
             hotel_lat NUMERIC(10, 7),
             hotel_lng NUMERIC(10, 7),
+            hotel_accuracy NUMERIC(10, 2),
+            gps_capture_timestamp TIMESTAMPTZ,
+            verification_status TEXT DEFAULT 'PENDING',
+            verification_timestamp TIMESTAMPTZ,
+            verified_place_name TEXT,
+            verified_address TEXT,
+            distance_meters NUMERIC(10, 2),
+            place_id TEXT,
+            verification_notes TEXT,
+            is_manual_override BOOLEAN DEFAULT FALSE,
             stay_status TEXT DEFAULT 'ACTIVE',
             notes TEXT,
             created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -134,6 +146,33 @@ async function ensureSchema() {
           CREATE INDEX IF NOT EXISTS idx_employee_leaves_status ON employee_leaves(status);
 
           ALTER TABLE auth_rate_limits ALTER COLUMN timestamp TYPE BIGINT;
+
+          ALTER TABLE employees ADD COLUMN IF NOT EXISTS dob DATE;
+          ALTER TABLE employees ADD COLUMN IF NOT EXISTS updated_at TEXT;
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_email_lower ON employees (LOWER(TRIM(email)));
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_phone_unique ON employees (phone) WHERE phone IS NOT NULL AND phone != '';
+
+          CREATE TABLE IF NOT EXISTS geofences (
+            id TEXT PRIMARY KEY,
+            employer_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            geofence_type TEXT NOT NULL DEFAULT 'WORKPLACE',
+            latitude NUMERIC(10, 7) NOT NULL,
+            longitude NUMERIC(10, 7) NOT NULL,
+            radius_meters NUMERIC(10, 2) NOT NULL DEFAULT 150.00,
+            policy TEXT NOT NULL DEFAULT 'ALLOW_WITH_FLAG',
+            address TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+          );
+          CREATE INDEX IF NOT EXISTS idx_geofences_employer ON geofences (employer_id, is_active);
+          CREATE INDEX IF NOT EXISTS idx_geofences_type ON geofences (employer_id, geofence_type, is_active);
+
+          UPDATE employees SET state = 'Delhi' WHERE state IS NOT NULL AND (state ILIKE '%delhi%' OR state ILIKE '%nct%' OR state = 'DL');
+          UPDATE attendance SET state = 'Delhi' WHERE state IS NOT NULL AND (state ILIKE '%delhi%' OR state ILIKE '%nct%' OR state = 'DL');
+          UPDATE teams SET state = 'Delhi' WHERE state IS NOT NULL AND (state ILIKE '%delhi%' OR state ILIKE '%nct%' OR state = 'DL');
+          UPDATE external_sync_records SET state = 'Delhi' WHERE state ILIKE '%delhi%' OR state ILIKE '%nct%' OR state = 'DL';
         `);
         schemaEnsured = true;
       } catch (err) {
@@ -306,6 +345,19 @@ async function initSeed() {
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )
+  `);
+
+  await query(`
+    ALTER TABLE employee_hotel_stays ADD COLUMN IF NOT EXISTS hotel_accuracy NUMERIC(10, 2);
+    ALTER TABLE employee_hotel_stays ADD COLUMN IF NOT EXISTS gps_capture_timestamp TIMESTAMPTZ;
+    ALTER TABLE employee_hotel_stays ADD COLUMN IF NOT EXISTS verification_status TEXT DEFAULT 'PENDING';
+    ALTER TABLE employee_hotel_stays ADD COLUMN IF NOT EXISTS verification_timestamp TIMESTAMPTZ;
+    ALTER TABLE employee_hotel_stays ADD COLUMN IF NOT EXISTS verified_place_name TEXT;
+    ALTER TABLE employee_hotel_stays ADD COLUMN IF NOT EXISTS verified_address TEXT;
+    ALTER TABLE employee_hotel_stays ADD COLUMN IF NOT EXISTS distance_meters NUMERIC(10, 2);
+    ALTER TABLE employee_hotel_stays ADD COLUMN IF NOT EXISTS place_id TEXT;
+    ALTER TABLE employee_hotel_stays ADD COLUMN IF NOT EXISTS verification_notes TEXT;
+    ALTER TABLE employee_hotel_stays ADD COLUMN IF NOT EXISTS is_manual_override BOOLEAN DEFAULT FALSE;
   `);
 
   // Ensure attendance table has location classification & hotel stay columns

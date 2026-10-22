@@ -3,6 +3,10 @@ node_modules/
 *.db-journal
 *.db-shm
 *.db-wal
+*.sqlite
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
 .env
 .DS_Store
 *.log
