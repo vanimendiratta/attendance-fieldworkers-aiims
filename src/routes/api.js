@@ -316,7 +316,7 @@ router.post('/auth/employee/login', authService.rateLimitMiddleware(authService.
       sessionType: 'employee', userId: employee.id, employerId: employer.id, clientIp, userAgent
     });
 
-    res.setHeader('Set-Cookie', `attendance_session=${session.token}; Path=/; HttpOnly; SameSite=Lax${isProductionEnvironment() ? '; Secure' : ''}`);
+    res.setHeader('Set-Cookie', `attendance_session=${session.token}; Path=/; Max-Age=1800; HttpOnly; SameSite=Lax${isProductionEnvironment() ? '; Secure' : ''}`);
 
     const { password: _, pin: __, face_descriptor: ___, face_photo: ____, ...safeEmployee } = employee;
     const { admin_password: _____, ...safeEmployer } = employer;
@@ -658,7 +658,7 @@ router.post('/auth/employee/signup', authService.rateLimitMiddleware(authService
       sessionType: 'employee', userId: safeEmployee.id, employerId: safeEmployee.employer_id, clientIp, userAgent
     });
 
-    res.setHeader('Set-Cookie', `attendance_session=${session.token}; Path=/; HttpOnly; SameSite=Lax${isProductionEnvironment() ? '; Secure' : ''}`);
+    res.setHeader('Set-Cookie', `attendance_session=${session.token}; Path=/; Max-Age=1800; HttpOnly; SameSite=Lax${isProductionEnvironment() ? '; Secure' : ''}`);
     res.status(201).json({
       success: true,
       token: session.token,
@@ -723,7 +723,7 @@ router.post('/auth/employee/face-login', authService.rateLimitMiddleware(authSer
       sessionType: 'employee', userId: matchedEmp.id, employerId: matchedEmp.employer_id, clientIp, userAgent
     });
 
-    res.setHeader('Set-Cookie', `attendance_session=${session.token}; Path=/; HttpOnly; SameSite=Lax${isProductionEnvironment() ? '; Secure' : ''}`);
+    res.setHeader('Set-Cookie', `attendance_session=${session.token}; Path=/; Max-Age=1800; HttpOnly; SameSite=Lax${isProductionEnvironment() ? '; Secure' : ''}`);
     const { admin_password: _, ...safeEmployer } = employer;
     res.json({ success: true, token: session.token, message: `Face recognized! Welcome back, ${matchedEmp.name}.`, employee: matchedEmp, employer: safeEmployer, confidence: matchResult.confidence });
   } catch (err) { return handleApiError(res, req, err); }
@@ -814,7 +814,7 @@ router.post('/auth/employer/login', authService.rateLimitMiddleware(authService.
       sessionType: 'admin', userId: employer.admin_username, employerId: employer.id, clientIp, userAgent
     });
 
-    res.setHeader('Set-Cookie', `attendance_session=${session.token}; Path=/; HttpOnly; SameSite=Lax${isProductionEnvironment() ? '; Secure' : ''}`);
+    res.setHeader('Set-Cookie', `attendance_session=${session.token}; Path=/; Max-Age=1800; HttpOnly; SameSite=Lax${isProductionEnvironment() ? '; Secure' : ''}`);
     const { admin_password: _, ...safeEmployer } = employer;
     res.json({
       success: true, token: session.token,
@@ -826,7 +826,7 @@ router.post('/auth/employer/login', authService.rateLimitMiddleware(authService.
 });
 
 // ---------------------------------------------------------------------------
-// 6. Logout
+// 6. Logout & Session Status Check
 // ---------------------------------------------------------------------------
 router.post('/auth/logout', async (req, res) => {
   try {
@@ -836,7 +836,7 @@ router.post('/auth/logout', async (req, res) => {
 
     let employeeId = null, employerId = null;
     if (token) {
-      const session = await sessionService.getSession(token);
+      const session = await sessionService.getSession(token, { touch: false });
       if (session) {
         employeeId = session.session_type === 'employee' ? session.user_id : null;
         employerId = session.employer_id;
@@ -846,8 +846,20 @@ router.post('/auth/logout', async (req, res) => {
 
     attendanceService.logAudit('USER_LOGOUT', employeeId || null, employerId || null, 'LOGOUT', 'SUCCESS', {}, clientIp, userAgent);
     res.setHeader('Set-Cookie', 'attendance_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
     res.json({ success: true, message: 'Logged out successfully.' });
   } catch (err) { res.status(500).json({ success: false, error: isProductionEnvironment() ? 'Internal server error' : err.message }); }
+});
+
+router.get('/auth/session/status', requireAuthenticatedUser, (req, res) => {
+  res.json({
+    success: true,
+    authenticated: true,
+    sessionType: req.userType,
+    userId: req.session.user_id,
+    expiresAt: req.session.expires_at,
+    lastActivity: req.session.last_activity
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -30,6 +30,7 @@ router.get('/system/info', (req, res) => {
 
 // --- Auth Routes ---
 router.post('/auth/login', loginRateLimiter, authController.login);
+router.post('/auth/logout', requireAuth, authController.logout);
 router.get('/auth/me', requireAuth, authController.getMe);
 router.post('/auth/change-password', requireAuth, authController.changePassword);
 router.post('/auth/admin-reset-password', requireAdmin, authController.adminResetPassword);

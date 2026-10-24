@@ -59,9 +59,12 @@ const API = {
       if (!res.ok) {
         if (res.status === 401) {
           this.clearAuth();
+          if (window.SessionTimeoutManager) {
+            window.SessionTimeoutManager.showExpiredModal('Your session expired due to inactivity. Please log in again.');
+          }
           window.location.hash = '#/login';
           window.dispatchEvent(new Event('auth_changed'));
-          throw new Error(data.error || 'Session expired. Please log in again.');
+          throw new Error(data.error || 'Session expired due to inactivity. Please log in again.');
         }
         throw new Error(data.error || (data.details ? data.details.join(', ') : 'Request failed'));
       }

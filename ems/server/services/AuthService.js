@@ -11,7 +11,77 @@ if (!JWT_SECRET) {
   console.error('[EMS_AUTH_CRITICAL] JWT_SECRET environment variable is not set. Token generation will fail until configured.');
 }
 
+const INACTIVITY_TIMEOUT_MS = parseInt(process.env.SESSION_INACTIVITY_TIMEOUT_MS, 10) || (30 * 60 * 1000); // 30 minutes
+
 class AuthService {
+  static get INACTIVITY_TIMEOUT_MS() {
+    return INACTIVITY_TIMEOUT_MS;
+  }
+
+  /**
+   * Validate a server-side session with 30-minute inactivity check.
+   */
+  static validateSession(sessionId, options = {}) {
+    if (!sessionId || typeof sessionId !== 'string') return null;
+    try {
+      const session = db.prepare('SELECT * FROM user_sessions WHERE id = ? AND is_revoked = 0').get(sessionId);
+      if (!session) return null;
+
+      const now = options.currentTime ? new Date(options.currentTime) : new Date();
+      const touch = options.touch !== false;
+
+      const lastActivityTime = new Date(session.last_activity_at).getTime();
+      const expiresAtTime     = new Date(session.expires_at).getTime();
+      const nowTime           = now.getTime();
+      const elapsed           = nowTime - lastActivityTime;
+
+      // Fail closed: Inactivity timeout reached (>= 30 mins) or absolute expiry reached
+      if (elapsed >= INACTIVITY_TIMEOUT_MS || nowTime >= expiresAtTime) {
+        db.prepare('UPDATE user_sessions SET is_revoked = 1 WHERE id = ?').run(sessionId);
+        return null;
+      }
+
+      if (touch) {
+        const extendedExpires = new Date(nowTime + INACTIVITY_TIMEOUT_MS);
+        const isoNow = now.toISOString();
+        const isoExp = extendedExpires.toISOString();
+        db.prepare('UPDATE user_sessions SET last_activity_at = ?, expires_at = ? WHERE id = ?').run(isoNow, isoExp, sessionId);
+        session.last_activity_at = isoNow;
+        session.expires_at       = isoExp;
+      }
+
+      return session;
+    } catch (err) {
+      console.error('[EMS_AUTH] Session validation database error (failing closed):', err.message);
+      return null;
+    }
+  }
+
+  /**
+   * Revoke a server-side session.
+   */
+  static revokeSession(sessionId) {
+    if (!sessionId) return false;
+    try {
+      const res = db.prepare('UPDATE user_sessions SET is_revoked = 1 WHERE id = ?').run(sessionId);
+      return res.changes > 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /**
+   * Revoke all active sessions for a user (e.g. on password change).
+   */
+  static revokeAllUserSessions(userId) {
+    if (!userId) return 0;
+    try {
+      const res = db.prepare('UPDATE user_sessions SET is_revoked = 1 WHERE user_id = ? AND is_revoked = 0').run(userId);
+      return res.changes;
+    } catch (_) {
+      return 0;
+    }
+  }
   /**
    * Generate a random cryptographically secure temporary password
    */
@@ -141,20 +211,45 @@ class AuthService {
       throw new Error('JWT_SECRET is not configured on the server.');
     }
 
+    const sessionId = crypto.randomBytes(24).toString('hex');
+    const now = reqMeta.currentTime ? new Date(reqMeta.currentTime) : new Date();
+    const expiresAt = new Date(now.getTime() + INACTIVITY_TIMEOUT_MS);
+
+    try {
+      db.prepare(`
+        INSERT INTO user_sessions (id, user_id, employee_id, created_at, last_activity_at, expires_at, is_revoked, client_ip, user_agent)
+        VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
+      `).run(
+        sessionId,
+        user.id,
+        user.employee_id,
+        now.toISOString(),
+        now.toISOString(),
+        expiresAt.toISOString(),
+        reqMeta.ip || null,
+        reqMeta.userAgent || null
+      );
+    } catch (dbErr) {
+      console.error('[EMS_AUTH] Failed to record user_sessions record:', dbErr.message);
+      throw new Error('Failed to establish secure session.');
+    }
+
     const token = jwt.sign(
       {
         id: user.id,
         employee_id: user.employee_id,
         email: user.email,
         role: user.role,
+        sessionId,
         must_change_password: user.must_change_password
       },
       secret,
-      { expiresIn: '24h' }
+      { expiresIn: '30m' }
     );
 
     return {
       token,
+      sessionId,
       user: {
         id: user.id,
         employee_id: user.employee_id,

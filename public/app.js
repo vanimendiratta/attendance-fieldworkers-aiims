@@ -545,14 +545,27 @@ if (DOM.btnSyncOfficeToCurrent) {
 /**
  * Authentication Setup
  */
-function checkSession() {
+async function checkSession() {
   const saved = localStorage.getItem('apex_employee_session');
   if (saved) {
     try {
       const session = JSON.parse(saved);
       if (session && session.employee && session.token) {
-        setupLoggedInState(session);
-        return;
+        // Validate with server before revealing protected dashboard
+        try {
+          const res = await fetch('/api/auth/session/status', {
+            headers: {
+              'Authorization': `Bearer ${session.token}`,
+              'X-Session-Token': session.token,
+              'X-Background-Request': 'true',
+              'X-Session-Touch': 'false'
+            }
+          });
+          if (res.ok) {
+            setupLoggedInState(session);
+            return;
+          }
+        } catch (_) {}
       }
     } catch (e) {}
   }
@@ -1527,6 +1540,10 @@ DOM.btnLogoutEmployee.addEventListener('click', async () => {
   clearInterval(state.workTimerInterval);
   clearInterval(state.breakTimerInterval);
 
+  if (window.SessionTimeoutManager) {
+    window.SessionTimeoutManager.expireNow('logout');
+  }
+
   DOM.loginModal.classList.add('active');
   switchAuthTab('signin');
   switchSignInMethod('creds');
@@ -1542,6 +1559,24 @@ function setupLoggedInState(sessionData) {
   if (sessionData.employer) {
     state.orgConfig = sessionData.employer;
     updateDistanceDisplay();
+  }
+
+  if (window.SessionTimeoutManager) {
+    window.SessionTimeoutManager.init({
+      appType: 'employee',
+      onExpired: function() {
+        localStorage.removeItem('apex_employee_session');
+        state.sessionToken = null;
+        state.currentEmployee = null;
+        state.activeSession = null;
+        clearInterval(state.workTimerInterval);
+        clearInterval(state.breakTimerInterval);
+        DOM.loginModal.classList.add('active');
+        switchAuthTab('signin');
+        switchSignInMethod('creds');
+      }
+    });
+    window.SessionTimeoutManager.resetTimer();
   }
 
   DOM.headerAvatar.textContent = sessionData.employee.name.charAt(0);

@@ -46,23 +46,43 @@ function extractToken(req) {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers: Session touch & test clock options, Cache-Control headers
+// ---------------------------------------------------------------------------
+function getSessionOptions(req) {
+  const isBackground = req.headers['x-background-request'] === 'true' || req.headers['x-session-touch'] === 'false';
+  const currentTime = (process.env.NODE_ENV !== 'production' && req.headers['x-test-current-time'])
+    ? req.headers['x-test-current-time']
+    : null;
+  return { touch: !isBackground, currentTime };
+}
+
+function setNoCacheHeaders(res) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+}
+
+// ---------------------------------------------------------------------------
 // Middleware: Require an active Employee session
 // ---------------------------------------------------------------------------
 async function requireAuthenticatedEmployee(req, res, next) {
+  setNoCacheHeaders(res);
   try {
     const token = extractToken(req);
     if (!token) {
       return res.status(401).json({
         success: false,
-        error: 'Authentication required. Please sign in with your employee credentials.'
+        error: 'Authentication required. Please sign in with your employee credentials.',
+        code: 'AUTH_REQUIRED'
       });
     }
 
-    const session = await sessionService.getSession(token);
+    const session = await sessionService.getSession(token, getSessionOptions(req));
     if (!session) {
       return res.status(401).json({
         success: false,
-        error: 'Session invalid or expired. Please sign in again.'
+        error: 'Session expired due to inactivity or invalid. Please sign in again.',
+        code: 'SESSION_EXPIRED'
       });
     }
 
@@ -104,7 +124,12 @@ async function requireAuthenticatedEmployee(req, res, next) {
     req.employerId = employee.employer_id;
     next();
   } catch (err) {
-    next(err);
+    console.error('[AUTH_MIDDLEWARE] Employee authentication failure (failing closed):', err.message);
+    return res.status(401).json({
+      success: false,
+      error: 'Session verification failed. Please sign in again.',
+      code: 'SESSION_ERROR'
+    });
   }
 }
 
@@ -112,20 +137,23 @@ async function requireAuthenticatedEmployee(req, res, next) {
 // Middleware: Require an active Employer Administrator session
 // ---------------------------------------------------------------------------
 async function requireAuthenticatedAdmin(req, res, next) {
+  setNoCacheHeaders(res);
   try {
     const token = extractToken(req);
     if (!token) {
       return res.status(401).json({
         success: false,
-        error: 'Administrator authentication required. Please sign in to the operations portal.'
+        error: 'Administrator authentication required. Please sign in to the operations portal.',
+        code: 'AUTH_REQUIRED'
       });
     }
 
-    const session = await sessionService.getSession(token);
+    const session = await sessionService.getSession(token, getSessionOptions(req));
     if (!session) {
       return res.status(401).json({
         success: false,
-        error: 'Admin session invalid or expired. Please sign in again.'
+        error: 'Admin session expired due to inactivity or invalid. Please sign in again.',
+        code: 'SESSION_EXPIRED'
       });
     }
 
@@ -161,7 +189,12 @@ async function requireAuthenticatedAdmin(req, res, next) {
     req.employerId = employer.id;
     next();
   } catch (err) {
-    next(err);
+    console.error('[AUTH_MIDDLEWARE] Admin authentication failure (failing closed):', err.message);
+    return res.status(401).json({
+      success: false,
+      error: 'Session verification failed. Please sign in again.',
+      code: 'SESSION_ERROR'
+    });
   }
 }
 
@@ -169,15 +202,24 @@ async function requireAuthenticatedAdmin(req, res, next) {
 // Middleware: Require either an authenticated Employee OR Administrator session
 // ---------------------------------------------------------------------------
 async function requireAuthenticatedUser(req, res, next) {
+  setNoCacheHeaders(res);
   try {
     const token = extractToken(req);
     if (!token) {
-      return res.status(401).json({ success: false, error: 'Authentication required.' });
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required.',
+        code: 'AUTH_REQUIRED'
+      });
     }
 
-    const session = await sessionService.getSession(token);
+    const session = await sessionService.getSession(token, getSessionOptions(req));
     if (!session) {
-      return res.status(401).json({ success: false, error: 'Session invalid or expired. Please sign in again.' });
+      return res.status(401).json({
+        success: false,
+        error: 'Session expired due to inactivity or invalid. Please sign in again.',
+        code: 'SESSION_EXPIRED'
+      });
     }
 
     if (session.session_type === 'employee') {
@@ -214,7 +256,12 @@ async function requireAuthenticatedUser(req, res, next) {
 
     return res.status(403).json({ success: false, error: 'Forbidden: Invalid session type.' });
   } catch (err) {
-    next(err);
+    console.error('[AUTH_MIDDLEWARE] User authentication failure (failing closed):', err.message);
+    return res.status(401).json({
+      success: false,
+      error: 'Session verification failed. Please sign in again.',
+      code: 'SESSION_ERROR'
+    });
   }
 }
 

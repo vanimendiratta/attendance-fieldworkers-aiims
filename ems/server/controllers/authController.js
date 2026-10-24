@@ -84,3 +84,25 @@ exports.adminResetPassword = (req, res) => {
     res.status(400).json({ error: err.message });
   }
 };
+
+exports.logout = (req, res) => {
+  try {
+    if (req.sessionId) {
+      AuthService.revokeSession(req.sessionId);
+    }
+    const authHeader = req.headers.authorization || req.headers['x-session-token'] || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : (authHeader || req.cookies?.token || req.cookies?.attendance_session);
+    if (token) {
+      let sessionService = null;
+      try { sessionService = require('../../../src/services/session_service'); } catch (_) {}
+      if (sessionService) {
+        sessionService.revokeSession(token).catch(() => {});
+      }
+    }
+    res.setHeader('Set-Cookie', 'token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    res.json({ success: true, message: 'Logged out successfully.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};

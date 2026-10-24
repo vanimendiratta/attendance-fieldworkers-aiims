@@ -22,6 +22,17 @@ const App = {
         const res = await API.get('/auth/me');
         this.state.user = res.user;
         API.setUser(res.user);
+        if (window.SessionTimeoutManager) {
+          window.SessionTimeoutManager.init({
+            appType: 'ems',
+            onExpired: () => {
+              API.clearAuth();
+              this.state.user = null;
+              this.handleRouting();
+            }
+          });
+          window.SessionTimeoutManager.resetTimer();
+        }
       } catch (e) {
         API.clearAuth();
         this.state.user = null;
@@ -350,6 +361,18 @@ const App = {
       API.setUser(res.user);
       this.state.user = res.user;
 
+      if (window.SessionTimeoutManager) {
+        window.SessionTimeoutManager.init({
+          appType: 'ems',
+          onExpired: () => {
+            API.clearAuth();
+            this.state.user = null;
+            this.handleRouting();
+          }
+        });
+        window.SessionTimeoutManager.resetTimer();
+      }
+
       Toast.success(`Welcome back, ${res.user.name}!`);
 
       if (res.user.must_change_password) {
@@ -363,10 +386,16 @@ const App = {
     }
   },
 
-  logout() {
+  async logout() {
+    try {
+      await API.post('/auth/logout', {});
+    } catch (_) {}
     API.clearAuth();
     this.state.user = null;
     this.state.currentRoute = 'login';
+    if (window.SessionTimeoutManager) {
+      window.SessionTimeoutManager.expireNow('logout');
+    }
     if (window.location.hash !== '#/login') {
       window.location.hash = '#/login';
     }

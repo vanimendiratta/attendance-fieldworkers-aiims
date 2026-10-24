@@ -161,7 +161,7 @@ window.addEventListener('hashchange', handleHashRoute);
 /**
  * Authentication Setup
  */
-function initAuth() {
+async function initAuth() {
   const now = new Date();
   const dateEl = document.getElementById('greetingDate');
   if (dateEl) {
@@ -172,10 +172,27 @@ function initAuth() {
   if (saved) {
     try {
       currentEmployerSession = JSON.parse(saved);
-      setupLoggedInAdmin(currentEmployerSession);
-      return;
+      if (currentEmployerSession && currentEmployerSession.token) {
+        // Validate with server before revealing admin portal
+        try {
+          const res = await fetch('/api/auth/session/status', {
+            headers: {
+              'Authorization': `Bearer ${currentEmployerSession.token}`,
+              'X-Session-Token': currentEmployerSession.token,
+              'X-Background-Request': 'true',
+              'X-Session-Touch': 'false'
+            }
+          });
+          if (res.ok) {
+            setupLoggedInAdmin(currentEmployerSession);
+            return;
+          }
+        } catch (_) {}
+      }
     } catch (e) {}
   }
+  localStorage.removeItem('apex_employer_admin_session');
+  currentEmployerSession = null;
   showAdminLoginModal();
 }
 
@@ -255,6 +272,11 @@ async function handleAdminLogout() {
 
   localStorage.removeItem('apex_employer_admin_session');
   currentEmployerSession = null;
+
+  if (window.SessionTimeoutManager) {
+    window.SessionTimeoutManager.expireNow('logout');
+  }
+
   showAdminLoginModal();
 }
 
@@ -267,6 +289,18 @@ function setupLoggedInAdmin(session) {
   const now = new Date();
   document.getElementById('greetingHeadline').textContent = `Good ${getTimeOfDay()}, ${session.admin_username}`;
   document.getElementById('greetingDate').textContent = `${now.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · ${session.employer.office_name}`;
+
+  if (window.SessionTimeoutManager) {
+    window.SessionTimeoutManager.init({
+      appType: 'admin',
+      onExpired: function() {
+        localStorage.removeItem('apex_employer_admin_session');
+        currentEmployerSession = null;
+        showAdminLoginModal('Your session expired due to inactivity. Please sign in again.');
+      }
+    });
+    window.SessionTimeoutManager.resetTimer();
+  }
 
   loadDashboardData();
   loadSettings();
@@ -307,7 +341,11 @@ async function adminFetch(url, options = {}) {
     console.warn('[AUTH] Admin session invalid or expired on backend. Requiring sign-in.');
     localStorage.removeItem('apex_employer_admin_session');
     currentEmployerSession = null;
-    showAdminLoginModal('Session expired. Please sign in with your administrator credentials.');
+    if (window.SessionTimeoutManager) {
+      window.SessionTimeoutManager.showExpiredModal('Your administrator session expired due to inactivity. Please log in again.');
+    } else {
+      showAdminLoginModal('Your session expired due to inactivity. Please sign in again.');
+    }
     throw new Error('401 Unauthorized');
   }
   return res;

@@ -187,6 +187,12 @@ async function ensureSchema() {
 // ---------------------------------------------------------------------------
 // Public query helper — use for all non-transactional queries
 // ---------------------------------------------------------------------------
+let testQueryProvider = null;
+
+function setTestQueryProvider(fn) {
+  testQueryProvider = fn;
+}
+
 /**
  * Execute a parameterized SQL query.
  * @param {string} text      — SQL string using $1, $2 … placeholders
@@ -194,6 +200,10 @@ async function ensureSchema() {
  * @returns {Promise<import('pg').QueryResult>}
  */
 async function query(text, params) {
+  if (testQueryProvider) {
+    return testQueryProvider(text, params);
+  }
+
   if (!DATABASE_URL) {
     const missingErr = new Error('[DB] DATABASE_URL environment variable is not configured. Please set DATABASE_URL in Vercel project environment variables.');
     console.error(missingErr.message);
@@ -429,4 +439,4 @@ if (!isServerless) {
 // ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
-module.exports = { query, pool, initSeed, closePool };
+module.exports = { query, pool, initSeed, closePool, setTestQueryProvider };

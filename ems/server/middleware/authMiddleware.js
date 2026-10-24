@@ -17,30 +17,58 @@ if (!JWT_SECRET) {
   console.error('[EMS_AUTH_CRITICAL] JWT_SECRET environment variable is not set. All EMS authentication will fail until it is configured.');
 }
 
+const AuthService = require('../services/AuthService');
+
+function setNoCacheHeaders(res) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+}
+
 async function requireAuth(req, res, next) {
+  setNoCacheHeaders(res);
   const authHeader = req.headers.authorization || req.headers['x-session-token'] || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : (authHeader || req.cookies?.token || req.cookies?.attendance_session);
 
   if (!token) {
-    return res.status(401).json({ error: 'Unauthorized: Authentication token is required.' });
+    return res.status(401).json({ error: 'Unauthorized: Authentication token is required.', code: 'AUTH_REQUIRED' });
   }
+
+  const isBackground = req.headers['x-background-request'] === 'true' || req.headers['x-session-touch'] === 'false';
+  const currentTime = (process.env.NODE_ENV !== 'production' && req.headers['x-test-current-time'])
+    ? req.headers['x-test-current-time']
+    : null;
 
   // 1. Try native EMS JWT
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
+    if (!decoded || !decoded.sessionId) {
+      return res.status(401).json({ error: 'Unauthorized: Invalid session token format.', code: 'SESSION_EXPIRED' });
+    }
+
+    const session = AuthService.validateSession(decoded.sessionId, { touch: !isBackground, currentTime });
+    if (!session) {
+      return res.status(401).json({ error: 'Unauthorized: Session expired due to inactivity. Please log in again.', code: 'SESSION_EXPIRED' });
+    }
+
     const user = db.prepare('SELECT id, employee_id, email, role, must_change_password, is_active FROM users WHERE id = ?').get(decoded.id);
     if (user && user.is_active === 1) {
       req.user = user;
+      req.sessionId = decoded.sessionId;
       return next();
     }
+    return res.status(401).json({ error: 'Unauthorized: User account is inactive or not found.', code: 'USER_INACTIVE' });
   } catch (err) {
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: 'Unauthorized: Session expired due to inactivity or token expiration.', code: 'SESSION_EXPIRED' });
+    }
     // Not an EMS JWT, proceed to check parent session
   }
 
   // 2. Try parent attendance session via sessionService (PostgreSQL / async)
   if (sessionService) {
     try {
-      const session = await sessionService.getSession(token);
+      const session = await sessionService.getSession(token, { touch: !isBackground, currentTime });
       if (session) {
         if (session.session_type === 'admin') {
           let adminUser = db.prepare("SELECT * FROM users WHERE role = 'ADMIN'").get();
@@ -55,6 +83,7 @@ async function requireAuth(req, res, next) {
             role: 'ADMIN',
             is_active: 1
           };
+          req.session = session;
           return next();
         } else if (session.session_type === 'employee') {
           let parentEmp = null;
@@ -80,6 +109,7 @@ async function requireAuth(req, res, next) {
           if (parentEmp && (parentEmp.is_active === 1 || parentEmp.is_active === true)) {
             const empSync = reconcileOrSyncEmployee(parentEmp);
             req.user = empSync;
+            req.session = session;
             return next();
           }
         }
@@ -94,9 +124,27 @@ async function requireAuth(req, res, next) {
     const Database = require('better-sqlite3');
     const attDbPath = path.resolve(__dirname, '../../../attendance.db');
     if (fs.existsSync(attDbPath)) {
-      const attDb = new Database(attDbPath, { readonly: true });
+      const attDb = new Database(attDbPath);
       const localSession = attDb.prepare('SELECT * FROM sessions WHERE id = ? AND is_revoked = 0').get(token);
       if (localSession) {
+        const now = currentTime ? new Date(currentTime) : new Date();
+        const nowTime = now.getTime();
+        const lastActTime = new Date(localSession.last_activity).getTime();
+        const expTime = new Date(localSession.expires_at).getTime();
+        const elapsed = nowTime - lastActTime;
+        const timeoutMs = 30 * 60 * 1000;
+
+        if (elapsed >= timeoutMs || nowTime >= expTime) {
+          attDb.prepare('UPDATE sessions SET is_revoked = 1 WHERE id = ?').run(token);
+          attDb.close();
+          return res.status(401).json({ error: 'Unauthorized: Session expired due to inactivity. Please log in again.', code: 'SESSION_EXPIRED' });
+        }
+
+        if (!isBackground) {
+          const extendedExpires = new Date(nowTime + timeoutMs).toISOString();
+          attDb.prepare('UPDATE sessions SET last_activity = ?, expires_at = ? WHERE id = ?').run(now.toISOString(), extendedExpires, token);
+        }
+
         if (localSession.session_type === 'admin') {
           attDb.close();
           let adminUser = db.prepare("SELECT * FROM users WHERE role = 'ADMIN'").get();
@@ -111,6 +159,7 @@ async function requireAuth(req, res, next) {
             role: 'ADMIN',
             is_active: 1
           };
+          req.session = localSession;
           return next();
         } else if (localSession.session_type === 'employee') {
           const parentEmp = attDb.prepare('SELECT * FROM employees WHERE id = ?').get(localSession.user_id);
@@ -118,6 +167,7 @@ async function requireAuth(req, res, next) {
           if (parentEmp && parentEmp.is_active) {
             const empSync = reconcileOrSyncEmployee(parentEmp);
             req.user = empSync;
+            req.session = localSession;
             return next();
           }
         }
@@ -127,7 +177,7 @@ async function requireAuth(req, res, next) {
     }
   } catch (_) {}
 
-  return res.status(401).json({ error: 'Unauthorized: Invalid or expired token.' });
+  return res.status(401).json({ error: 'Unauthorized: Invalid or expired token.', code: 'SESSION_EXPIRED' });
 }
 
 function reconcileOrSyncEmployee(parentEmp) {
