@@ -61,16 +61,70 @@ async function createSession({
   const timeoutMs = INACTIVITY_TIMEOUT_MS;
   const expiresAt = new Date(now.getTime() + timeoutMs);
 
+// Clean up any expired or inactive sessions for this user/session type
+try {
+  const inactivityCutoff = new Date(now.getTime() - INACTIVITY_TIMEOUT_MS).toISOString();
   await executeQuery(
-    `INSERT INTO sessions
-       (id, session_type, user_id, employer_id, created_at, expires_at, last_activity, is_revoked, client_ip, user_agent)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,0,$8,$9)`,
-    [
-      token, sessionType, userId, employerId,
-      now.toISOString(), expiresAt.toISOString(), now.toISOString(),
-      clientIp, userAgent
-    ]
+    `UPDATE sessions
+       SET is_revoked = 1
+     WHERE user_id = $1 AND session_type = $2
+       AND is_revoked = 0
+       AND (expires_at <= $3 OR last_activity <= $4)`,
+    [userId, sessionType, now.toISOString(), inactivityCutoff]
   );
+} catch (err) {
+  console.error('[SESSION_SERVICE] Failed to clean up expired sessions:', err.message);
+  throw err;
+}
+
+// After cleanup, check for any still‑active session (not revoked, not expired, recent activity)
+try {
+  const result = await executeQuery(
+    `SELECT 1 FROM sessions
+       WHERE user_id = $1 AND session_type = $2
+         AND is_revoked = 0
+         AND expires_at > $3
+         AND last_activity > $4
+       LIMIT 1`,
+    [userId, sessionType, now.toISOString(), new Date(now.getTime() - INACTIVITY_TIMEOUT_MS).toISOString()]
+  );
+  if (result && result.rowCount && result.rowCount > 0) {
+    const activeErr = new Error('This account is already logged in on another device. Please log out from that device before logging in here.');
+    activeErr.code = 'ACTIVE_SESSION_EXISTS';
+    activeErr.status = 409;
+    throw activeErr;
+  }
+} catch (err) {
+  if (err.code === 'ACTIVE_SESSION_EXISTS') {
+    throw err; // propagate expected active session error
+  }
+  console.error('[SESSION_SERVICE] Failed to check existing active sessions:', err.message);
+  throw err;
+}
+
+  try {
+    await executeQuery(
+      `INSERT INTO sessions
+         (id, session_type, user_id, employer_id, created_at, expires_at, last_activity, is_revoked, client_ip, user_agent)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,0,$8,$9)`,
+      [
+        token, sessionType, userId, employerId,
+        now.toISOString(), expiresAt.toISOString(), now.toISOString(),
+        clientIp, userAgent
+      ]
+    );
+  } catch (err) {
+    // 23505 = PostgreSQL unique_violation, or SQLite / generic UNIQUE constraint error
+    const isUniqueViolation = err.code === '23505' ||
+      (err.message && (err.message.includes('UNIQUE constraint') || err.message.includes('unique constraint') || err.message.includes('idx_sessions_single_active_user')));
+    if (isUniqueViolation) {
+      const activeErr = new Error('This account is already logged in on another device. Please log out from that device before logging in here.');
+      activeErr.code = 'ACTIVE_SESSION_EXISTS';
+      activeErr.status = 409;
+      throw activeErr;
+    }
+    throw err;
+  }
 
   return {
     token,
@@ -193,12 +247,70 @@ async function cleanupExpiredSessions() {
   } catch (_) {}
 }
 
+/**
+ * Return the single active (non-revoked, non-expired) session for a given user identity,
+ * or null if no active session exists.
+ *
+ * Used by login routes to enforce the single-active-session policy.
+ * The caller must treat a non-null return as "this account is already logged in".
+ *
+ * @param {string} userId        - The user_id stored in the sessions table (employee ID or admin username)
+ * @param {string} sessionType   - 'employee' | 'admin'
+ * @param {Date|string} [now]    - Optional test clock injection
+ * @returns {Promise<Object|null>}
+ */
+async function getActiveSessionForUser(userId, sessionType, optionsOrNow = null) {
+  if (!userId || !sessionType) return null;
+  let parsedDate;
+  if (optionsOrNow && typeof optionsOrNow === 'object' && !(optionsOrNow instanceof Date)) {
+    parsedDate = optionsOrNow.currentTime ? new Date(optionsOrNow.currentTime) : new Date();
+  } else if (optionsOrNow) {
+    parsedDate = new Date(optionsOrNow);
+  } else {
+    parsedDate = new Date();
+  }
+  const nowTime = parsedDate.getTime();
+  try {
+    const result = await executeQuery(
+      `SELECT id, created_at, last_activity, expires_at, client_ip
+         FROM sessions
+        WHERE user_id = $1
+          AND session_type = $2
+          AND is_revoked = 0
+          AND expires_at > $3
+        ORDER BY last_activity DESC
+        LIMIT 1`,
+      [userId, sessionType, new Date(nowTime).toISOString()]
+    );
+    if (!result || !result.rows || result.rows.length === 0) return null;
+
+    const row = result.rows[0];
+    const lastActivityTime = new Date(row.last_activity).getTime();
+    const elapsed = nowTime - lastActivityTime;
+
+    // Must also pass the inactivity check — an expired-by-inactivity but not-yet-revoked
+    // session should not block a new login.
+    if (elapsed >= INACTIVITY_TIMEOUT_MS) {
+      // Mark it revoked opportunistically (best effort)
+      await revokeSession(row.id).catch(() => {});
+      return null;
+    }
+
+    return row;
+  } catch (err) {
+    // Fail open on lookup error: do not block login if the session check itself fails.
+    console.error('[SESSION_SERVICE] getActiveSessionForUser lookup error (failing open):', err.message);
+    return null;
+  }
+}
+
 module.exports = {
   createSession,
   getSession,
   revokeSession,
   revokeUserSessions,
   cleanupExpiredSessions,
+  getActiveSessionForUser,
   setQueryProvider,
   INACTIVITY_TIMEOUT_MS,
   DEFAULT_EMPLOYEE_TTL_HOURS,

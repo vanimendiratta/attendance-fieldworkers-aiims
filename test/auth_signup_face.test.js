@@ -146,6 +146,12 @@ async function runTests() {
   assert.strictEqual(resDuplicate.status, 409, 'Must reject duplicate email with 409');
   console.log('   ✓ Blocked duplicate email registration');
 
+  // End the session created by signup before testing password login.
+  const signupLogout = await apiRequest('POST', '/api/auth/logout', {}, {
+    Authorization: `Bearer ${resSignup.data.token}`
+  });
+  assert.strictEqual(signupLogout.status, 200, 'Signup session logout should succeed');
+
   // Test 4: Sign In with ID & Password
   console.log('\n4. Testing Sign In with ID & Password for newly registered employee...');
   const resLoginCreds = await apiRequest('POST', '/api/auth/employee/login', {
@@ -156,6 +162,12 @@ async function runTests() {
   assert.strictEqual(resLoginCreds.status, 200);
   assert.strictEqual(resLoginCreds.data.employee.id, newEmpId);
   console.log('   ✓ Successful ID & Password login');
+
+  // End the password-login session before testing face login.
+  const passwordLogout = await apiRequest('POST', '/api/auth/logout', {}, {
+    Authorization: `Bearer ${resLoginCreds.data.token}`
+  });
+  assert.strictEqual(passwordLogout.status, 200, 'Password-login session logout should succeed');
 
   // Test 5: Screenlock Face Recognition Login with Enrolled Vector
   console.log('\n5. Testing Mobile Screenlock Face Recognition Login (Matching Vector)...');
@@ -182,6 +194,12 @@ async function runTests() {
   assert.strictEqual(resFaceFail.data.success, false);
   console.log('   ✓ Unknown face correctly blocked: ' + resFaceFail.data.error);
 
+  // End the matching-face session before testing quick unlock.
+  const faceLogout = await apiRequest('POST', '/api/auth/logout', {}, {
+    Authorization: `Bearer ${resFaceLogin.data.token}`
+  });
+  assert.strictEqual(faceLogout.status, 200, 'Face-login session logout should succeed');
+
   // Test 7: Face Recognition Quick-Unlock with registered employee
   console.log('\n7. Testing Face Unlock with registered employee...');
   const resDemoFace = await apiRequest('POST', '/api/auth/employee/face-login', {
@@ -191,6 +209,12 @@ async function runTests() {
   assert.strictEqual(resDemoFace.status, 200);
   assert.strictEqual(resDemoFace.data.employee.name, 'Dr. Samir Sengupta');
   console.log(`   ✓ Face Unlock verified: Welcome, ${resDemoFace.data.employee.name}`);
+
+  // Revoke the final session so repeated test runs do not leave it active.
+  const demoFaceLogout = await apiRequest('POST', '/api/auth/logout', {}, {
+    Authorization: `Bearer ${resDemoFace.data.token}`
+  });
+  assert.strictEqual(demoFaceLogout.status, 200, 'Demo face-login session logout should succeed');
 
   console.log('\n===============================================================');
   console.log('🎉 ALL SIGN UP & SCREENLOCK FACE RECOGNITION TESTS PASSED 100%!');

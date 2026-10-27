@@ -173,6 +173,10 @@ async function ensureSchema() {
           UPDATE attendance SET state = 'Delhi' WHERE state IS NOT NULL AND (state ILIKE '%delhi%' OR state ILIKE '%nct%' OR state = 'DL');
           UPDATE teams SET state = 'Delhi' WHERE state IS NOT NULL AND (state ILIKE '%delhi%' OR state ILIKE '%nct%' OR state = 'DL');
           UPDATE external_sync_records SET state = 'Delhi' WHERE state ILIKE '%delhi%' OR state ILIKE '%nct%' OR state = 'DL';
+
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_single_active_user
+          ON sessions (user_id, session_type)
+          WHERE is_revoked = 0;
         `);
         schemaEnsured = true;
       } catch (err) {

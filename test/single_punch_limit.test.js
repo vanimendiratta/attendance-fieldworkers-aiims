@@ -12,6 +12,7 @@ const http = require('http');
 const db = require('../src/db/database');
 
 const app = require('../server');
+const testHelper = require('./test_helper');
 const sessionService = require('../src/services/session_service');
 
 let BASE_URL = process.env.TEST_BASE_URL || '';
@@ -94,6 +95,7 @@ async function runSinglePunchLimitTests() {
 
   await db.query("DELETE FROM breaks WHERE attendance_id IN (SELECT id FROM attendance WHERE employee_id = $1)", [testEmpId]);
   await db.query("DELETE FROM attendance WHERE employee_id = $1", [testEmpId]);
+  await db.query("DELETE FROM sessions WHERE user_id = $1", [testEmpId]);
 
   const session = await sessionService.createSession({
     sessionType: 'employee',

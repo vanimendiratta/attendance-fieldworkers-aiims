@@ -23,6 +23,7 @@ const biometricService = require('../src/services/biometric_service');
 const attendanceService = require('../src/services/attendance_service');
 
 const sessionService = require('../src/services/session_service');
+const testHelper = require('./test_helper');
 
 let PORT = 0;
 let BASE_URL = '';
@@ -85,6 +86,8 @@ async function runSecurityVerification() {
     // Ensure test credentials
     const empHash = authService.hashPassword('Password@123');
     await db.query('UPDATE employees SET password = $1 WHERE id = $2', [empHash, 'EMP-1001']);
+  // Ensure no lingering sessions from previous runs
+  await testHelper.cleanTestData();
     const adminHash = authService.hashPassword('Aiims@123');
     await db.query('UPDATE organizations SET admin_password = $1 WHERE id = $2', [adminHash, 'ORG-001']);
 

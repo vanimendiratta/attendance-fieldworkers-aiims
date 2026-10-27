@@ -462,6 +462,8 @@ async function runTests() {
 
     // D5. Employee ID stability across login and profile updates
     const stableEmpId = createdIds[1];
+    // Clean up active session created during signup for this test employee
+    await query('DELETE FROM sessions WHERE user_id = $1', [stableEmpId]);
     // Login check
     const loginCheckRes = await makeRequest('POST', '/api/auth/employee/login', {}, {
       employer_id: 'ORG-001',
@@ -471,6 +473,8 @@ async function runTests() {
     assert.strictEqual(loginCheckRes.status, 200);
     assert.strictEqual(loginCheckRes.data.employee.id, stableEmpId, 'ID must not change on login');
 
+    // Clean up any lingering admin session before admin login
+    await query("DELETE FROM sessions WHERE user_id = 'aiims_admin'");
     // Profile update check (as admin)
     const adminLogin = await makeRequest('POST', '/api/auth/employer/login', {}, {
       employer_id: 'ORG-001',
@@ -523,6 +527,7 @@ async function runTests() {
     const priyaId = regRes.data.employee.id;
 
     // E1. Login with Generated Employee ID
+    await query('DELETE FROM sessions WHERE user_id = $1', [priyaId]);
     const loginById = await makeRequest('POST', '/api/auth/employee/login', {}, {
       employer_id: 'ORG-001',
       login_id: priyaId,
@@ -534,6 +539,7 @@ async function runTests() {
     markPassed('Login with newly generated Employee ID succeeds securely');
 
     // E2. Login with Normalized Email
+    await query('DELETE FROM sessions WHERE user_id = $1', [priyaId]);
     const loginByEmail = await makeRequest('POST', '/api/auth/employee/login', {}, {
       employer_id: 'ORG-001',
       login_id: testRegEmail.toUpperCase(), // Test case-insensitivity
@@ -544,6 +550,7 @@ async function runTests() {
     markPassed('Login with case-insensitive email succeeds');
 
     // E3. Login with Mobile Number
+    await query('DELETE FROM sessions WHERE user_id = $1', [priyaId]);
     const loginByPhone = await makeRequest('POST', '/api/auth/employee/login', {}, {
       employer_id: 'ORG-001',
       login_id: '+91 98555-00001', // Test formatting resilience
@@ -559,7 +566,7 @@ async function runTests() {
     markPassed('Unauthenticated request to protected endpoint is rejected with 401');
 
     // E5. Employee role restrictions enforced (Employee cannot access admin endpoints)
-    const priyaToken = loginById.data.token;
+    const priyaToken = loginByPhone.data.token;
     const employeeForbiddenRes = await makeRequest('GET', '/api/admin/audit-logs', {
       'Authorization': `Bearer ${priyaToken}`,
       'x-employer-id': 'ORG-001'

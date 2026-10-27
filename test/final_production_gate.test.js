@@ -209,6 +209,17 @@ async function runGateTests() {
   assert.strictEqual(loginRes.body.employee.face_photo, undefined, 'face_photo must NEVER be in login response');
   assert.strictEqual(loginRes.body.employee.password, undefined, 'password must NEVER be in login response');
   console.log('  ✓ Employee login response strictly excludes face_descriptor, face_photo, and password');
+// Ensure any stale admin session is revoked before attempting admin login
+
+  // Ensure any stale admin session is revoked before attempting a fresh admin login
+  await db.query(
+    `UPDATE sessions SET is_revoked = 1
+       WHERE user_id = $1
+         AND session_type = $2
+         AND employer_id = $3
+         AND is_revoked = 0`,
+    ['aiims_admin', 'admin', 'ORG-001']
+  );
 
   // Authenticate as Employer Admin to obtain real server-side session token for protected admin endpoints
   const adminLoginRes = await request('POST', '/api/auth/employer/login', {

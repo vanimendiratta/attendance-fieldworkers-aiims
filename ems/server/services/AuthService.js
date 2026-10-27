@@ -211,9 +211,26 @@ class AuthService {
       throw new Error('JWT_SECRET is not configured on the server.');
     }
 
-    const sessionId = crypto.randomBytes(24).toString('hex');
-    const now = reqMeta.currentTime ? new Date(reqMeta.currentTime) : new Date();
-    const expiresAt = new Date(now.getTime() + INACTIVITY_TIMEOUT_MS);
+// Single-Active-Session Policy: reject new login if the account is already actively logged in.
+const existingSession = db.prepare(`
+  SELECT id, last_activity_at, expires_at FROM user_sessions
+   WHERE user_id = ? AND is_revoked = 0 AND expires_at > ?
+   ORDER BY last_activity_at DESC LIMIT 1
+`).get(user.id, new Date().toISOString());
+if (existingSession) {
+  const elapsed = new Date().getTime() - new Date(existingSession.last_activity_at).getTime();
+  if (elapsed < INACTIVITY_TIMEOUT_MS) {
+    const err = new Error('This account is already logged in on another device. Please log out from that device before logging in here.');
+    err.code = 'ACTIVE_SESSION_EXISTS';
+    throw err;
+  }
+  // Revoke stale session
+  db.prepare('UPDATE user_sessions SET is_revoked = 1 WHERE id = ?').run(existingSession.id);
+}
+
+const sessionId = crypto.randomBytes(24).toString('hex');
+const now = reqMeta.currentTime ? new Date(reqMeta.currentTime) : new Date();
+const expiresAt = new Date(now.getTime() + INACTIVITY_TIMEOUT_MS);
 
     try {
       db.prepare(`
@@ -230,6 +247,11 @@ class AuthService {
         reqMeta.userAgent || null
       );
     } catch (dbErr) {
+      if (dbErr.code === 'SQLITE_CONSTRAINT_UNIQUE' || (dbErr.message && dbErr.message.includes('UNIQUE constraint'))) {
+        const activeErr = new Error('This account is already logged in on another device. Please log out from that device before logging in here.');
+        activeErr.code = 'ACTIVE_SESSION_EXISTS';
+        throw activeErr;
+      }
       console.error('[EMS_AUTH] Failed to record user_sessions record:', dbErr.message);
       throw new Error('Failed to establish secure session.');
     }

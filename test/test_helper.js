@@ -123,7 +123,13 @@ async function applySchema() {
     const migration5Sql = fs.readFileSync(migration5Path, 'utf8');
     await pool.query(migration5Sql);
   }
-  console.log('✓ Applied schema migrations (001, 002, 003, 004, 005) to test database');
+
+  const migration6Path = path.join(__dirname, '../supabase/migrations/006_single_active_session_index.sql');
+  if (fs.existsSync(migration6Path)) {
+    const migration6Sql = fs.readFileSync(migration6Path, 'utf8');
+    await pool.query(migration6Sql);
+  }
+  console.log('✓ Applied schema migrations (001, 002, 003, 004, 005, 006) to test database');
 }
 
 /**
@@ -132,6 +138,9 @@ async function applySchema() {
 async function seedTestData() {
   const orgId = 'ORG-001';
   const hashedAdmin = hashPassword('TestAdmin@12345');
+
+  // Ensure no lingering sessions for test users before seeding data
+  await query("DELETE FROM sessions WHERE user_id LIKE 'EMP-%' OR user_id LIKE '%admin%'");
 
   await query(
     `INSERT INTO organizations (
@@ -186,6 +195,8 @@ async function cleanTestData() {
   await query("DELETE FROM breaks WHERE attendance_id IN (SELECT id FROM attendance WHERE employee_id LIKE 'TEST_%' OR employee_id = 'EMP-1001')");
   await query("DELETE FROM attendance WHERE employee_id LIKE 'TEST_%' OR employee_id = 'EMP-1001'");
   await query("DELETE FROM auth_rate_limits");
+  // Clean up test-owned sessions for all test identities (employees and admins)
+  await query("DELETE FROM sessions WHERE user_id LIKE 'EMP-%' OR user_id LIKE '%admin%'");
 }
 
 /**

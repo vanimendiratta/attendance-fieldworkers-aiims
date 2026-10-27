@@ -21,7 +21,11 @@ const fs = require('fs');
 const path = require('path');
 const db = require('../src/db/database');
 const authService = require('../src/services/auth_service');
+const testHelper = require('./test_helper');
 const sessionService = require('../src/services/session_service');
+
+
+
 
 function request(method, urlPath, body = null, headers = {}, customPort = null) {
   return new Promise((resolve, reject) => {
@@ -58,6 +62,7 @@ function request(method, urlPath, body = null, headers = {}, customPort = null) 
 }
 
 async function runSecurityRemediationTests() {
+  await testHelper.cleanTestData();
   console.log('===============================================================');
   console.log('🛡️ RUNNING COMPREHENSIVE SECURITY REMEDIATION TEST SUITE');
   console.log('===============================================================');
@@ -90,6 +95,7 @@ async function runSecurityRemediationTests() {
     const org1 = org1Res.rows[0];
     const org1Hash = authService.hashPassword('Aiims@123');
     await db.query('UPDATE organizations SET admin_password = $1 WHERE id = $2', [org1Hash, 'ORG-001']);
+
     let org2Res = await db.query('SELECT * FROM organizations WHERE id = $1', ['ORG-002']);
     let org2 = org2Res.rows[0];
     const org2Hash = authService.hashPassword('Password@123');
@@ -106,6 +112,7 @@ async function runSecurityRemediationTests() {
     assert(org1 && org2, 'Organizations ORG-001 and ORG-002 must exist');
 
     // Create valid sessions directly or via login
+    await testHelper.cleanTestData();
     const empLoginRes = await request('POST', '/api/auth/employee/login', {
       employer_id: 'ORG-001',
       employee_id: 'EMP-1001',

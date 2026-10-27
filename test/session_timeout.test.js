@@ -453,7 +453,10 @@ async function runAllTests() {
       currentTime: T0
     });
 
-    const { req, res } = createMockReqRes({ token: session.token });
+    const { req, res } = createMockReqRes({
+      token: session.token,
+      headers: { 'x-test-current-time': T0.toISOString() }
+    });
     let nextCalled = false;
     await requireAuthenticatedEmployee(req, res, () => { nextCalled = true; });
 

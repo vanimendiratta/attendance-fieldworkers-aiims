@@ -11,6 +11,7 @@ const teamService = require('../src/services/team_service');
 
 const app = require('../server');
 const sessionService = require('../src/services/session_service');
+const testHelper = require('./test_helper');
 
 let BASE_URL = process.env.TEST_BASE_URL || '';
 let serverInstance = null;
@@ -70,6 +71,7 @@ function apiRequest(method, path, body = null, headers = {}) {
 
 async function runStateDistrictTeamTests() {
   if (!BASE_URL) {
+    await testHelper.cleanTestData();
     serverInstance = app.listen(0);
     const port = serverInstance.address().port;
     BASE_URL = `http://localhost:${port}`;

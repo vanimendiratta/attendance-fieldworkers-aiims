@@ -236,6 +236,13 @@ async function handleAdminLogin(e) {
       data = { success: false, error: `Server error (${res.status}): Please check backend service.` };
     }
 
+    // Explicit handling for single‑active‑session conflict (HTTP 409)
+    if (res.status === 409 && data.code === 'ACTIVE_SESSION_EXISTS') {
+      errorEl.textContent = data.error || 'This account is already logged in elsewhere.';
+      errorEl.style.display = 'block';
+      return;
+    }
+
     if (!data.success) {
       errorEl.textContent = data.error || 'Authentication failed.';
       errorEl.style.display = 'block';

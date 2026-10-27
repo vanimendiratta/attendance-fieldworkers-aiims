@@ -33,6 +33,13 @@ function isProductionEnvironment() {
 }
 
 function handleApiError(res, req, err, defaultMsg = 'Internal server error') {
+  if (err && (err.code === 'ACTIVE_SESSION_EXISTS' || err.status === 409)) {
+    return res.status(409).json({
+      success: false,
+      code: 'ACTIVE_SESSION_EXISTS',
+      error: err.message || 'This account is already logged in on another device. Please log out from that device before logging in here.'
+    });
+  }
   const safeMsg = (err && err.message) ? String(err.message) : (typeof err === 'string' ? err : defaultMsg);
   console.error(`[API ERROR ${req.method} ${req.originalUrl || req.url}]:`, safeMsg);
   return res.status(500).json({ success: false, error: safeMsg });
@@ -311,6 +318,16 @@ router.post('/auth/employee/login', authService.rateLimitMiddleware(authService.
     }
 
     attendanceService.logAudit('EMPLOYEE_LOGIN_SUCCESS', employee.id, employer.id, 'EMPLOYEE_LOGIN', 'SUCCESS', {}, clientIp, userAgent);
+
+    // Single-Active-Session Policy: reject new login if the account is already actively logged in.
+    const existingSession = await sessionService.getActiveSessionForUser(employee.id, 'employee');
+    if (existingSession) {
+      return res.status(409).json({
+        success: false,
+        code: 'ACTIVE_SESSION_EXISTS',
+        error: 'This account is already logged in on another device. Please log out from that device before logging in here.'
+      });
+    }
 
     const session = await sessionService.createSession({
       sessionType: 'employee', userId: employee.id, employerId: employer.id, clientIp, userAgent
@@ -654,6 +671,17 @@ router.post('/auth/employee/signup', authService.rateLimitMiddleware(authService
     const { password: _, pin: __, face_descriptor: ___, ...safeEmployee } = createdEmployee;
     const { admin_password: ____, ...safeEmployer } = employer;
 
+    // Single-Active-Session Policy: newly registered employee cannot have a prior session,
+    // but guard defensively in case of duplicate signup attempts.
+    const existingSignupSession = await sessionService.getActiveSessionForUser(safeEmployee.id, 'employee');
+    if (existingSignupSession) {
+      return res.status(409).json({
+        success: false,
+        code: 'ACTIVE_SESSION_EXISTS',
+        error: 'This account is already logged in on another device. Please log out from that device before logging in here.'
+      });
+    }
+
     const session = await sessionService.createSession({
       sessionType: 'employee', userId: safeEmployee.id, employerId: safeEmployee.employer_id, clientIp, userAgent
     });
@@ -718,6 +746,16 @@ router.post('/auth/employee/face-login', authService.rateLimitMiddleware(authSer
     const employer = employerRes.rows[0];
 
     attendanceService.logAudit('EMPLOYEE_FACE_LOGIN_SUCCESS', matchedEmp.id, matchedEmp.employer_id, 'FACE_UNLOCK', 'SUCCESS', { confidence: matchResult.confidence }, clientIp, userAgent);
+
+    // Single-Active-Session Policy: reject face login if employee already has an active session.
+    const existingFaceSession = await sessionService.getActiveSessionForUser(matchedEmp.id, 'employee');
+    if (existingFaceSession) {
+      return res.status(409).json({
+        success: false,
+        code: 'ACTIVE_SESSION_EXISTS',
+        error: 'This account is already logged in on another device. Please log out from that device before logging in here.'
+      });
+    }
 
     const session = await sessionService.createSession({
       sessionType: 'employee', userId: matchedEmp.id, employerId: matchedEmp.employer_id, clientIp, userAgent
@@ -809,6 +847,16 @@ router.post('/auth/employer/login', authService.rateLimitMiddleware(authService.
     }
 
     attendanceService.logAudit('ADMIN_LOGIN_SUCCESS', null, employer_id, 'EMPLOYER_LOGIN', 'SUCCESS', { admin_username }, clientIp, userAgent);
+
+    // Single-Active-Session Policy: reject admin login if an active admin session already exists.
+    const existingAdminSession = await sessionService.getActiveSessionForUser(employer.admin_username, 'admin');
+    if (existingAdminSession) {
+      return res.status(409).json({
+        success: false,
+        code: 'ACTIVE_SESSION_EXISTS',
+        error: 'This administrator account is already logged in on another device. Please log out from that device before logging in here.'
+      });
+    }
 
     const session = await sessionService.createSession({
       sessionType: 'admin', userId: employer.admin_username, employerId: employer.id, clientIp, userAgent

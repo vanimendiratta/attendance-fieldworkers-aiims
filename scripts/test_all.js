@@ -33,6 +33,9 @@ const suites = [
   { name: 'CSV Exports, Timesheet Fix & Team-Wise Attendance',       cmd: 'node test/csv_and_timesheet_export.test.js',          requiresDb: false },
   { name: 'EMS Integration & Leave Governance Engine',              cmd: 'node test/ems_integration.test.js',                   requiresDb: false },
   { name: 'EMS Post-Integration Security Verification (26 Tests)', cmd: 'node test/ems_security_verification.test.js',          requiresDb: false },
+  { name: 'Secure 30-Minute Session Inactivity Timeout (15 Tests)', cmd: 'node test/session_timeout.test.js',                  requiresDb: true },
+  { name: 'Single Active Session Policy Across App & EMS (8 Tests)',cmd: 'node test/single_active_session.test.js',             requiresDb: false },
+  { name: 'Single Active Session Atomic Concurrency (10 Tests)',    cmd: 'node test/single_active_session_concurrency.test.js', requiresDb: true },
 ];
 
 console.log('===============================================================');
@@ -49,6 +52,7 @@ if (!HAS_DB) {
 
 let passed  = 0;
 let skipped = 0;
+let failed = 0;
 let idx     = 0;
 
 for (const suite of suites) {
@@ -68,17 +72,24 @@ for (const suite of suites) {
     passed++;
   } catch (err) {
     console.log('❌ FAILED');
-    console.error(err.stdout ? err.stdout.toString() : err.message);
-    process.exit(1);
+    // Suite identification and exit status
+    console.error(`Suite: ${label}`);
+    if (err.status !== undefined) console.error(`Exit code: ${err.status}`);
+    // Print both stdout and stderr if available for better diagnostics
+    if (err.stdout) console.error('STDOUT:', err.stdout.toString());
+    if (err.stderr) console.error('STDERR:', err.stderr.toString());
+    if (!err.stdout && !err.stderr) console.error(err.message);
+    failed++;
+    continue;
   }
 }
 
 console.log('\n===============================================================');
-if (skipped > 0) {
-  console.log(`🎉 ${passed} PASSED  |  ${skipped} SKIPPED (requires PostgreSQL)  |  0 FAILED`);
-  console.log(`   Set TEST_DATABASE_URL to run the full suite against a local DB.`);
+console.log(`🎉 ${passed} PASSED  |  ${skipped} SKIPPED (requires PostgreSQL)  |  ${failed} FAILED`);
+if (failed > 0) {
+  console.log('===============================================================\n');
+  process.exit(1);
 } else {
-  console.log(`🎉 ALL ${passed}/${suites.length} TEST SUITES PASSED 100% WITH ZERO ERRORS!`);
+  console.log('===============================================================\n');
+  process.exit(0);
 }
-console.log('===============================================================\n');
-process.exit(0);

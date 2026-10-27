@@ -19,6 +19,7 @@ const path = require('path');
 const testHelper = require('./test_helper');
 const authService = require('../src/services/auth_service');
 const sessionService = require('../src/services/session_service');
+
 const { closePool } = require('../src/db/database');
 const app = require('../server');
 
@@ -66,7 +67,9 @@ async function runAuditTests() {
   console.log('===============================================================\n');
 
   await testHelper.applySchema();
+  await testHelper.cleanTestData();
   await testHelper.seedTestData();
+  await testHelper.cleanTestData();
 
   await new Promise((resolve) => {
     server = app.listen(0, '127.0.0.1', () => {
@@ -113,6 +116,7 @@ async function runAuditTests() {
     // Test 2: Admin Password Sanitization in set-current-office
     // -------------------------------------------------------------------------
     console.log('[Test 2] Admin Password Sanitization in set-current-office');
+    await testHelper.cleanTestData();
     const adminSession = await sessionService.createSession({
       sessionType: 'admin',
       userId: 'aiims_admin',

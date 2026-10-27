@@ -17,6 +17,13 @@ exports.login = (req, res) => {
     const authResult = AuthService.authenticate(identifier, password, reqMeta);
     res.json(authResult);
   } catch (err) {
+    if (err.code === 'ACTIVE_SESSION_EXISTS') {
+      return res.status(409).json({
+        success: false,
+        code: 'ACTIVE_SESSION_EXISTS',
+        error: err.message
+      });
+    }
     res.status(401).json({ error: err.message });
   }
 };
