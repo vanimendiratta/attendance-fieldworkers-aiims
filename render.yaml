@@ -3,7 +3,7 @@ services:
     name: attendance-fieldworkers-aiims
     env: node
     plan: free
-    buildCommand: npm install
+    buildCommand: npm install && cd ems && npm install
     startCommand: node server.js
     healthCheckPath: /api/organizations
     disk:

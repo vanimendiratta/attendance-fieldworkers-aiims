@@ -80,9 +80,13 @@ try {
   console.warn('[SERVER] EMS Database startup warning:', emsDbErr.message);
 }
 
-// API routes
-const emsApiRouter = require('./ems/server/routes/api');
-app.use('/api/ems', emsApiRouter);
+// API routes — EMS sub-module (graceful degradation if native deps unavailable)
+try {
+  const emsApiRouter = require('./ems/server/routes/api');
+  app.use('/api/ems', emsApiRouter);
+} catch (emsRouterErr) {
+  console.warn('[SERVER] EMS API router could not be loaded (EMS features disabled):', emsRouterErr.message);
+}
 app.use('/api', apiRouter);
 
 // Fallback to employee portal
