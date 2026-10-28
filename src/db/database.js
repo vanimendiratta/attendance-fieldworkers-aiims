@@ -72,117 +72,135 @@ async function ensureSchema() {
   if (schemaEnsured) return;
   if (!schemaPromise) {
     schemaPromise = (async () => {
-      try {
-        await pool.query(`
-          ALTER TABLE attendance ADD COLUMN IF NOT EXISTS punch_location_type TEXT DEFAULT 'FIELD_SITE';
-          ALTER TABLE attendance ADD COLUMN IF NOT EXISTS hotel_stay_id TEXT;
-          ALTER TABLE attendance ADD COLUMN IF NOT EXISTS hotel_name TEXT;
-          ALTER TABLE attendance ADD COLUMN IF NOT EXISTS hotel_room TEXT;
-          ALTER TABLE attendance ADD COLUMN IF NOT EXISTS hotel_phone TEXT;
-          ALTER TABLE attendance ADD COLUMN IF NOT EXISTS location_place_name TEXT;
-          ALTER TABLE attendance ADD COLUMN IF NOT EXISTS location_place_type TEXT;
-          ALTER TABLE attendance ADD COLUMN IF NOT EXISTS exact_coordinates_url TEXT;
-          ALTER TABLE attendance ADD COLUMN IF NOT EXISTS is_regularized INTEGER DEFAULT 0;
-          ALTER TABLE attendance ADD COLUMN IF NOT EXISTS regularized_by TEXT;
-          ALTER TABLE attendance ADD COLUMN IF NOT EXISTS regularization_notes TEXT;
+      const statements = [
+        // 1. Critical Employee Columns (ensures Signup works immediately)
+        `ALTER TABLE employees ADD COLUMN IF NOT EXISTS dob DATE`,
+        `ALTER TABLE employees ADD COLUMN IF NOT EXISTS updated_at TEXT`,
 
-          CREATE TABLE IF NOT EXISTS organization_holidays (
-            id TEXT PRIMARY KEY,
-            employer_id TEXT NOT NULL,
-            holiday_date DATE NOT NULL,
-            name TEXT NOT NULL,
-            holiday_type TEXT DEFAULT 'GAZETTED',
-            created_at TIMESTAMPTZ DEFAULT NOW(),
-            UNIQUE(employer_id, holiday_date)
-          );
+        // 2. Attendance schema extensions
+        `ALTER TABLE attendance ADD COLUMN IF NOT EXISTS punch_location_type TEXT DEFAULT 'FIELD_SITE'`,
+        `ALTER TABLE attendance ADD COLUMN IF NOT EXISTS hotel_stay_id TEXT`,
+        `ALTER TABLE attendance ADD COLUMN IF NOT EXISTS hotel_name TEXT`,
+        `ALTER TABLE attendance ADD COLUMN IF NOT EXISTS hotel_room TEXT`,
+        `ALTER TABLE attendance ADD COLUMN IF NOT EXISTS hotel_phone TEXT`,
+        `ALTER TABLE attendance ADD COLUMN IF NOT EXISTS location_place_name TEXT`,
+        `ALTER TABLE attendance ADD COLUMN IF NOT EXISTS location_place_type TEXT`,
+        `ALTER TABLE attendance ADD COLUMN IF NOT EXISTS exact_coordinates_url TEXT`,
+        `ALTER TABLE attendance ADD COLUMN IF NOT EXISTS is_regularized INTEGER DEFAULT 0`,
+        `ALTER TABLE attendance ADD COLUMN IF NOT EXISTS regularized_by TEXT`,
+        `ALTER TABLE attendance ADD COLUMN IF NOT EXISTS regularization_notes TEXT`,
 
-          CREATE TABLE IF NOT EXISTS employee_hotel_stays (
-            id TEXT PRIMARY KEY,
-            employer_id TEXT NOT NULL,
-            employee_id TEXT NOT NULL,
-            hotel_name TEXT NOT NULL,
-            room_number TEXT,
-            hotel_address TEXT NOT NULL,
-            hotel_phone TEXT,
-            checkin_date DATE NOT NULL,
-            checkout_date DATE,
-            booking_ref TEXT,
-            hotel_lat NUMERIC(10, 7),
-            hotel_lng NUMERIC(10, 7),
-            hotel_accuracy NUMERIC(10, 2),
-            gps_capture_timestamp TIMESTAMPTZ,
-            verification_status TEXT DEFAULT 'PENDING',
-            verification_timestamp TIMESTAMPTZ,
-            verified_place_name TEXT,
-            verified_address TEXT,
-            distance_meters NUMERIC(10, 2),
-            place_id TEXT,
-            verification_notes TEXT,
-            is_manual_override BOOLEAN DEFAULT FALSE,
-            stay_status TEXT DEFAULT 'ACTIVE',
-            notes TEXT,
-            created_at TIMESTAMPTZ DEFAULT NOW(),
-            updated_at TIMESTAMPTZ DEFAULT NOW()
-          );
+        // 3. Organization Holidays
+        `CREATE TABLE IF NOT EXISTS organization_holidays (
+          id TEXT PRIMARY KEY,
+          employer_id TEXT NOT NULL,
+          holiday_date DATE NOT NULL,
+          name TEXT NOT NULL,
+          holiday_type TEXT DEFAULT 'GAZETTED',
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(employer_id, holiday_date)
+        )`,
 
-          CREATE TABLE IF NOT EXISTS employee_leaves (
-            id TEXT PRIMARY KEY,
-            employer_id TEXT NOT NULL,
-            employee_id TEXT NOT NULL,
-            leave_date DATE NOT NULL,
-            leave_type TEXT NOT NULL DEFAULT 'UNMARKED_ABSENCE',
-            status TEXT NOT NULL DEFAULT 'PENDING',
-            reason TEXT,
-            applied_by TEXT DEFAULT 'SYSTEM_ABSENCE',
-            admin_remarks TEXT,
-            regularized_attendance_id TEXT,
-            created_at TIMESTAMPTZ DEFAULT NOW(),
-            updated_at TIMESTAMPTZ DEFAULT NOW(),
-            UNIQUE(employer_id, employee_id, leave_date)
-          );
+        // 4. Employee Hotel Stays
+        `CREATE TABLE IF NOT EXISTS employee_hotel_stays (
+          id TEXT PRIMARY KEY,
+          employer_id TEXT NOT NULL,
+          employee_id TEXT NOT NULL,
+          hotel_name TEXT NOT NULL,
+          room_number TEXT,
+          hotel_address TEXT NOT NULL,
+          hotel_phone TEXT,
+          checkin_date DATE NOT NULL,
+          checkout_date DATE,
+          booking_ref TEXT,
+          hotel_lat NUMERIC(10, 7),
+          hotel_lng NUMERIC(10, 7),
+          hotel_accuracy NUMERIC(10, 2),
+          gps_capture_timestamp TIMESTAMPTZ,
+          verification_status TEXT DEFAULT 'PENDING',
+          verification_timestamp TIMESTAMPTZ,
+          verified_place_name TEXT,
+          verified_address TEXT,
+          distance_meters NUMERIC(10, 2),
+          place_id TEXT,
+          verification_notes TEXT,
+          is_manual_override BOOLEAN DEFAULT FALSE,
+          stay_status TEXT DEFAULT 'ACTIVE',
+          notes TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )`,
 
-          CREATE INDEX IF NOT EXISTS idx_employee_leaves_emp_date ON employee_leaves(employer_id, leave_date);
-          CREATE INDEX IF NOT EXISTS idx_employee_leaves_emp_id ON employee_leaves(employee_id);
-          CREATE INDEX IF NOT EXISTS idx_employee_leaves_status ON employee_leaves(status);
+        // 5. Employee Leaves
+        `CREATE TABLE IF NOT EXISTS employee_leaves (
+          id TEXT PRIMARY KEY,
+          employer_id TEXT NOT NULL,
+          employee_id TEXT NOT NULL,
+          leave_date DATE NOT NULL,
+          leave_type TEXT NOT NULL DEFAULT 'UNMARKED_ABSENCE',
+          status TEXT NOT NULL DEFAULT 'PENDING',
+          reason TEXT,
+          applied_by TEXT DEFAULT 'SYSTEM_ABSENCE',
+          admin_remarks TEXT,
+          regularized_attendance_id TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(employer_id, employee_id, leave_date)
+        )`,
+        `CREATE INDEX IF NOT EXISTS idx_employee_leaves_emp_date ON employee_leaves(employer_id, leave_date)`,
+        `CREATE INDEX IF NOT EXISTS idx_employee_leaves_emp_id ON employee_leaves(employee_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_employee_leaves_status ON employee_leaves(status)`,
 
-          ALTER TABLE auth_rate_limits ALTER COLUMN timestamp TYPE BIGINT;
+        // 6. Rate Limits table & column
+        `CREATE TABLE IF NOT EXISTS auth_rate_limits (
+          rate_key TEXT NOT NULL,
+          timestamp BIGINT NOT NULL
+        )`,
+        `CREATE INDEX IF NOT EXISTS idx_rate_limits_key_ts ON auth_rate_limits (rate_key, timestamp)`,
+        `ALTER TABLE auth_rate_limits ALTER COLUMN timestamp TYPE BIGINT`,
 
-          ALTER TABLE employees ADD COLUMN IF NOT EXISTS dob DATE;
-          ALTER TABLE employees ADD COLUMN IF NOT EXISTS updated_at TEXT;
-          CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_email_lower ON employees (LOWER(TRIM(email)));
-          CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_phone_unique ON employees (phone) WHERE phone IS NOT NULL AND phone != '';
+        // 7. Employee Unique Indexes
+        `CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_email_lower ON employees (LOWER(TRIM(email)))`,
+        `CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_phone_unique ON employees (phone) WHERE phone IS NOT NULL AND phone != ''`,
 
-          CREATE TABLE IF NOT EXISTS geofences (
-            id TEXT PRIMARY KEY,
-            employer_id TEXT NOT NULL,
-            name TEXT NOT NULL,
-            geofence_type TEXT NOT NULL DEFAULT 'WORKPLACE',
-            latitude NUMERIC(10, 7) NOT NULL,
-            longitude NUMERIC(10, 7) NOT NULL,
-            radius_meters NUMERIC(10, 2) NOT NULL DEFAULT 150.00,
-            policy TEXT NOT NULL DEFAULT 'ALLOW_WITH_FLAG',
-            address TEXT,
-            is_active INTEGER NOT NULL DEFAULT 1,
-            created_at TIMESTAMPTZ DEFAULT NOW(),
-            updated_at TIMESTAMPTZ DEFAULT NOW()
-          );
-          CREATE INDEX IF NOT EXISTS idx_geofences_employer ON geofences (employer_id, is_active);
-          CREATE INDEX IF NOT EXISTS idx_geofences_type ON geofences (employer_id, geofence_type, is_active);
+        // 8. Geofences
+        `CREATE TABLE IF NOT EXISTS geofences (
+          id TEXT PRIMARY KEY,
+          employer_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          geofence_type TEXT NOT NULL DEFAULT 'WORKPLACE',
+          latitude NUMERIC(10, 7) NOT NULL,
+          longitude NUMERIC(10, 7) NOT NULL,
+          radius_meters NUMERIC(10, 2) NOT NULL DEFAULT 150.00,
+          policy TEXT NOT NULL DEFAULT 'ALLOW_WITH_FLAG',
+          address TEXT,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )`,
+        `CREATE INDEX IF NOT EXISTS idx_geofences_employer ON geofences (employer_id, is_active)`,
+        `CREATE INDEX IF NOT EXISTS idx_geofences_type ON geofences (employer_id, geofence_type, is_active)`,
 
-          UPDATE employees SET state = 'Delhi' WHERE state IS NOT NULL AND (state ILIKE '%delhi%' OR state ILIKE '%nct%' OR state = 'DL');
-          UPDATE attendance SET state = 'Delhi' WHERE state IS NOT NULL AND (state ILIKE '%delhi%' OR state ILIKE '%nct%' OR state = 'DL');
-          UPDATE teams SET state = 'Delhi' WHERE state IS NOT NULL AND (state ILIKE '%delhi%' OR state ILIKE '%nct%' OR state = 'DL');
-          UPDATE external_sync_records SET state = 'Delhi' WHERE state ILIKE '%delhi%' OR state ILIKE '%nct%' OR state = 'DL';
+        // 9. Location & State Normalization
+        `UPDATE employees SET state = 'Delhi' WHERE state IS NOT NULL AND (state ILIKE '%delhi%' OR state ILIKE '%nct%' OR state = 'DL')`,
+        `UPDATE attendance SET state = 'Delhi' WHERE state IS NOT NULL AND (state ILIKE '%delhi%' OR state ILIKE '%nct%' OR state = 'DL')`,
+        `UPDATE teams SET state = 'Delhi' WHERE state IS NOT NULL AND (state ILIKE '%delhi%' OR state ILIKE '%nct%' OR state = 'DL')`,
+        `UPDATE external_sync_records SET state = 'Delhi' WHERE state ILIKE '%delhi%' OR state ILIKE '%nct%' OR state = 'DL'`,
 
-          CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_single_active_user
-          ON sessions (user_id, session_type)
-          WHERE is_revoked = 0;
-        `);
-        schemaEnsured = true;
-      } catch (err) {
-        console.warn('[DB] Schema sync warning (will retry on next query):', err.message);
-        schemaPromise = null;
+        // 10. Sessions Single Active User Index
+        `CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_single_active_user
+         ON sessions (user_id, session_type)
+         WHERE is_revoked = 0`
+      ];
+
+      for (const stmt of statements) {
+        try {
+          await pool.query(stmt);
+        } catch (err) {
+          console.warn('[DB] Schema sync notice:', err.message, `(${stmt.slice(0, 50).replace(/\\s+/g, ' ')}...)`);
+        }
       }
+      schemaEnsured = true;
     })();
   }
   return schemaPromise;
