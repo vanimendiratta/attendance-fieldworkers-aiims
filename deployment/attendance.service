@@ -11,15 +11,15 @@ Group=www-data
 WorkingDirectory=/var/www/attendance
 EnvironmentFile=/etc/attendance/attendance.env
 
-# Execution
-ExecStart=/usr/bin/node server.js
+# Execution with V8 heap cap suited for 4 GB RAM server (prevents OOM crashes)
+ExecStart=/usr/bin/node --max-old-space-size=1536 server.js
 
 # Restart policy
 Restart=always
 RestartSec=5s
 KillMode=process
 
-# Process limits & security sandboxing
+# Process limits & security sandboxing (Ubuntu 26.04 LTS)
 LimitNOFILE=65535
 StandardOutput=journal
 StandardError=journal
@@ -34,4 +34,3 @@ ReadWritePaths=/var/www/attendance/uploads /var/www/attendance/ems/data
 
 [Install]
 WantedBy=multi-user.target
-

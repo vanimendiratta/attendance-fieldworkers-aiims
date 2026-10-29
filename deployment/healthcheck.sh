@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # AIIMS CDER Attendance & EMS Operational Health Check
-# Location: /usr/local/bin/attendance-healthcheck.sh
-# Can be used with monitoring tools (Uptime Kuma, Zabbix, Datadog, cron)
+# Target Server: Ubuntu 26.04 LTS (IP: 192.168.14.224)
+# Usage:
+#   ./healthcheck.sh                            # checks local loopback: http://127.0.0.1:3000
+#   ./healthcheck.sh http://192.168.14.224       # checks Nginx reverse proxy on private IP
 # ==============================================================================
 
 set -euo pipefail
@@ -47,4 +49,3 @@ fi
 echo "✓ EMS Sub-module: HEALTHY (HTTP 200)"
 echo "🎉 All services reporting operational."
 exit 0
-
