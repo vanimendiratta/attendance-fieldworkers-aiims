@@ -36,6 +36,7 @@ const suites = [
   { name: 'Secure 30-Minute Session Inactivity Timeout (15 Tests)', cmd: 'node test/session_timeout.test.js',                  requiresDb: true },
   { name: 'Single Active Session Policy Across App & EMS (8 Tests)',cmd: 'node test/single_active_session.test.js',             requiresDb: false },
   { name: 'Single Active Session Atomic Concurrency (10 Tests)',    cmd: 'node test/single_active_session_concurrency.test.js', requiresDb: true },
+  { name: 'EMS Production End-to-End Workflow & QA Gate (26 Tests)',cmd: 'node test/ems_end_to_end_workflow.test.js',         requiresDb: false },
 ];
 
 console.log('===============================================================');

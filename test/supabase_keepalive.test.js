@@ -166,7 +166,7 @@ async function runAll() {
   runTest('CLI exits with code 1 when no environment variables are provided', () => {
     try {
       execSync('node scripts/supabase-keepalive.js', {
-        env: { PATH: process.env.PATH },
+        env: { PATH: process.env.PATH, DATABASE_URL: '', TEST_DATABASE_URL: '', SUPABASE_URL: '', SUPABASE_ANON_KEY: '' },
         stdio: 'pipe'
       });
       assert.fail('Should have exited with non-zero code');
@@ -206,6 +206,8 @@ async function runAll() {
     const output = execSync('node scripts/supabase-keepalive.js --dry-run', {
       env: {
         PATH: process.env.PATH,
+        DATABASE_URL: '',
+        TEST_DATABASE_URL: '',
         SUPABASE_URL: 'https://demo-project.supabase.co',
         SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.demo_token'
       },

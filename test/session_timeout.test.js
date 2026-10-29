@@ -260,6 +260,7 @@ async function runAllTests() {
     const nowIso = T0.toISOString();
     const expIso = new Date(T0.getTime() + 30 * 60 * 1000).toISOString();
 
+    emsDb.prepare('UPDATE user_sessions SET is_revoked = 1 WHERE user_id = 1').run();
     emsDb.prepare(`
       INSERT INTO user_sessions (id, user_id, employee_id, created_at, last_activity_at, expires_at, is_revoked)
       VALUES (?, 1, 'CDER-01', ?, ?, ?, 0)

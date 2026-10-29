@@ -111,6 +111,22 @@ app.use((err, req, res, next) => {
 // Local development startup (npm run dev / node server.js)
 // ---------------------------------------------------------------------------
 if (require.main === module) {
+  // Production security & configuration gate
+  const isProd = (process.env.NODE_ENV || process.env.APP_ENV || '').toLowerCase().trim() === 'production';
+  if (isProd) {
+    const requiredEnv = ['DATABASE_URL', 'JWT_SECRET'];
+    const missing = requiredEnv.filter(k => !process.env[k] || !process.env[k].trim());
+    if (missing.length > 0) {
+      console.error(`[SERVER_FATAL] Production startup aborted. Missing mandatory environment variable(s): ${missing.join(', ')}`);
+      process.exit(1);
+    }
+    const weakSecrets = ['secret', 'changeme', 'password', '123456', 'default', 'test', 'admin'];
+    if (weakSecrets.includes((process.env.JWT_SECRET || '').toLowerCase().trim())) {
+      console.error('[SERVER_FATAL] Insecure JWT_SECRET detected in production. Refusing to start.');
+      process.exit(1);
+    }
+  }
+
   app.listen(PORT, () => {
     console.log(`=======================================================`);
     console.log(`🚀 Real-Time Photo & Live Geolocation Attendance System`);

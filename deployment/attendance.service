@@ -1,0 +1,37 @@
+[Unit]
+Description=AIIMS CDER Attendance and EMS Web Application
+Documentation=https://github.com/vanimendiratta/attendance-fieldworkers-aiims
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/attendance
+EnvironmentFile=/etc/attendance/attendance.env
+
+# Execution
+ExecStart=/usr/bin/node server.js
+
+# Restart policy
+Restart=always
+RestartSec=5s
+KillMode=process
+
+# Process limits & security sandboxing
+LimitNOFILE=65535
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=attendance
+
+# Systemd Security Hardening
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/www/attendance/uploads /var/www/attendance/ems/data
+
+[Install]
+WantedBy=multi-user.target
+

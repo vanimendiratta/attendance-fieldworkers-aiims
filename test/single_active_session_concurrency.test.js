@@ -127,6 +127,7 @@ function setupAtomicMockDb() {
 
 async function runAll() {
   setupAtomicMockDb();
+  emsDb.prepare('UPDATE user_sessions SET is_revoked = 1 WHERE is_revoked = 0').run();
   const T0 = new Date('2026-10-26T10:00:00.000Z');
 
   // Test 1: Two simultaneous login requests for the same account (atomic race test)
