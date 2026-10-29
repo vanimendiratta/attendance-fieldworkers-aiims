@@ -21,6 +21,10 @@
   ],
   "author": "Antigravity",
   "license": "ISC",
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  },
   "dependencies": {
     "better-sqlite3": "^11.8.1",
     "bcryptjs": "^2.4.3",

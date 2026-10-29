@@ -48,10 +48,25 @@ const poolMax        = process.env.DB_POOL_MAX ? parseInt(process.env.DB_POOL_MA
 
 const pool = new Pool({
   connectionString: DATABASE_URL,
-  // Supabase requires SSL in production; allow self-signed in dev if needed
-  ssl: DATABASE_URL && (DATABASE_URL.includes('supabase') || isProduction)
-    ? { rejectUnauthorized: false }
-    : false,
+  // SSL configuration:
+  //   - Supabase cloud: always requires SSL; rejectUnauthorized=false is
+  //     intentional because Supabase uses a CA that pg cannot verify by default.
+  //   - Local PostgreSQL (AIIMS institutional VM, 127.0.0.1): SSL is not used
+  //     on the loopback interface; ssl:false is correct and safe.
+  //   - Any other production host with a verifiable CA cert: set
+  //     DATABASE_URL_SSL_MODE=verify-ca in the environment to enable full
+  //     certificate verification.
+  ssl: (() => {
+    if (!DATABASE_URL) return false;
+    if (DATABASE_URL.includes('supabase')) return { rejectUnauthorized: false };
+    // Local loopback connections (127.0.0.1 or localhost) never use SSL
+    if (/[@/](127\.0\.0\.1|localhost)(:|\/|$)/.test(DATABASE_URL)) return false;
+    // Explicit opt-in for full SSL verification on non-Supabase production hosts
+    if (process.env.DATABASE_URL_SSL_MODE === 'verify-ca') return { rejectUnauthorized: true };
+    if (process.env.DATABASE_URL_SSL_MODE === 'require') return { rejectUnauthorized: false };
+    // Default for non-local production: disable SSL (local institutional VM default)
+    return false;
+  })(),
   max:                    poolMax,
   idleTimeoutMillis:      isServerless ? 10_000 : 30_000,
   connectionTimeoutMillis: 5_000,
