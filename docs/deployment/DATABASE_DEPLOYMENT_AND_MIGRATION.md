@@ -67,18 +67,34 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO attendance_u
 EOF
 ```
 
-### 2.4 Schema Migrations
-The application automatically runs schema verification on startup. To apply or inspect initial migration scripts manually:
+### 2.4 Schema Migrations & Target Verification
+
+> [!IMPORTANT]
+> The application automatically performs safe additive schema synchronization on startup (`CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`).
+> 
+> **Safety Check Before Manual Execution:** Confirm you are targeting the production database (`attendance_prod`), NOT any development or test database (`attendance_test`), and verify that existing data will not be overwritten.
+> 
+> Never pass database passwords as inline shell command arguments. Instead, execute migration scripts as the local `postgres` system user via peer authentication:
 
 ```bash
+# 1. Verify target database identity and ensure it is NOT a test database
+sudo -u postgres psql -d attendance_prod -c "SELECT current_database(), current_user;"
+# Expected: current_database = attendance_prod
+
+# 2. Apply migrations sequentially using local peer authentication (no passwords in shell history)
 cd /var/www/attendance
-PGPASSWORD='STRONG_PG_PASSWORD_HERE' psql -h 127.0.0.1 -U attendance_user -d attendance_prod -f supabase/migrations/001_initial_schema.sql
-PGPASSWORD='STRONG_PG_PASSWORD_HERE' psql -h 127.0.0.1 -U attendance_user -d attendance_prod -f supabase/migrations/002_add_organization_holidays.sql
-PGPASSWORD='STRONG_PG_PASSWORD_HERE' psql -h 127.0.0.1 -U attendance_user -d attendance_prod -f supabase/migrations/003_add_session_inactivity_timeout.sql
-PGPASSWORD='STRONG_PG_PASSWORD_HERE' psql -h 127.0.0.1 -U attendance_user -d attendance_prod -f supabase/migrations/004_single_active_session.sql
-PGPASSWORD='STRONG_PG_PASSWORD_HERE' psql -h 127.0.0.1 -U attendance_user -d attendance_prod -f supabase/migrations/005_atomic_session_concurrency.sql
-PGPASSWORD='STRONG_PG_PASSWORD_HERE' psql -h 127.0.0.1 -U attendance_user -d attendance_prod -f supabase/migrations/006_state_district_standardization.sql
+sudo -u postgres psql -d attendance_prod -f supabase/migrations/001_initial_schema.sql
+sudo -u postgres psql -d attendance_prod -f supabase/migrations/002_add_organization_holidays.sql
+sudo -u postgres psql -d attendance_prod -f supabase/migrations/003_add_session_inactivity_timeout.sql
+sudo -u postgres psql -d attendance_prod -f supabase/migrations/004_single_active_session.sql
+sudo -u postgres psql -d attendance_prod -f supabase/migrations/005_atomic_session_concurrency.sql
+sudo -u postgres psql -d attendance_prod -f supabase/migrations/006_state_district_standardization.sql
 ```
+
+### 2.5 PostgreSQL SSL & Remote CA Verification
+- **Local Loopback (`127.0.0.1` / `localhost`):** SSL is disabled (`ssl: false`) as traffic never leaves the local VM memory/bus.
+- **Supabase Cloud:** Uses managed poolers requiring SSL with intermediate certificates (`rejectUnauthorized: false`).
+- **Remote Institutional PostgreSQL:** Certificate verification is **enabled by default** in production (`rejectUnauthorized: true`). For private institutional CAs, configure `DATABASE_SSL_CA=/etc/ssl/certs/aiims-ca.crt` in `/etc/attendance/attendance.env` or use system trust via `NODE_EXTRA_CA_CERTS`. Explicit opt-out requires setting `DATABASE_URL_SSL_MODE=no-verify`.
 
 ---
 
@@ -156,15 +172,21 @@ dropdb attendance_restore_test
 ### 4.3 Production Restore Runbook
 - **Restoring PostgreSQL in Production:**
   ```bash
+  # Terminate active client connections to attendance_prod before restoring
+  sudo -u postgres psql -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='attendance_prod' AND pid<>pg_backend_pid();"
+  
+  # Stream decompress directly into attendance_prod using peer auth (no passwords exposed)
   gunzip -c /var/backups/attendance/daily/attendance_pg_YYYYMMDD_HHMMSS.sql.gz | \
-  PGPASSWORD='STRONG_PG_PASSWORD_HERE' psql -h 127.0.0.1 -U attendance_user -d attendance_prod
+    sudo -u postgres psql -d attendance_prod
   ```
 - **Restoring SQLite in Production:**
   ```bash
   sudo systemctl stop attendance.service
+  # Copy restored sqlite file to persistent location
   sudo cp /var/backups/attendance/daily/ems_sqlite_YYYYMMDD_HHMMSS.sqlite /var/www/attendance/ems/data/ems.sqlite
   sudo chown www-data:www-data /var/www/attendance/ems/data/ems.sqlite
   sudo chmod 660 /var/www/attendance/ems/data/ems.sqlite
+  # Clean up stale WAL / SHM files so SQLite starts clean
   sudo rm -f /var/www/attendance/ems/data/ems.sqlite-wal /var/www/attendance/ems/data/ems.sqlite-shm
   sudo systemctl start attendance.service
   ```

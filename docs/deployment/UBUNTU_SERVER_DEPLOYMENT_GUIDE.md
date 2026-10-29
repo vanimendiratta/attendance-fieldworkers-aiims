@@ -204,9 +204,17 @@ sudo mkdir -p /var/www/attendance/uploads/checkouts
 sudo mkdir -p /var/www/attendance/uploads/leave_documents
 sudo mkdir -p /var/www/attendance/ems/data
 
-# Strict permissions (service runs as www-data)
-sudo chown -R www-data:www-data /var/www/attendance
-sudo chmod -R 750 /var/www/attendance
+# Strict least-privilege permissions:
+# Source code is owned by root:www-data with read-only access for www-data.
+# Only the two runtime directories (uploads and ems/data) are writable by www-data.
+sudo chown -R root:www-data /var/www/attendance
+sudo find /var/www/attendance -type d -exec chmod 750 {} \;
+sudo find /var/www/attendance -type f -exec chmod 640 {} \;
+sudo chmod 750 /var/www/attendance/deployment/*.sh
+
+# Grant write access ONLY to the required runtime directories:
+sudo chown -R www-data:www-data /var/www/attendance/uploads
+sudo chown -R www-data:www-data /var/www/attendance/ems/data
 sudo chmod -R 770 /var/www/attendance/uploads
 sudo chmod -R 770 /var/www/attendance/ems/data
 ```

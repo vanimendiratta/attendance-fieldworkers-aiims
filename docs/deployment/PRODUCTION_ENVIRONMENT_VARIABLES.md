@@ -41,6 +41,8 @@ All production environment variables are configured in `/etc/attendance/attendan
 | `NODE_ENV` | Application | String | **Mandatory** | `production` | Set to `production` to activate security headers, mask internal database errors from API clients, and enforce fail-closed startup validation. |
 | `APP_ENV` | Application | String | Optional | `production` | Secondary environment flag. |
 | `DATABASE_URL` | Attendance DB | URI | **Mandatory** | — | Local PostgreSQL connection string: `postgresql://attendance_user:<password>@127.0.0.1:5432/attendance_prod`. Must never listen on a public IP. |
+| `DATABASE_URL_SSL_MODE` | Attendance DB | String | Optional | Auto | SSL verification mode for remote PostgreSQL. Loopback (127.0.0.1) uses no SSL. Remote DBs default to strict CA verification (`verify-ca`). Set to `no-verify` only for temporary self-signed dev testing; set to `disable` for unencrypted LAN DBs. |
+| `DATABASE_SSL_CA` | Attendance DB | Filepath | Optional | — | Absolute path to institutional custom CA bundle (e.g. `/etc/ssl/certs/aiims-ca.crt`) used to verify remote PostgreSQL TLS certificates. |
 | `DB_POOL_MAX` | Attendance DB | Integer | Optional | `8` | Maximum connections in `pg.Pool`. Sized for 4 GB RAM server (avoids exhausting memory; 8 connections * ~10 MB each = ~80 MB). |
 | `JWT_SECRET` | EMS Auth | String | **Mandatory** | — | Cryptographic secret for signing and verifying EMS JWT tokens. Minimum 64-character hex string. |
 | `SESSION_SECRET` | Attendance Auth | String | **Mandatory** | SHA-256 of DB URL | HMAC secret for attendance session signatures. Recommended 64-character hex string. |

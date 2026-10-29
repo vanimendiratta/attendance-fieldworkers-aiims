@@ -5,7 +5,7 @@
 **Date:** 2026-10-29  
 **Prepared by:** Development team  
 **Repository:** `vanimendiratta/attendance-fieldworkers-aiims`  
-**Final commit:** See Section 1 below  
+**Final commit:** `1ffdb9e` (deployment corrections follow in the next commit)  
 **Target server:** Ubuntu 26.04 LTS, private IP `192.168.14.224` (AIIMS hospital intranet)  
 **Decision:** See Section 10 — READY FOR IT-ASSISTED DEPLOYMENT
 
@@ -199,55 +199,63 @@ ssh admin@192.168.14.224 'watch -n2 "free -h; echo; vmstat 1 1; echo; iostat -x 
 
 See `docs/deployment/RESTRICTED_INSTITUTIONAL_VM_DEPLOYMENT_RUNBOOK.md` for the complete step-by-step runbook.
 
-Quick-reference command sequence (assumes Ubuntu 26.04, internet access, `sudo` available):
+Quick-reference command sequence. **Confirm with IT whether internet access, apt repositories, and the npm registry are reachable before using Option A. Use Option B (offline) if the VM is network-restricted.** See the full runbook for the offline procedure.
+
+**Option A — internet/apt available:**
 
 ```bash
-# 1. Install Node.js 22 LTS
+# 1. Install Node.js 22 LTS via NodeSource (requires internet or internal apt mirror)
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt-get install -y nodejs postgresql nginx
 node --version  # → v22.x.x
 
-# 2. Database setup
-sudo -u postgres psql <<'SQL'
+# 2. Database setup (interactive psql session — password never on command line)
+sudo -u postgres psql
+```
+Then paste these SQL statements interactively:
+```sql
 CREATE ROLE attendance_user WITH LOGIN PASSWORD 'REPLACE_STRONG_PASSWORD';
 CREATE DATABASE attendance_prod OWNER attendance_user ENCODING 'UTF8'
   LC_COLLATE 'en_US.UTF-8' LC_CTYPE 'en_US.UTF-8' TEMPLATE template0;
 \c attendance_prod
-GRANT CONNECT, CREATE ON DATABASE attendance_prod TO attendance_user;
+GRANT CONNECT ON DATABASE attendance_prod TO attendance_user;
 GRANT USAGE, CREATE ON SCHEMA public TO attendance_user;
-SQL
+\q
+```
 
-# 3. Deploy application
+```bash
+# 3. Deploy application (source owned by root, only uploads+ems/data writable by www-data)
 sudo mkdir -p /var/www/attendance
 cd /var/www/attendance
 sudo tar -xzf /tmp/attendance_release.tar.gz
-sudo chown -R www-data:www-data /var/www/attendance
-sudo -u www-data npm ci --omit=dev
-sudo -u www-data npm rebuild better-sqlite3
+sudo chown -R root:www-data /var/www/attendance
+sudo find /var/www/attendance -type d -exec chmod 750 {} \;
+sudo find /var/www/attendance -type f -exec chmod 640 {} \;
+sudo chmod 750 /var/www/attendance/deployment/*.sh
+# Grant runtime write access only to upload and SQLite directories
+sudo mkdir -p /var/www/attendance/uploads/checkins /var/www/attendance/uploads/checkouts
+sudo mkdir -p /var/www/attendance/ems/data
+sudo chown -R www-data:www-data /var/www/attendance/uploads /var/www/attendance/ems/data
+
+# Install deps: temporarily grant www-data write on app root for npm ci, then restore
+sudo chown www-data:www-data /var/www/attendance
+sudo -u www-data npm ci --omit=dev && sudo -u www-data npm rebuild better-sqlite3
+sudo chown root:www-data /var/www/attendance
+sudo chown www-data:www-data /var/www/attendance/ems
 cd ems && sudo -u www-data npm ci --omit=dev && sudo -u www-data npm rebuild better-sqlite3
+sudo chown root:www-data /var/www/attendance/ems
 
-# 4. Production environment file
+# 4. Production environment file (0640 root:www-data, NEVER commit)
 sudo mkdir -p /etc/attendance
-sudo tee /etc/attendance/attendance.env > /dev/null << 'ENV'
-PORT=3000
-NODE_ENV=production
-DATABASE_URL=postgresql://attendance_user:STRONG_PG_PASSWORD@127.0.0.1:5432/attendance_prod
-DB_POOL_MAX=8
-EMS_DB_PATH=/var/www/attendance/ems/data/ems.sqlite
-JWT_SECRET=GENERATED_64_HEX
-SESSION_SECRET=GENERATED_64_HEX
-HOTEL_VERIFY_SECRET=GENERATED_64_HEX
-UPLOADS_PATH=/var/www/attendance/uploads
-ALLOWED_ORIGINS=http://192.168.14.224,https://192.168.14.224
-ENV
-sudo chmod 640 /etc/attendance/attendance.env
-sudo chown root:www-data /etc/attendance/attendance.env
+sudo install -m 640 -o root -g www-data /dev/null /etc/attendance/attendance.env
+sudo nano /etc/attendance/attendance.env   # paste template from PRODUCTION_ENVIRONMENT_VARIABLES.md
 
-# 5. Systemd service
+# 5. Systemd service — verify ExecStart path with `which node` first
 sudo cp deployment/attendance.service /etc/systemd/system/attendance.service
-# Verify ExecStart path matches `which node` output
+# If `which node` output differs from /usr/bin/node, edit the ExecStart line:
+# sudo nano /etc/systemd/system/attendance.service
 sudo systemctl daemon-reload && sudo systemctl enable attendance && sudo systemctl start attendance
-sudo systemctl status attendance  # expect: active (running)
+sudo journalctl -u attendance -n 20 --no-pager   # confirm: "Server listening on http://localhost:3000"
 
 # 6. Nginx
 sudo cp deployment/nginx-attendance.conf /etc/nginx/sites-available/attendance.conf
@@ -259,6 +267,8 @@ sudo nginx -t && sudo systemctl enable nginx && sudo systemctl restart nginx
 curl -s http://127.0.0.1:3000/api/health | python3 -m json.tool
 # Expected: {"status":"healthy","database":"connected",...}
 ```
+
+**Option B — restricted/offline network:** Follow all 15 steps in [`RESTRICTED_INSTITUTIONAL_VM_DEPLOYMENT_RUNBOOK.md`](./RESTRICTED_INSTITUTIONAL_VM_DEPLOYMENT_RUNBOOK.md) which includes offline Node.js tarball install, offline .deb PostgreSQL/Nginx install, pre-packed node_modules tarball, and pgpass-based credential handling.
 
 ---
 
@@ -279,9 +289,22 @@ curl -s http://127.0.0.1:3000/api/health | python3 -m json.tool
 ### Rollback (if needed within first 24 hours):
 ```bash
 sudo systemctl stop attendance
-# Restore previous tarball to /var/www/attendance_prev/ and swap
+# Preserve uploads and EMS SQLite database before touching application files
+sudo cp -a /var/www/attendance/uploads /tmp/uploads_preserve_$(date +%Y%m%d_%H%M%S)
+sudo cp -a /var/www/attendance/ems/data /tmp/emsdata_preserve_$(date +%Y%m%d_%H%M%S)
+# Move failed deployment aside (do NOT delete until rollback is confirmed working)
 sudo mv /var/www/attendance /var/www/attendance_failed
-sudo mv /var/www/attendance_prev /var/www/attendance
+sudo mkdir /var/www/attendance
+sudo tar -xzf /tmp/previous_release.tar.gz -C /var/www/attendance
+# Restore ownership
+sudo chown -R root:www-data /var/www/attendance
+sudo find /var/www/attendance -type d -exec chmod 750 {} \;
+sudo find /var/www/attendance -type f -exec chmod 640 {} \;
+# Re-attach preserved runtime data
+sudo mkdir -p /var/www/attendance/uploads /var/www/attendance/ems/data
+sudo cp -a /tmp/uploads_preserve_*/. /var/www/attendance/uploads/
+sudo cp -a /tmp/emsdata_preserve_*/. /var/www/attendance/ems/data/
+sudo chown -R www-data:www-data /var/www/attendance/uploads /var/www/attendance/ems/data
 sudo systemctl start attendance
 sudo systemctl status attendance
 ```

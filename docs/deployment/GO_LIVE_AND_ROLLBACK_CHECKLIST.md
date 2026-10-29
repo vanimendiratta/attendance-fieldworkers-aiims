@@ -157,30 +157,48 @@ Trigger rollback immediately if, within 30 minutes of go-live:
 
 ### Rollback commands (IT admin)
 
+> [!CAUTION]
+> **Never use `rm -rf /var/www/attendance`** — this destroys uploaded check-in photos and the EMS SQLite database. Preserve `uploads/` and `ems/data/` in every rollback.
+
 ```bash
-# Stop the new deployment:
+# Stop the service
 sudo systemctl stop attendance
 
-# If restoring previous application version:
-sudo -u www-data bash -c "
-  cd /var/www
-  mv attendance attendance_failed_$(date +%Y%m%d_%H%M%S)
-  mkdir attendance
-  tar -xzf /tmp/previous_release.tar.gz -C attendance/
-"
-sudo chown -R www-data:www-data /var/www/attendance
+# Preserve runtime data before touching application code
+sudo cp -a /var/www/attendance/uploads /tmp/uploads_preserve_$(date +%Y%m%d_%H%M%S)
+sudo cp -a /var/www/attendance/ems/data /tmp/emsdata_preserve_$(date +%Y%m%d_%H%M%S)
 
-# Reinstall dependencies for the previous version:
-sudo -u www-data bash -c "
-  cd /var/www/attendance && npm ci --omit=dev && npm rebuild better-sqlite3
-  cd /var/www/attendance/ems && npm ci --omit=dev && npm rebuild better-sqlite3
-"
+# Move failed deployment aside — do NOT delete until rollback is confirmed working
+sudo mv /var/www/attendance /var/www/attendance_failed_$(date +%Y%m%d_%H%M%S)
 
-# Start the previous version:
+# Extract previous release (must have been saved before the upgrade)
+sudo mkdir -p /var/www/attendance
+sudo tar -xzf /tmp/previous_release.tar.gz -C /var/www/attendance
+
+# Set ownership: root owns source, www-data reads
+sudo chown -R root:www-data /var/www/attendance
+sudo find /var/www/attendance -type d -exec chmod 750 {} \;
+sudo find /var/www/attendance -type f -exec chmod 640 {} \;
+
+# Reinstall dependencies for the previous version
+sudo chown www-data:www-data /var/www/attendance
+sudo -u www-data bash -c "cd /var/www/attendance && npm ci --omit=dev && npm rebuild better-sqlite3"
+sudo chown root:www-data /var/www/attendance
+sudo chown www-data:www-data /var/www/attendance/ems
+sudo -u www-data bash -c "cd /var/www/attendance/ems && npm ci --omit=dev && npm rebuild better-sqlite3"
+sudo chown root:www-data /var/www/attendance/ems
+
+# Restore preserved runtime data
+sudo mkdir -p /var/www/attendance/uploads /var/www/attendance/ems/data
+sudo cp -a /tmp/uploads_preserve_*/. /var/www/attendance/uploads/
+sudo cp -a /tmp/emsdata_preserve_*/. /var/www/attendance/ems/data/
+sudo chown -R www-data:www-data /var/www/attendance/uploads /var/www/attendance/ems/data
+
+# Start the previous version
 sudo systemctl start attendance
 sudo systemctl status attendance
 
-# Confirm health:
+# Confirm health
 curl -s http://127.0.0.1:3000/api/health
 ```
 
@@ -189,15 +207,24 @@ curl -s http://127.0.0.1:3000/api/health
 The Attendance PostgreSQL schema uses additive `ADD COLUMN IF NOT EXISTS` and `CREATE TABLE IF NOT EXISTS` migrations. These cannot be automatically reversed. If a new migration causes data integrity problems:
 
 1. Stop the application: `sudo systemctl stop attendance`
-2. Restore from the most recent `pg_dump` backup:
+2. Restore from the most recent `pg_dump` backup (runs as the `postgres` superuser to avoid password prompt):
    ```bash
+   # Identify the backup file
+   ls -lt /var/backups/attendance/daily/attendance_pg_*.sql.gz | head -3
+   # Terminate active connections, then drop and recreate
+   sudo -u postgres psql -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='attendance_prod' AND pid<>pg_backend_pid();"
+   sudo -u postgres psql -c "DROP DATABASE IF EXISTS attendance_prod;"
+   sudo -u postgres psql -c "CREATE DATABASE attendance_prod OWNER attendance_user ENCODING 'UTF8' LC_COLLATE 'en_US.UTF-8' LC_CTYPE 'en_US.UTF-8' TEMPLATE template0;"
+   # Restore from gzip SQL dump
    gunzip -c /var/backups/attendance/daily/attendance_pg_TIMESTAMP.sql.gz | \
-     psql -U attendance_user -h 127.0.0.1 attendance_prod
+     sudo -u postgres psql -d attendance_prod
    ```
 3. Restore EMS SQLite if affected:
    ```bash
    gunzip -c /var/backups/attendance/daily/ems_sqlite_TIMESTAMP.sqlite.gz > /tmp/ems_restored.sqlite
-   cp /tmp/ems_restored.sqlite /var/www/attendance/ems/data/ems.sqlite
+   sudo cp /tmp/ems_restored.sqlite /var/www/attendance/ems/data/ems.sqlite
+   sudo chown www-data:www-data /var/www/attendance/ems/data/ems.sqlite
+   sudo rm -f /tmp/ems_restored.sqlite
    ```
 4. Restart the previous application version.
 

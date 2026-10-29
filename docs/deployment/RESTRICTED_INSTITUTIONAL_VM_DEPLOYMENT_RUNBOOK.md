@@ -252,10 +252,17 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 
 The application runs as `www-data`, an existing Ubuntu system account with no login shell. Do not create a new user.
 
+> [!IMPORTANT]
+> **Minimum writable directories only.** The `www-data` service account must be able to write only to the two directories that the running application writes to at runtime:
+> - `/var/www/attendance/uploads` — check-in/check-out photos uploaded by employees
+> - `/var/www/attendance/ems/data` — EMS SQLite database file and WAL files
+>
+> All other application source files, scripts, and configuration should be owned by `root` with `www-data` having read-only access (`chmod 750`, `chown root:www-data`). This limits the blast radius if the application process is ever compromised.
+
 ```bash
-# Create main application directory
+# Create main application directory — owned by root, readable by www-data
 sudo mkdir -p /var/www/attendance
-sudo chown www-data:www-data /var/www/attendance
+sudo chown root:www-data /var/www/attendance
 sudo chmod 750 /var/www/attendance
 
 # Create upload directories for check-in/check-out photos
@@ -265,7 +272,7 @@ sudo mkdir -p /var/www/attendance/uploads/checkouts
 # Create EMS SQLite data directory
 sudo mkdir -p /var/www/attendance/ems/data
 
-# Set ownership and permissions
+# Grant www-data write access ONLY to the two runtime-writable directories
 sudo chown -R www-data:www-data /var/www/attendance/uploads
 sudo chown -R www-data:www-data /var/www/attendance/ems/data
 sudo chmod 750 /var/www/attendance/uploads
@@ -291,7 +298,20 @@ scp attendance_release_*.tar.gz <admin_user>@192.168.14.224:/tmp/
 ```bash
 cd /var/www/attendance
 sudo tar -xzf /tmp/attendance_release_*.tar.gz
-sudo chown -R www-data:www-data /var/www/attendance
+
+# Source files and scripts: root owns, www-data can read (not write)
+sudo chown -R root:www-data /var/www/attendance
+sudo find /var/www/attendance -type d -exec chmod 750 {} \;
+sudo find /var/www/attendance -type f -exec chmod 640 {} \;
+
+# Make shell scripts executable by root only
+sudo chmod 750 /var/www/attendance/deployment/*.sh
+
+# Restore write access ONLY to the two runtime-writable directories
+sudo chown -R www-data:www-data /var/www/attendance/uploads
+sudo chown -R www-data:www-data /var/www/attendance/ems/data
+sudo chmod 750 /var/www/attendance/uploads
+sudo chmod 750 /var/www/attendance/ems/data
 
 # Confirm key files are present
 ls /var/www/attendance/server.js
@@ -301,18 +321,35 @@ ls /var/www/attendance/deployment/nginx-attendance.conf
 
 ### Install Production Dependencies — Online (npm registry reachable)
 
+> [!IMPORTANT]
+> Confirm with IT whether the VM can reach the npm registry (`registry.npmjs.org`) before running `npm ci`. In a fully restricted network, use the offline method below instead.
+
 ```bash
 # Install main application dependencies (production only, no devDependencies)
 cd /var/www/attendance
+# Temporarily allow www-data to write node_modules during install
+sudo chown www-data:www-data /var/www/attendance
 sudo -u www-data npm ci --omit=dev
 
 # Rebuild native modules (better-sqlite3) for the server's Node.js ABI version
 sudo -u www-data npm rebuild better-sqlite3
 
+# Restore root ownership of source files after install
+sudo chown -R root:www-data /var/www/attendance
+sudo find /var/www/attendance -not \( -path "*/uploads*" -o -path "*/ems/data*" \) -type d -exec chmod 750 {} \;
+sudo find /var/www/attendance -not \( -path "*/uploads*" -o -path "*/ems/data*" \) -type f -exec chmod 640 {} \;
+sudo chmod 750 /var/www/attendance/deployment/*.sh
+
+# Grant write access only to runtime-writable directories
+sudo chown -R www-data:www-data /var/www/attendance/uploads /var/www/attendance/ems/data
+
 # Install EMS dependencies
 cd /var/www/attendance/ems
+sudo chown www-data:www-data /var/www/attendance/ems
 sudo -u www-data npm ci --omit=dev
 sudo -u www-data npm rebuild better-sqlite3
+sudo chown -R root:www-data /var/www/attendance/ems
+sudo chown -R www-data:www-data /var/www/attendance/ems/data
 ```
 
 ### Install Production Dependencies — Offline (no npm registry access)
@@ -438,20 +475,34 @@ sudo -u www-data cat /etc/attendance/attendance.env | head -3
 
 ### Test Database Connectivity Before First Start
 
+> [!IMPORTANT]
+> Do not pass the database password as a command-line argument or inline shell string — it becomes visible in `ps`, shell history, and process lists. Use a temporary `.pgpass` file or read from the environment file instead.
+
 ```bash
-sudo -u www-data env \
-  DATABASE_URL="postgresql://attendance_user:STRONG_PG_PASSWORD@127.0.0.1:5432/attendance_prod" \
-  node -e "
-    const { Pool } = require('pg');
-    const p = new Pool({ connectionString: process.env.DATABASE_URL });
-    p.query('SELECT 1')
-      .then(() => { console.log('DB OK — connectivity confirmed'); p.end(); })
-      .catch(e => { console.error('DB FAIL:', e.message); process.exit(1); });
-  "
-# Expected: DB OK — connectivity confirmed
+# Create a temporary pgpass entry so the password is not exposed on the command line
+# Format: hostname:port:database:user:password
+sudo -u www-data bash -c "
+  install -m 600 /dev/null /tmp/attendance_pgpass_test
+  echo '127.0.0.1:5432:attendance_prod:attendance_user:REPLACE_WITH_ACTUAL_PASSWORD' > /tmp/attendance_pgpass_test
+"
+
+# Test connectivity (password read from pgpass, not the command line)
+sudo -u www-data env PGPASSFILE=/tmp/attendance_pgpass_test \
+  psql -h 127.0.0.1 -p 5432 -U attendance_user -d attendance_prod -c "SELECT 1 AS ping;"
+# Expected:
+#  ping
+# ------
+#     1
+# (1 row)
+
+# Remove the temporary pgpass file immediately after the test
+sudo rm -f /tmp/attendance_pgpass_test
+echo "DB connectivity confirmed. Temporary pgpass removed."
 ```
 
-If this fails:
+Alternatively, start the service directly (Step 10) — it will log a `FATAL` error if the database is unreachable.
+
+If connectivity fails:
 - Confirm PostgreSQL is running: `sudo systemctl status postgresql`
 - Confirm the role and database were created correctly (Step 5)
 - Confirm the password in `DATABASE_URL` matches what was used in `CREATE ROLE`
@@ -730,7 +781,14 @@ curl -s http://192.168.14.224/api/health | python3 -m json.tool
 /var/www/attendance/deployment/healthcheck.sh http://192.168.14.224
 
 # 5. Test EMS system info endpoint
+# This confirms the EMS router loaded (better-sqlite3 ABI correct, migrations ran).
+# It does NOT query the SQLite database — a 200 response confirms router availability only.
 curl -s http://127.0.0.1:3000/api/ems/system/info
+# Expected: {"environment":"production","isDevelopment":false,"version":"1.0.0"}
+
+# For SQLite database integrity (optional but recommended after first start):
+sqlite3 /var/www/attendance/ems/data/ems.sqlite 'PRAGMA integrity_check;'
+# Expected: ok
 
 # 6. Confirm uploads directory is writable by www-data
 sudo -u www-data touch /var/www/attendance/uploads/checkins/.write_test
@@ -807,12 +865,32 @@ sudo systemctl stop attendance
 
 ### 2. Restore Previous Application Files
 
+> [!CAUTION]
+> **Do NOT run `rm -rf /var/www/attendance`** — this would permanently destroy uploaded check-in photos and the EMS SQLite database. Preserve `uploads/` and `ems/data/` in all rollback scenarios.
+
 ```bash
-# If you kept a backup of the previous release:
-sudo rm -rf /var/www/attendance
+# Save production data directories before touching application code
+sudo cp -a /var/www/attendance/uploads /tmp/attendance_uploads_backup_$(date +%Y%m%d_%H%M%S)
+sudo cp -a /var/www/attendance/ems/data /tmp/attendance_emsdata_backup_$(date +%Y%m%d_%H%M%S)
+
+# Move the failed deployment out of the way (do NOT delete it until rollback is confirmed)
+sudo mv /var/www/attendance /var/www/attendance_failed_$(date +%Y%m%d_%H%M%S)
+
+# Extract the previous release tarball (must have been saved before the upgrade)
 sudo mkdir -p /var/www/attendance
 sudo tar -xzf /tmp/previous_release.tar.gz -C /var/www/attendance
-sudo chown -R www-data:www-data /var/www/attendance
+
+# Restore ownership (root owns source, www-data owns runtime dirs)
+sudo chown -R root:www-data /var/www/attendance
+sudo find /var/www/attendance -type d -exec chmod 750 {} \;
+sudo find /var/www/attendance -type f -exec chmod 640 {} \;
+sudo chmod 750 /var/www/attendance/deployment/*.sh
+
+# Restore production uploads and EMS database from the preserved copy
+sudo mkdir -p /var/www/attendance/uploads /var/www/attendance/ems/data
+sudo cp -a /tmp/attendance_uploads_backup_*/. /var/www/attendance/uploads/
+sudo cp -a /tmp/attendance_emsdata_backup_*/. /var/www/attendance/ems/data/
+sudo chown -R www-data:www-data /var/www/attendance/uploads /var/www/attendance/ems/data
 ```
 
 ### 3. Restore Node Modules (if Node.js version changed)
@@ -847,14 +925,27 @@ For a full PostgreSQL database restore from backup:
 # Stop the application first
 sudo systemctl stop attendance
 
-# Restore database from backup (replace with actual backup file path)
+# Identify the most recent backup (produced by backup.sh as a gzip-compressed SQL file)
+ls -lt /var/backups/attendance/daily/attendance_pg_*.sql.gz | head -5
+# Note the filename — e.g., attendance_pg_20261029_020001.sql.gz
+
+# IMPORTANT: restoring overwrites ALL data written after the backup timestamp.
+# Inform the project lead and document the data loss window before proceeding.
+
+# Drop and recreate the database
+# Use pgpass to avoid passing password on command line:
+sudo -u postgres psql -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'attendance_prod' AND pid <> pg_backend_pid();"
 sudo -u postgres psql -c "DROP DATABASE IF EXISTS attendance_prod;"
 sudo -u postgres psql -c "CREATE DATABASE attendance_prod OWNER attendance_user ENCODING 'UTF8' LC_COLLATE 'en_US.UTF-8' LC_CTYPE 'en_US.UTF-8' TEMPLATE template0;"
-sudo -u postgres pg_restore -d attendance_prod /var/backups/attendance/daily/attendance_prod_YYYYMMDD.dump
 
-# Restart
+# Restore from the gzip-compressed SQL dump
+gunzip -c /var/backups/attendance/daily/attendance_pg_YYYYMMDD_HHMMSS.sql.gz \
+  | sudo -u postgres psql -d attendance_prod
+
+# Restart and verify
 sudo systemctl start attendance
 sudo journalctl -u attendance -n 30 --no-pager
+curl -s http://127.0.0.1:3000/api/health
 ```
 
 ---

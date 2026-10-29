@@ -19,6 +19,7 @@ const { Pool, types } = require('pg');
 types.setTypeParser(1082, (val) => val);
 const crypto   = require('crypto');
 const path     = require('path');
+const fs       = require('fs');
 
 // ---------------------------------------------------------------------------
 // Environment & Configuration Validation
@@ -49,22 +50,34 @@ const poolMax        = process.env.DB_POOL_MAX ? parseInt(process.env.DB_POOL_MA
 const pool = new Pool({
   connectionString: DATABASE_URL,
   // SSL configuration:
-  //   - Supabase cloud: always requires SSL; rejectUnauthorized=false is
-  //     intentional because Supabase uses a CA that pg cannot verify by default.
-  //   - Local PostgreSQL (AIIMS institutional VM, 127.0.0.1): SSL is not used
-  //     on the loopback interface; ssl:false is correct and safe.
-  //   - Any other production host with a verifiable CA cert: set
-  //     DATABASE_URL_SSL_MODE=verify-ca in the environment to enable full
-  //     certificate verification.
+  //   - Local PostgreSQL (AIIMS institutional VM loopback: 127.0.0.1 / localhost):
+  //     SSL is not used over the loopback interface; ssl:false is correct and safe.
+  //   - Supabase cloud: requires SSL; uses rejectUnauthorized=false due to pooler CA chain.
+  //   - Remote PostgreSQL (institutional database server or external host):
+  //     Certificate verification is ENABLED by default (rejectUnauthorized: true) in production
+  //     to prevent MITM attacks. For institutional internal CAs, specify DATABASE_SSL_CA=/path/to/ca.crt
+  //     or use NODE_EXTRA_CA_CERTS. To explicitly opt out of verification, set DATABASE_URL_SSL_MODE=no-verify.
   ssl: (() => {
     if (!DATABASE_URL) return false;
-    if (DATABASE_URL.includes('supabase')) return { rejectUnauthorized: false };
     // Local loopback connections (127.0.0.1 or localhost) never use SSL
     if (/[@/](127\.0\.0\.1|localhost)(:|\/|$)/.test(DATABASE_URL)) return false;
-    // Explicit opt-in for full SSL verification on non-Supabase production hosts
-    if (process.env.DATABASE_URL_SSL_MODE === 'verify-ca') return { rejectUnauthorized: true };
-    if (process.env.DATABASE_URL_SSL_MODE === 'require') return { rejectUnauthorized: false };
-    // Default for non-local production: disable SSL (local institutional VM default)
+    // Supabase cloud requires SSL; uses rejectUnauthorized=false due to pooler CA chain
+    if (DATABASE_URL.includes('supabase')) return { rejectUnauthorized: false };
+    // Remote database connections:
+    if (process.env.DATABASE_URL_SSL_MODE === 'disable') return false;
+    if (process.env.DATABASE_URL_SSL_MODE === 'no-verify') return { rejectUnauthorized: false };
+    // Remote connections in production default to secure SSL with CA certificate verification enabled
+    if (isProduction || process.env.DATABASE_URL_SSL_MODE === 'verify-ca' || process.env.DATABASE_URL_SSL_MODE === 'verify-full') {
+      const sslConfig = { rejectUnauthorized: true };
+      if (process.env.DATABASE_SSL_CA) {
+        try {
+          sslConfig.ca = fs.readFileSync(process.env.DATABASE_SSL_CA, 'utf8');
+        } catch (e) {
+          console.error('[DB] Failed to read DATABASE_SSL_CA file:', e.message);
+        }
+      }
+      return sslConfig;
+    }
     return false;
   })(),
   max:                    poolMax,
