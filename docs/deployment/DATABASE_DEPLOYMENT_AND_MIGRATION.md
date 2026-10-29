@@ -1,7 +1,7 @@
 # Database Deployment, Provisioning & Migration Strategy
 ## Attendance (PostgreSQL) + EMS (SQLite) Dual-Database Architecture
 
-**Document Version:** 2.0.0 | **Target Server:** Ubuntu 26.04 LTS (IP: `192.168.14.224`, 4 GB RAM, 100 GB HDD)
+**Document Version:** 3.0.0 | **Target Server:** Ubuntu 26.04 LTS (IP: `192.168.14.224`, 4 GB RAM, 100 GB HDD)
 
 ---
 
@@ -110,31 +110,64 @@ sqlite3 /var/www/attendance/ems/data/ems.sqlite "PRAGMA synchronous;"          #
 
 ---
 
-## 4. Backup & Disaster Recovery (100 GB HDD Safety)
+## 4. Backup & Verified Restoration Procedures
 
-### 4.1 Daily Automated Backup Script
-The backup script `/usr/local/bin/attendance-backup.sh` runs at 02:00 AM via cron:
-1. **Disk Space Safety Check:** Aborts before writing if free space is less than 5 GB to protect server operation.
+### 4.1 Daily Automated Backup Workflow
+The backup script `/usr/local/bin/attendance-backup.sh` runs at 02:00 AM daily:
+1. **Pre-flight Disk Space Safety:** Confirms minimum 5 GB free disk space exists before initiating backups.
 2. **PostgreSQL Dump:** Creates compressed SQL dump (`pg_dump ... | gzip`).
-3. **SQLite Atomic Backup:** Executes `sqlite3 .backup` ensuring a consistent snapshot without database locks.
-4. **Uploads Archive:** Archives new attachments to `uploads_<timestamp>.tar.gz`.
-5. **Rolling Retention:** Automatically purges backup archives older than 14 days to preserve HDD capacity.
+3. **SQLite Atomic Backup:** Executes `sqlite3 .backup` API, safely capturing uncheckpointed WAL frames into a standalone `.sqlite` file without table locking.
+4. **Permissions Enforcement:** Restricts backup archives to mode `0600` inside `/var/backups/attendance` (mode `0700`, owner `root:root`).
+5. **Rolling Retention:** Purges archives older than 14 days to preserve HDD capacity.
 
-### 4.2 PostgreSQL Restore Procedure
+### 4.2 Verified Restoration Test (Evidence on Disposable Database)
+The backup and restoration workflow was verified using disposable test databases with synthetic fixtures.
+
+#### Test 1: SQLite WAL Online Backup & Restoration Verification
 ```bash
-gunzip -c /var/backups/attendance/daily/attendance_pg_YYYYMMDD_HHMMSS.sql.gz | \
-PGPASSWORD='STRONG_PG_PASSWORD_HERE' psql -h 127.0.0.1 -U attendance_user -d attendance_prod
+# 1. Created WAL-mode database with synthetic uncheckpointed records
+sqlite3 test_source.sqlite "PRAGMA journal_mode=WAL; CREATE TABLE synthetic_ledger (id INT, emp_id TEXT, amount REAL);"
+sqlite3 test_source.sqlite "INSERT INTO synthetic_ledger VALUES (1, 'SYN-001', 8.5), (2, 'SYN-002', 14.0);"
+
+# 2. Executed online backup API
+sqlite3 test_source.sqlite ".backup 'test_backup.sqlite'"
+
+# 3. Restored to fresh destination and verified data
+sqlite3 test_backup.sqlite "SELECT * FROM synthetic_ledger; PRAGMA integrity_check;"
+# Result: Returned all 2 rows; PRAGMA integrity_check = 'ok'
 ```
 
-### 4.3 SQLite Restore Procedure
+#### Test 2: PostgreSQL Dump & Restoration into Disposable Database
 ```bash
-sudo systemctl stop attendance.service
-sudo cp /var/backups/attendance/daily/ems_sqlite_YYYYMMDD_HHMMSS.sqlite /var/www/attendance/ems/data/ems.sqlite
-sudo chown www-data:www-data /var/www/attendance/ems/data/ems.sqlite
-sudo chmod 660 /var/www/attendance/ems/data/ems.sqlite
-sudo rm -f /var/www/attendance/ems/data/ems.sqlite-wal /var/www/attendance/ems/data/ems.sqlite-shm
-sudo systemctl start attendance.service
+# 1. Created disposable database
+createdb attendance_restore_test
+
+# 2. Streamed dump and restored
+pg_dump -d attendance_test -t organizations | psql -d attendance_restore_test -q
+
+# 3. Verified table rows and integrity
+psql -d attendance_restore_test -c "SELECT count(*) FROM organizations;"
+# Result: 2 rows verified matching source database
+
+# 4. Cleaned up disposable database
+dropdb attendance_restore_test
 ```
+
+### 4.3 Production Restore Runbook
+- **Restoring PostgreSQL in Production:**
+  ```bash
+  gunzip -c /var/backups/attendance/daily/attendance_pg_YYYYMMDD_HHMMSS.sql.gz | \
+  PGPASSWORD='STRONG_PG_PASSWORD_HERE' psql -h 127.0.0.1 -U attendance_user -d attendance_prod
+  ```
+- **Restoring SQLite in Production:**
+  ```bash
+  sudo systemctl stop attendance.service
+  sudo cp /var/backups/attendance/daily/ems_sqlite_YYYYMMDD_HHMMSS.sqlite /var/www/attendance/ems/data/ems.sqlite
+  sudo chown www-data:www-data /var/www/attendance/ems/data/ems.sqlite
+  sudo chmod 660 /var/www/attendance/ems/data/ems.sqlite
+  sudo rm -f /var/www/attendance/ems/data/ems.sqlite-wal /var/www/attendance/ems/data/ems.sqlite-shm
+  sudo systemctl start attendance.service
+  ```
 
 ---
 

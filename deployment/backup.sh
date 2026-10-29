@@ -42,6 +42,7 @@ if [ "${FREE_KB}" -lt "${MIN_FREE_KB}" ]; then
 fi
 
 mkdir -p "${BACKUP_ROOT}/daily" "${BACKUP_ROOT}/logs"
+chmod 700 "${BACKUP_ROOT}" "${BACKUP_ROOT}/daily" "${BACKUP_ROOT}/logs"
 
 # 1. PostgreSQL Backup (nice + gzip to minimize HDD seek starvation)
 PG_BACKUP_FILE="${BACKUP_ROOT}/daily/attendance_pg_${TIMESTAMP}.sql.gz"
@@ -81,7 +82,10 @@ if [ -d "${UPLOADS_DIR}" ]; then
     fi
 fi
 
-# 4. Cleanup Backups Older than Retention Window (Preserves 100 GB HDD space)
+# 4. Cleanup Backups Older than Retention Window & Enforce Permissions
+echo "${LOG_PREFIX} Enforcing 0600 permissions on backup archives..."
+chmod -R go-rwx "${BACKUP_ROOT}/daily"
+
 echo "${LOG_PREFIX} Pruning backups older than ${RETENTION_DAYS} days..."
 find "${BACKUP_ROOT}/daily" -type f -name "attendance_*" -mtime +"${RETENTION_DAYS}" -delete
 find "${BACKUP_ROOT}/daily" -type f -name "ems_*" -mtime +"${RETENTION_DAYS}" -delete

@@ -1,7 +1,7 @@
 # Production Operations Runbook
 ## AIIMS CDER Real-Time Attendance & EMS System
 
-**Document Version:** 2.0.0 | **Target Server:** Ubuntu 26.04 LTS (IP: `192.168.14.224`, 4 GB RAM, 100 GB HDD)
+**Document Version:** 3.0.0 | **Target Server:** Ubuntu 26.04 LTS (IP: `192.168.14.224`, 4 GB RAM, 100 GB HDD) | **Runtime:** Node.js 22 LTS
 
 ---
 
@@ -17,10 +17,11 @@
 | **Reload Nginx (No Downtime)**| `sudo nginx -t && sudo systemctl reload nginx` |
 | **Check PostgreSQL Status**| `sudo systemctl status postgresql` |
 | **Check Memory & Swap** | `free -h && swapon --show` |
-| **Check Disk Utilization** | `df -h / /var /var/www` |
-| **Run Health Check** | `/usr/local/bin/attendance-healthcheck.sh` |
+| **Check Disk Utilization** | `df -h / /var /var/backups /var/www` |
+| **Run Health Check (Loopback)**| `/usr/local/bin/attendance-healthcheck.sh` |
 | **Run Intranet Health Check**| `/usr/local/bin/attendance-healthcheck.sh http://192.168.14.224` |
 | **Trigger Immediate Backup** | `sudo /usr/local/bin/attendance-backup.sh` |
+| **Verify Off-Host Backup Sync**| `ssh backup-operator@aiims-nas.internal "ls -lh /volume1/cder-backups/"` |
 
 ---
 
@@ -61,6 +62,7 @@ free -h
 - **Warning Threshold:**
   - If `Mem: free` < 200 MB and `Swap: used` > 2 GB, the server is under memory pressure.
   - Review top memory consumers: `ps aux --sort=-%mem | head -10`.
+  - **Important:** 4 GB swap space is a safety net against OOM termination, not a substitute for physical RAM. If load tests demonstrate sustained swap thrashing (>50 MB/s swap in/out via `vmstat 1`), physical RAM upgrade to 8 GB must be requested.
 
 ### 3.2 Rotational HDD Disk Space & I/O Monitoring
 ```bash
@@ -81,12 +83,16 @@ iostat -xz 1 5
 
 ## 4. Routine Maintenance Procedures
 
-### 4.1 Daily Backup Verification
-Check that the 02:00 AM cron backup completed:
+### 4.1 Daily Backup Verification & Off-Host Sync
+Check that the 02:00 AM cron backup completed locally and synchronized off-host:
 ```bash
+# 1. Local backup check
 ls -lh /var/backups/attendance/daily/
+
+# 2. Trigger off-host replication to AIIMS central NAS
+rsync -avz -e ssh /var/backups/attendance/daily/ backup-operator@aiims-nas.internal:/volume1/cder-backups/
 ```
-Confirm today's `attendance_pg_*.sql.gz` and `ems_sqlite_*.sqlite.gz` exist and are non-empty.
+Confirm today's `attendance_pg_*.sql.gz` and `ems_sqlite_*.sqlite.gz` exist, are non-empty, and replicated.
 
 ### 4.2 Log Rotation & Journald Cap
 Prevent system logs from consuming the 100 GB HDD:

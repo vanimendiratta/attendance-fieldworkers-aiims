@@ -1,5 +1,5 @@
 [Unit]
-Description=AIIMS CDER Attendance and EMS Web Application
+Description=AIIMS CDER Attendance and EMS Web Application (Node.js 22 LTS)
 Documentation=https://github.com/vanimendiratta/attendance-fieldworkers-aiims
 After=network.target postgresql.service
 Wants=postgresql.service
